@@ -12,6 +12,7 @@
 |------|------|------|
 | 项目章程 | [initiation/项目章程.md](./initiation/项目章程.md) | 发起人、PM |
 | 商业论证 | [initiation/商业论证.md](./initiation/商业论证.md) | 发起人、财务 |
+| 成本价值与 ROI 评估 | [initiation/成本价值与ROI评估报告.md](./initiation/成本价值与ROI评估报告.md) | 发起人、财务、PM |
 
 ---
 
