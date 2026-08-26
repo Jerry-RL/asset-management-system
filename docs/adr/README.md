@@ -18,6 +18,7 @@
 | [ADR-0012](./0012-pnpm-monorepo-structure.md) | pnpm Monorepo 工程结构 | Accepted |
 | [ADR-0013](./0013-in-process-domain-events.md) | 进程内领域事件驱动通知 | Accepted |
 | [ADR-0014](./0014-wechat-native-miniprogram.md) | 微信小程序原生开发（一期） | Accepted |
+| [ADR-0015](./0015-data-classification-and-encryption.md) | 数据分类分级与加密策略 | Accepted |
 
 **状态说明**：Proposed / Accepted / Deprecated / Superseded
 

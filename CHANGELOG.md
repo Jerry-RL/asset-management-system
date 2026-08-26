@@ -6,6 +6,11 @@
 
 ### Added
 
+- **数据安全强化（SRS V2.3）**：§5.8 NFR-DSEC-001~025；§5.4 扩展；§10.2 数据安全验收项
+- [数据安全设计说明书.md](docs/design/数据安全设计说明书.md)：分类分级、加密、脱敏、导出、生命周期、合规
+- ADR-0015：数据分类分级与加密策略
+- DSD V1.4 §7.2 数据安全实现；HLD §9 扩展；应急预案 V1.1 §5.4
+- 技术选型 V1.1 §6 数据安全选型；测试用例 §14 TC-DSEC-001~009
 - DSD V1.3：Knex+Flyway、BullMQ、DomainEventBus、审批引擎、Monorepo、缓存/幂等/监控
 - HLD V1.1、技术选型说明书、CI-CD方案、技术方案评审报告
 - ADR-0009~0014（审批、Knex、BullMQ、Monorepo、EventBus、小程序）
