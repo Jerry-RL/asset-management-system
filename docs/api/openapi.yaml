@@ -1,0 +1,910 @@
+openapi: 3.0.3
+info:
+  title: 资产经营管理系统 API
+  description: Asset Management System — REST API v1（契约与 docs/api/README.md 同步）
+  version: 1.0.0
+  contact:
+    name: Asset Management Team
+
+servers:
+  - url: https://api.example.com/api/v1
+    description: 生产环境
+  - url: http://localhost:3000/api/v1
+    description: 本地开发
+
+tags:
+  - name: Auth
+  - name: Assets
+  - name: Projects
+  - name: LeaseListings
+  - name: Contracts
+  - name: Billing
+  - name: Invoices
+  - name: Dunning
+  - name: Repairs
+  - name: Tasks
+  - name: Alerts
+  - name: Dashboard
+  - name: Files
+  - name: System
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: PC 账号登录
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ClientType'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              username: admin
+              password: secret
+              captchaId: "550e8400-e29b-41d4-a716-446655440000"
+              captchaCode: Z6VTC
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 0
+                message: ok
+                data:
+                  accessToken: eyJhbGciOiJIUzI1NiIs...
+                  refreshToken: eyJhbGciOiJIUzI1NiIs...
+                  expiresIn: 7200
+                  user:
+                    id: 1
+                    name: 办事员
+                    roles: [clerk]
+                traceId: abc123
+
+  /auth/wechat/login:
+    post:
+      tags: [Auth]
+      summary: 微信小程序登录
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ClientType'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: wx.login 返回的 code
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 刷新 Token
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /assets:
+    get:
+      tags: [Assets]
+      summary: 资产台账列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: assetType
+          in: query
+          schema:
+            type: string
+            enum: [property, land]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: sourceType
+          in: query
+          schema:
+            type: string
+        - name: ownershipType
+          in: query
+          schema:
+            type: string
+        - name: leaseControlStatus
+          in: query
+          schema:
+            type: string
+            enum: [vacant, leasing, leased, partial_leased, self_use, occupied, vacating, disposing, exited]
+      responses:
+        '200':
+          description: 分页列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageResult'
+              example:
+                code: 0
+                message: ok
+                data:
+                  list:
+                    - id: 1001
+                      assetNo: CQL-06-02
+                      name: 常青东大道6-2
+                      projectName: 原市场管理局
+                      area: 22.18
+                      leaseControlStatus: vacant
+                  total: 841
+                  page: 1
+                  pageSize: 10
+                traceId: abc123
+    post:
+      tags: [Assets]
+      summary: 新增资产
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetCreate'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /assets/{assetId}:
+    get:
+      tags: [Assets]
+      summary: 资产详情（一物一档）
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    put:
+      tags: [Assets]
+      summary: 更新资产基础信息
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetUpdate'
+      responses:
+        '200':
+          description: OK
+
+  /assets/{assetId}/qrcode:
+    get:
+      tags: [Assets]
+      summary: 下载资产二维码
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: 图片流
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
+  /lease-listings:
+    get:
+      tags: [LeaseListings]
+      summary: 招租列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [LeaseListings]
+      summary: 发布招租
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaseListingCreate'
+      responses:
+        '200':
+          description: OK
+
+  /tender/announcements:
+    post:
+      tags: [LeaseListings]
+      summary: 创建公开招租公告
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenderAnnouncement'
+      responses:
+        '200':
+          description: OK
+
+  /tender/announcements/{id}/applications:
+    get:
+      tags: [LeaseListings]
+      summary: 报名列表
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+
+  /contracts:
+    get:
+      tags: [Contracts]
+      summary: 合同列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, pending_approval, active, expiring, terminated, voided]
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Contracts]
+      summary: 创建租赁合同
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractCreate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example:
+                code: 0
+                message: ok
+                data:
+                  id: 5001
+                  contractNo: XCZL20260824012
+                  status: pending_approval
+                traceId: abc123
+
+  /contracts/{contractId}/approve:
+    post:
+      tags: [Contracts]
+      summary: 合同审批
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [approve, reject]
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: 审批后触发生成缴费计划
+
+  /contracts/{contractId}/renew:
+    post:
+      tags: [Contracts]
+      summary: 续签合同
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractRenew'
+      responses:
+        '200':
+          description: OK
+
+  /contracts/{contractId}/vacate:
+    post:
+      tags: [Contracts]
+      summary: 发起退租
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VacateApply'
+      responses:
+        '200':
+          description: 创建退租单
+
+  /vacate-orders/{vacateOrderId}/inspection:
+    post:
+      tags: [Contracts]
+      summary: 提交清场验收（工作端）
+      parameters:
+        - name: vacateOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VacateInspection'
+      responses:
+        '200':
+          description: OK
+
+  /vacate-orders/{vacateOrderId}/settlement:
+    post:
+      tags: [Contracts]
+      summary: 退租费用结算
+      parameters:
+        - name: vacateOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 生成结算单并完成保证金处理
+
+  /billing/plans:
+    get:
+      tags: [Billing]
+      summary: 缴费计划列表
+      parameters:
+        - name: contractId
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+
+  /billing/bills:
+    get:
+      tags: [Billing]
+      summary: 账单列表（收费大厅）
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: contractId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending_issue, unpaid, partial_paid, paid, reduced, voided]
+      responses:
+        '200':
+          description: OK
+
+  /billing/bills/{billId}/collect:
+    post:
+      tags: [Billing]
+      summary: 线下收款登记
+      parameters:
+        - name: billId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectRequest'
+      responses:
+        '200':
+          description: OK
+
+  /billing/payments/wechat:
+    post:
+      tags: [Billing]
+      summary: 发起微信支付（用户端）
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [billIds]
+              properties:
+                billIds:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: 返回小程序支付参数
+
+  /invoices:
+    post:
+      tags: [Invoices]
+      summary: 开具电子发票
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceCreate'
+      responses:
+        '200':
+          description: OK
+
+  /dunning/records:
+    post:
+      tags: [Dunning]
+      summary: 创建催缴记录
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DunningRecord'
+      responses:
+        '200':
+          description: OK
+
+  /repairs:
+    get:
+      tags: [Repairs]
+      summary: 报修列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Repairs]
+      summary: 提交报修（用户端/PC）
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepairCreate'
+      responses:
+        '200':
+          description: OK
+
+  /repairs/{repairId}/dispatch:
+    post:
+      tags: [Repairs]
+      summary: 派工
+      parameters:
+        - name: repairId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vendorId:
+                  type: integer
+                assigneeId:
+                  type: integer
+      responses:
+        '200':
+          description: OK
+
+  /tasks:
+    get:
+      tags: [Tasks]
+      summary: 任务列表
+      parameters:
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [all, mine]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, completed]
+      responses:
+        '200':
+          description: OK
+
+  /alerts/rules:
+    get:
+      tags: [Alerts]
+      summary: 预警规则列表
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Alerts]
+      summary: 新增预警规则
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRule'
+      responses:
+        '200':
+          description: OK
+
+  /dashboard/operations:
+    get:
+      tags: [Dashboard]
+      summary: 经营看板指标
+      parameters:
+        - name: companyId
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example:
+                code: 0
+                data:
+                  assetTotal: 943
+                  leasedRate: 0.93
+                  collectionRateMonth: 0.814
+                  vacantArea: 69102.34
+
+  /files/upload:
+    post:
+      tags: [Files]
+      summary: 上传附件
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                bizType:
+                  type: string
+                  enum: [certificate, contract, repair, inspection, vacate]
+      responses:
+        '200':
+          description: OK
+
+  /health:
+    get:
+      tags: [System]
+      summary: 健康检查
+      security: []
+      responses:
+        '200':
+          description: 服务正常
+          content:
+            application/json:
+              example:
+                status: ok
+                version: 1.0.0
+                db: ok
+                redis: ok
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ClientType:
+      name: X-Client-Type
+      in: header
+      required: true
+      schema:
+        type: string
+        enum: [admin, tenant-mp, worker-mp]
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ContractId:
+      name: contractId
+      in: path
+      required: true
+      schema:
+        type: integer
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          nullable: true
+        traceId:
+          type: string
+
+    PageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items: {}
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    LoginRequest:
+      type: object
+      required: [username, password, captchaId, captchaCode]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        captchaId:
+          type: string
+        captchaCode:
+          type: string
+
+    AssetCreate:
+      type: object
+      required: [projectId, name, assetType, area]
+      properties:
+        projectId:
+          type: integer
+        name:
+          type: string
+        assetNo:
+          type: string
+        assetType:
+          type: string
+          enum: [property, land]
+        area:
+          type: number
+        sourceType:
+          type: string
+        ownershipType:
+          type: string
+
+    AssetUpdate:
+      allOf:
+        - $ref: '#/components/schemas/AssetCreate'
+
+    LeaseListingCreate:
+      type: object
+      required: [assetId, rentAmount]
+      properties:
+        assetId:
+          type: integer
+        rentAmount:
+          type: number
+          nullable: true
+        rentNegotiable:
+          type: boolean
+
+    TenderAnnouncement:
+      type: object
+      required: [title, assetIds, registerDeadline]
+      properties:
+        title:
+          type: string
+        assetIds:
+          type: array
+          items:
+            type: integer
+        registerDeadline:
+          type: string
+          format: date-time
+        displayPeriodDays:
+          type: integer
+
+    ContractCreate:
+      type: object
+      required: [assetId, tenantId, startDate, endDate, rentType, rentAmount, depositAmount, paymentCycle]
+      properties:
+        assetId:
+          type: integer
+        tenantId:
+          type: integer
+        leaseArea:
+          type: number
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        rentType:
+          type: string
+          enum: [fixed_monthly, fixed_yearly, per_area, per_unit, negotiable]
+        rentAmount:
+          type: number
+        depositAmount:
+          type: number
+        paymentCycle:
+          type: string
+          enum: [monthly, quarterly, yearly]
+        freeRentDays:
+          type: integer
+        contractType:
+          type: string
+
+    ContractRenew:
+      type: object
+      properties:
+        endDate:
+          type: string
+          format: date
+        rentAmount:
+          type: number
+
+    VacateApply:
+      type: object
+      properties:
+        reason:
+          type: string
+        expectedVacateDate:
+          type: string
+          format: date
+
+    VacateInspection:
+      type: object
+      properties:
+        waterReading:
+          type: number
+        electricReading:
+          type: number
+        photos:
+          type: array
+          items:
+            type: string
+          description: fileId 列表
+        remark:
+          type: string
+
+    CollectRequest:
+      type: object
+      required: [amount, paymentMethod]
+      properties:
+        amount:
+          type: number
+        paymentMethod:
+          type: string
+          enum: [cash, bank_transfer, wechat, alipay]
+        remark:
+          type: string
+
+    InvoiceCreate:
+      type: object
+      required: [paymentId, titleId]
+      properties:
+        paymentId:
+          type: integer
+        titleId:
+          type: integer
+
+    DunningRecord:
+      type: object
+      properties:
+        billId:
+          type: integer
+        level:
+          type: integer
+          minimum: 1
+          maximum: 5
+        method:
+          type: string
+          enum: [sms, notice_post, lawyer_letter, legal]
+
+    RepairCreate:
+      type: object
+      required: [assetId, description]
+      properties:
+        assetId:
+          type: integer
+        description:
+          type: string
+        photos:
+          type: array
+          items:
+            type: string
+
+    AlertRule:
+      type: object
+      properties:
+        companyId:
+          type: integer
+        alertType:
+          type: string
+        subType:
+          type: string
+        level:
+          type: integer
+        condition:
+          type: object
+        enabled:
+          type: boolean
