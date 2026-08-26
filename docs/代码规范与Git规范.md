@@ -51,6 +51,7 @@ export const LeaseControlStatus = {
 ## 5. 后端（Node.js + Express）
 
 - 分层：`routes → controllers → services → repositories`
+- 数据访问：**Knex**（DDL 由 Flyway 管理，见 ADR-0010）
 - 统一 `AppError` + 错误码（见 api/README.md）
 - 写操作：事务 + 幂等（Redis Idempotency-Key）
 - 输入校验：Zod / Joi，与 OpenAPI schema 对齐
@@ -115,29 +116,21 @@ fix(billing): prevent duplicate payment with idempotency key
 - API 变更必须同时更新 `docs/api/openapi.yaml`
 - 库表变更必须同时更新 Flyway + `docs/database/数据库设计.md`
 
-## 10. 工具配置（规划）
+## 10. 工具配置
 
-| 工具 | 用途 |
-|------|------|
-| ESLint + Prettier | TS/JS 格式与规则 |
-| EditorConfig | 编辑器统一缩进 |
-| Husky + lint-staged | 提交前 lint |
-| commitlint | Commit 格式校验 |
+| 工具 | 用途 | 路径 |
+|------|------|------|
+| ESLint + Prettier | TS/JS 格式与规则 | `eslint.config.js`、`.prettierrc` |
+| EditorConfig | 编辑器统一缩进 | `.editorconfig` |
+| Husky + lint-staged | 提交前 lint（backend 脚手架后启用） | 见 setup-pre-commit |
+| commitlint | Commit 格式校验（可选） | — |
 
-`.editorconfig` 建议：
+根目录命令（需 `pnpm install`）：
 
-```ini
-root = true
-
-[*]
-charset = utf-8
-end_of_line = lf
-indent_style = space
-indent_size = 2
-insert_final_newline = true
-
-[*.md]
-trim_trailing_whitespace = false
+```bash
+pnpm lint          # ESLint
+pnpm format        # Prettier
+pnpm api:lint      # OpenAPI 校验
 ```
 
 ## 11. Code Review 检查清单

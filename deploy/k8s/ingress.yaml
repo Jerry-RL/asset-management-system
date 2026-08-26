@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ams-api
+  namespace: ams
+  labels:
+    app.kubernetes.io/name: ams-api
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: ams-api-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: ams-api
+                port:
+                  number: 80
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: ams-api
+                port:
+                  number: 80

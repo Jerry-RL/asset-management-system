@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ams-api-config
+  namespace: ams
+  labels:
+    app.kubernetes.io/name: ams-api
+data:
+  NODE_ENV: production
+  PORT: "3000"
+  API_PREFIX: /api/v1
+  # DATABASE_URL / REDIS_URL / JWT_* 等敏感项见 Secret

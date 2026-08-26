@@ -1,0 +1,335 @@
+// 资产经营管理系统 — dbdocs.io 源文件
+// 与 docs/database/数据库设计.md 同步维护
+
+Project ams {
+  database_type: 'PostgreSQL'
+  Note: 'Asset Management System — 主业务库'
+}
+
+Table company {
+  id bigserial [pk, increment]
+  parent_id bigint [ref: > company.id]
+  name varchar(200) [not null]
+  company_type varchar(50)
+  status smallint [default: 1]
+  created_at timestamptz [not null]
+
+  indexes {
+    parent_id [name: 'idx_company_parent']
+  }
+}
+
+Table department {
+  id bigserial [pk, increment]
+  company_id bigint [not null, ref: > company.id]
+  name varchar(100) [not null]
+  created_at timestamptz [not null]
+}
+
+Table user {
+  id bigserial [pk, increment]
+  username varchar(64) [unique, not null]
+  password_hash varchar(255) [not null]
+  name varchar(100)
+  phone varchar(20)
+  department_id bigint [ref: > department.id]
+  status smallint [default: 1]
+}
+
+Table project {
+  id bigserial [pk, increment]
+  company_id bigint [not null, ref: > company.id]
+  name varchar(200) [not null]
+  address varchar(500)
+  longitude numeric(10,7)
+  latitude numeric(10,7)
+  status smallint [default: 1]
+
+  indexes {
+    company_id [name: 'idx_project_company']
+  }
+}
+
+Table asset {
+  id bigserial [pk, increment]
+  project_id bigint [not null, ref: > project.id]
+  asset_no varchar(64) [unique, not null]
+  name varchar(200) [not null]
+  asset_type varchar(20) [not null, note: 'property | land']
+  area numeric(18,2)
+  source_type varchar(50)
+  ownership_type varchar(50)
+  property_company_id bigint [ref: > company.id]
+  operating_company_id bigint [ref: > company.id]
+  lease_control_status varchar(30) [not null]
+  base_rent_assessed numeric(18,2)
+  base_rent_floor numeric(18,2)
+  qr_code_url varchar(500)
+  parent_asset_id bigint [ref: > asset.id]
+  deleted_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    project_id [name: 'idx_asset_project']
+    operating_company_id [name: 'idx_asset_company']
+    lease_control_status [name: 'idx_asset_status']
+  }
+}
+
+Table tenant {
+  id bigserial [pk, increment]
+  name varchar(200) [not null]
+  phone varchar(20)
+  id_no varchar(50)
+  tenant_type varchar(20)
+  blacklist boolean [default: false]
+  credit_score integer [default: 100]
+  wechat_openid varchar(64)
+
+  indexes {
+    id_no [name: 'idx_tenant_id_no']
+    phone [name: 'idx_tenant_phone']
+  }
+}
+
+Table lease_listing {
+  id bigserial [pk, increment]
+  asset_id bigint [not null, ref: > asset.id]
+  rent_amount numeric(18,2)
+  status varchar(20) [not null]
+  published_at timestamptz
+}
+
+Table contract {
+  id bigserial [pk, increment]
+  contract_no varchar(64) [unique, not null]
+  asset_id bigint [not null, ref: > asset.id]
+  tenant_id bigint [not null, ref: > tenant.id]
+  version integer [default: 1]
+  parent_contract_id bigint [ref: > contract.id]
+  start_date date [not null]
+  end_date date [not null]
+  lease_area numeric(18,2)
+  rent_type varchar(30)
+  rent_amount numeric(18,2) [not null]
+  deposit_amount numeric(18,2)
+  payment_cycle varchar(20)
+  free_rent_days integer [default: 0]
+  status varchar(30) [not null]
+  esign_status varchar(20)
+  created_at timestamptz [not null]
+
+  indexes {
+    asset_id [name: 'idx_contract_asset']
+    tenant_id [name: 'idx_contract_tenant']
+    status [name: 'idx_contract_status']
+    end_date [name: 'idx_contract_end_date']
+  }
+}
+
+Table payment_plan {
+  id bigserial [pk, increment]
+  contract_id bigint [not null, ref: > contract.id]
+  period_start date [not null]
+  period_end date [not null]
+  planned_amount numeric(18,2) [not null]
+  status varchar(20) [not null]
+}
+
+Table bill {
+  id bigserial [pk, increment]
+  contract_id bigint [not null, ref: > contract.id]
+  payment_plan_id bigint [ref: > payment_plan.id]
+  bill_no varchar(64) [unique, not null]
+  amount numeric(18,2) [not null]
+  due_date date [not null]
+  status varchar(20) [not null]
+}
+
+Table payment {
+  id bigserial [pk, increment]
+  bill_id bigint [not null, ref: > bill.id]
+  amount numeric(18,2) [not null]
+  paid_at timestamptz [not null]
+  channel varchar(30)
+  idempotency_key varchar(64) [unique]
+}
+
+Table vacate_order {
+  id bigserial [pk, increment]
+  contract_id bigint [not null, ref: > contract.id]
+  status varchar(30) [not null]
+  settlement_amount numeric(18,2)
+  deposit_refund numeric(18,2)
+}
+
+Table repair_order {
+  id bigserial [pk, increment]
+  asset_id bigint [not null, ref: > asset.id]
+  status varchar(30) [not null]
+  description text
+  created_at timestamptz [not null]
+}
+
+Table alert_rule {
+  id bigserial [pk, increment]
+  company_id bigint [not null, ref: > company.id]
+  rule_type varchar(50) [not null]
+  config jsonb
+  enabled boolean [default: true]
+}
+
+Table tenant_credit {
+  id bigserial [pk, increment]
+  tenant_id bigint [not null, ref: > tenant.id]
+  score_delta integer [not null]
+  reason varchar(200)
+  created_at timestamptz [not null]
+}
+
+Table agent_session {
+  id bigserial [pk, increment]
+  user_id bigint [not null, ref: > user.id]
+  company_id bigint [ref: > company.id]
+  title varchar(200)
+  status varchar(20)
+  created_at timestamptz [not null]
+}
+
+Table agent_run {
+  id bigserial [pk, increment]
+  session_id bigint [ref: > agent_session.id]
+  user_id bigint [ref: > user.id]
+  intent varchar(50)
+  template_id varchar(64)
+  status varchar(20)
+  trace_id varchar(64)
+  started_at timestamptz
+  finished_at timestamptz
+}
+
+Table agent_tool_call {
+  id bigserial [pk, increment]
+  run_id bigint [not null, ref: > agent_run.id]
+  tool_name varchar(100)
+  request_json jsonb
+  response_hash varchar(64)
+  response_summary jsonb
+  duration_ms integer
+  created_at timestamptz [not null]
+}
+
+Table agent_report {
+  id bigserial [pk, increment]
+  run_id bigint [not null, ref: > agent_run.id]
+  title varchar(200)
+  format varchar(20)
+  status varchar(20)
+  preview_path varchar(500)
+  file_path varchar(500)
+  verified boolean
+  approved_by bigint [ref: > user.id]
+  created_at timestamptz [not null]
+}
+
+Table agent_report_citation {
+  id bigserial [pk, increment]
+  report_id bigint [not null, ref: > agent_report.id]
+  claim_key varchar(100)
+  claim_value text
+  tool_call_id bigint [ref: > agent_tool_call.id]
+  api_path varchar(200)
+  verified boolean
+}
+
+Table agent_prompt_template {
+  id bigserial [pk, increment]
+  template_code varchar(64) [unique, not null]
+  name varchar(200)
+  definition jsonb
+  version integer
+  enabled boolean
+}
+
+Table agent_model_audit {
+  id bigserial [pk, increment]
+  run_id bigint [not null, ref: > agent_run.id]
+  model_id varchar(100)
+  prompt_tokens integer
+  completion_tokens integer
+  sensitivity varchar(20)
+  created_at timestamptz [not null]
+}
+
+Table approval_flow_def {
+  id bigserial [pk, increment]
+  biz_type varchar(50) [not null]
+  name varchar(100)
+  definition jsonb
+  version integer
+  enabled boolean
+}
+
+Table approval_instance {
+  id bigserial [pk, increment]
+  flow_def_id bigint [ref: > approval_flow_def.id]
+  biz_type varchar(50)
+  biz_id bigint
+  status varchar(20)
+  submitted_by bigint [ref: > user.id]
+  submitted_at timestamptz
+}
+
+Table approval_task {
+  id bigserial [pk, increment]
+  instance_id bigint [not null, ref: > approval_instance.id]
+  node_id varchar(50)
+  assignee_id bigint [ref: > user.id]
+  status varchar(20)
+  acted_at timestamptz
+}
+
+Table notification {
+  id bigserial [pk, increment]
+  user_id bigint [not null, ref: > user.id]
+  title varchar(200)
+  content text
+  biz_type varchar(50)
+  biz_id bigint
+  channel varchar(20)
+  read_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table disposal_order {
+  id bigserial [pk, increment]
+  asset_id bigint [not null, ref: > asset.id]
+  disposal_type varchar(30)
+  status varchar(20)
+  created_at timestamptz [not null]
+}
+
+Table occupation_order {
+  id bigserial [pk, increment]
+  asset_id bigint [not null, ref: > asset.id]
+  status varchar(20)
+  start_date date
+  end_date date
+}
+
+Table refund_order {
+  id bigserial [pk, increment]
+  payment_id bigint [ref: > payment.id]
+  amount numeric(18,2)
+  status varchar(20)
+}
+
+Table asset_certificate {
+  id bigserial [pk, increment]
+  asset_id bigint [not null, ref: > asset.id]
+  cert_type varchar(50)
+  cert_no varchar(100)
+  mortgage_status varchar(20)
+  file_id bigint
+}

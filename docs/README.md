@@ -2,6 +2,8 @@
 
 按 **立项 → 需求 → 设计 → 开发 → 测试 → 运维 → 交接** 全生命周期组织。
 
+**交付对照表**（SRS / DSD / 接口 / 库表 / ADR / 测试 / 部署 / 规范 / CHANGELOG）：见 **[文档交付清单.md](./文档交付清单.md)**。
+
 ---
 
 ## 立项
@@ -17,7 +19,8 @@
 
 | 文档 | 路径 | 受众 |
 |------|------|------|
-| 需求规格说明书（SRS）V2.0 | [需求规格说明书.md](./需求规格说明书.md) | 全体 |
+| 需求规格说明书（SRS）V2.2 | [需求规格说明书.md](./需求规格说明书.md) | 全体 |
+| 业务闭环评审报告 | [requirements/业务闭环评审报告.md](./requirements/业务闭环评审报告.md) | 产品、架构 |
 | 用户故事地图 | [requirements/用户故事地图.md](./requirements/用户故事地图.md) | 产品、开发、测试 |
 | 业务完善方案（分析底稿） | [业务完善方案补充.md](./业务完善方案补充.md) | 产品、架构 |
 
@@ -27,9 +30,13 @@
 
 | 文档 | 路径 | 受众 |
 |------|------|------|
-| 概要设计说明书（HLD） | [design/概要设计说明书.md](./design/概要设计说明书.md) | 架构、开发 |
-| 详细设计说明书（DSD） | [详细设计说明书.md](./详细设计说明书.md) | 开发、测试 |
-| 接口规范 | [api/README.md](./api/README.md) · [openapi.yaml](./api/openapi.yaml) | 前后端、第三方 |
+| 概要设计说明书（HLD） | [design/概要设计说明书.md](./design/概要设计说明书.md) V1.1 | 架构、开发 |
+| 详细设计说明书（DSD） | [详细设计说明书.md](./详细设计说明书.md) V1.3 | 开发、测试 |
+| 技术选型说明书 | [design/技术选型说明书.md](./design/技术选型说明书.md) | 架构、开发 |
+| 技术方案评审报告 | [design/技术方案评审报告.md](./design/技术方案评审报告.md) | 架构 |
+| CI/CD 方案 | [design/CI-CD方案.md](./design/CI-CD方案.md) | 开发、运维 |
+| 智能 Agent 技术方案 | [design/智能Agent技术方案.md](./design/智能Agent技术方案.md) | 架构、安全 |
+| 接口规范 | [api/README.md](./api/README.md) · [openapi.yaml](./api/openapi.yaml) · [Postman](./api/postman/) | 前后端、第三方 |
 
 ---
 
@@ -37,8 +44,8 @@
 
 | 文档 | 路径 | 受众 |
 |------|------|------|
-| 数据库设计文档 | [database/数据库设计.md](./database/数据库设计.md) | 开发、DBA |
-| 架构决策记录（ADR） | [adr/README.md](./adr/README.md) | 架构、技术负责人 |
+| 数据库设计文档 | [database/数据库设计.md](./database/数据库设计.md) · [ams.dbml](./database/ams.dbml) | 开发、DBA |
+| 架构决策记录（ADR） | [adr/README.md](./adr/README.md) · [template.md](./adr/template.md) | 架构、技术负责人 |
 | 代码规范与 Git 规范 | [代码规范与Git规范.md](./代码规范与Git规范.md) | 全体开发者 |
 | 变更日志 | [../CHANGELOG.md](../CHANGELOG.md) | 全体 |
 
@@ -49,7 +56,7 @@
 | 文档 | 路径 | 受众 |
 |------|------|------|
 | 测试计划 | [testing/测试计划.md](./testing/测试计划.md) | QA、PM |
-| 测试用例 | [testing/测试用例.md](./testing/测试用例.md) | QA、开发 |
+| 测试用例 | [testing/测试用例.md](./testing/测试用例.md) · [testcases.csv](./testing/testcases.csv) | QA、开发 |
 | 性能测试报告 | [testing/性能测试报告.md](./testing/性能测试报告.md) | QA、架构、运维 |
 
 ---
@@ -58,7 +65,7 @@
 
 | 文档 | 路径 | 受众 |
 |------|------|------|
-| 部署手册 | [deployment/部署手册.md](./deployment/部署手册.md) | 开发、运维 |
+| 部署手册 | [deployment/部署手册.md](./deployment/部署手册.md) · [K8s 清单](../deploy/k8s/) | 开发、运维 |
 | 应急预案 | [deployment/应急预案.md](./deployment/应急预案.md) | 运维、值班 |
 | 部署与运维手册（FAQ 合集） | [deployment/部署与运维手册.md](./deployment/部署与运维手册.md) | 运维 |
 
@@ -96,11 +103,15 @@ flowchart LR
   business[商业论证] --> srs
   srs --> story[用户故事地图]
   srs --> hld[概要设计]
+  hld --> techstack[技术选型]
   hld --> dsd[详细设计]
+  techstack --> adr[ADR]
   dsd --> api[接口规范]
   dsd --> db[数据库设计]
   dsd --> adr[ADR]
-  srs --> testplan[测试计划]
+  dsd --> agent[智能Agent方案]
+  srs --> loop[十三条闭环矩阵]
+  loop --> testplan[测试计划]
   testplan --> testcase[测试用例]
   testplan --> perf[性能测试报告]
   dsd --> deploy[部署手册]

@@ -30,5 +30,11 @@ Thumbs.db
 # Test / coverage
 coverage/
 
+# Generated docs
+docs/database/schemadoc/output/
+
+# K8s secrets (use secret.example.yaml)
+deploy/k8s/secret.yaml
+
 # Misc
 *.local

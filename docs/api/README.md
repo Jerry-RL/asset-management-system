@@ -1,7 +1,8 @@
 # 接口规范说明
 
 > OpenAPI 定义文件：[openapi.yaml](./openapi.yaml)  
-> 本地预览：`npx @redocly/cli preview-docs docs/api/openapi.yaml` 或导入 Swagger UI
+> 本地预览：`pnpm api:preview` 或 `npx @redocly/cli preview-docs docs/api/openapi.yaml`  
+> Postman：[postman/Asset-Management-System.postman_collection.json](./postman/Asset-Management-System.postman_collection.json) + [AMS-Local 环境](./postman/AMS-Local.postman_environment.json)
 
 ## 1. 基本信息
 
@@ -127,6 +128,7 @@ POST /api/v1/auth/refresh
 | 40901 | 重复提交（幂等拦截） | 忽略或查询结果 |
 | 42201 | 签约价低于底价 | 走超低价审批 |
 | 42202 | 租户在黑名单 | 禁止签约 |
+| 42203 | 报告未通过溯源校验 | 修复数据或重新生成 |
 | 42900 | 请求过于频繁 | 稍后重试 |
 | 50000 | 服务器内部错误 | 联系技术支持，提供 traceId |
 | 50001 | 第三方服务异常 | 支付/短信/发票等，可重试 |
@@ -182,17 +184,30 @@ Content-Type: multipart/form-data
 | 看板 | `/dashboard` | 经营指标 |
 | 盘点盘活 | `/audits`, `/revitalization` | 经营性盘点、空置盘活 |
 | 业财 | `/finance` | 对账、月结 |
+| 智能 | `/intelligence` | Agent 会话、报告生成、溯源 |
+| 处置 | `/disposals` | 资产处置申请与执行 |
+| 占用 | `/occupations` | 临时占用与解除 |
+| 退款 | `/refunds` | 退款申请与冲正 |
+| 审批 | `/approvals` | 待办审批、通过/驳回 |
+| 通知 | `/notifications` | 站内消息、已读 |
 | 系统 | `/system` | 菜单、角色、日志 |
 
 完整路径、Schema 见 **openapi.yaml**。
 
-## 7. 与代码同步
+## 7. Postman 使用
+
+1. Import → 选择 `postman/Asset-Management-System.postman_collection.json`
+2. Import → 选择 `postman/AMS-Local.postman_environment.json`
+3. 运行 **Auth → PC Login**，Test 脚本自动写入 `accessToken`
+4. 完整路径可 Postman → Import → Link 粘贴 `openapi.yaml` URL 同步
+
+## 8. 与代码同步
 
 1. 接口变更先改 `openapi.yaml`，PR 中 @ 前后端 Review。
-2. CI 运行 OpenAPI 校验（`redocly lint`）。
+2. CI 运行 OpenAPI 校验（`pnpm api:lint`）。
 3. 可选：从 OpenAPI 生成 TypeScript 类型到 `packages/api-types`。
 
-## 8. 第三方回调
+## 9. 第三方回调
 
 | 回调 | 路径 | 说明 |
 |------|------|------|

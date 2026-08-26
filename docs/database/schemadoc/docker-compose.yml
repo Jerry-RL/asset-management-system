@@ -1,0 +1,29 @@
+services:
+  schemadoc:
+    image: schemaspy/schemaspy:7.0.2
+    volumes:
+      - ./output:/output
+    command:
+      - -t
+      - pgsql
+      - -host
+      - postgres
+      - -port
+      - "5432"
+      - -db
+      - ams
+      - -u
+      - ams
+      - -p
+      - ams_dev_password
+      - -s
+      - public
+      - -o
+      - /output
+    networks:
+      - ams-net
+
+networks:
+  ams-net:
+    external: true
+    name: docker_ams-net

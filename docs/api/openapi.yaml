@@ -27,6 +27,12 @@ tags:
   - name: Dashboard
   - name: Files
   - name: System
+  - name: Disposals
+  - name: Occupations
+  - name: Refunds
+  - name: Approvals
+  - name: Notifications
+  - name: Intelligence
 
 security:
   - BearerAuth: []
@@ -642,6 +648,327 @@ paths:
                 db: ok
                 redis: ok
 
+  /disposals:
+    post:
+      tags: [Disposals]
+      summary: 创建资产处置申请
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assetId, disposalType]
+              properties:
+                assetId: { type: integer }
+                disposalType: { type: string, enum: [sale, scrap, transfer] }
+                reason: { type: string }
+      responses:
+        '200':
+          description: OK
+    get:
+      tags: [Disposals]
+      summary: 处置单列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+
+  /disposals/{disposalId}/submit:
+    post:
+      tags: [Disposals]
+      summary: 提交处置审批
+      parameters:
+        - name: disposalId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+
+  /disposals/{disposalId}/execute:
+    post:
+      tags: [Disposals]
+      summary: 登记处置执行结果
+      parameters:
+        - name: disposalId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+
+  /occupations:
+    post:
+      tags: [Occupations]
+      summary: 创建临时占用申请
+      responses:
+        '200':
+          description: OK
+    get:
+      tags: [Occupations]
+      summary: 占用单列表
+      responses:
+        '200':
+          description: OK
+
+  /occupations/{occupationId}/release:
+    post:
+      tags: [Occupations]
+      summary: 解除占用
+      parameters:
+        - name: occupationId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+
+  /refunds:
+    post:
+      tags: [Refunds]
+      summary: 创建退款申请
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentId, amount, reason]
+              properties:
+                paymentId: { type: integer }
+                amount: { type: number }
+                reason: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /refunds/{refundId}/approve:
+    post:
+      tags: [Refunds]
+      summary: 审批退款
+      parameters:
+        - name: refundId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+
+  /approvals/tasks:
+    get:
+      tags: [Approvals]
+      summary: 我的待审批任务
+      responses:
+        '200':
+          description: OK
+
+  /approvals/{instanceId}/approve:
+    post:
+      tags: [Approvals]
+      summary: 审批通过
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+
+  /approvals/{instanceId}/reject:
+    post:
+      tags: [Approvals]
+      summary: 审批驳回
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: 消息列表
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: OK
+
+  /notifications/{notificationId}/read:
+    post:
+      tags: [Notifications]
+      summary: 标记已读
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+
+  /intelligence/sessions:
+    post:
+      tags: [Intelligence]
+      summary: 创建 Agent 会话
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                companyId:
+                  type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /intelligence/sessions/{sessionId}/messages:
+    post:
+      tags: [Intelligence]
+      summary: 发送自然语言指令（支持 SSE 流式）
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentMessageRequest'
+      responses:
+        '200':
+          description: 同步响应或 SSE 流
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /intelligence/templates:
+    get:
+      tags: [Intelligence]
+      summary: 报告模板列表
+      responses:
+        '200':
+          description: OK
+
+  /intelligence/reports/generate:
+    post:
+      tags: [Intelligence]
+      summary: 按模板或 NL 生成报告
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentReportGenerateRequest'
+      responses:
+        '200':
+          description: 返回 reportId、previewUrl、jobId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /intelligence/reports/{reportId}:
+    get:
+      tags: [Intelligence]
+      summary: 报告详情与 citations
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /intelligence/reports/{reportId}/preview:
+    get:
+      tags: [Intelligence]
+      summary: HTML 在线预览
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: text/html
+
+  /intelligence/reports/{reportId}/download:
+    get:
+      tags: [Intelligence]
+      summary: 下载 PPT/PDF/DOC（须 verified=true）
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [pptx, pdf, docx]
+      responses:
+        '200':
+          description: 文件流
+        '422':
+          description: 未通过溯源校验 code=42203
+
+  /intelligence/reports/{reportId}/approve:
+    post:
+      tags: [Intelligence]
+      summary: 对外发布审批
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+
+  /intelligence/runs/{runId}/trace:
+    get:
+      tags: [Intelligence]
+      summary: 溯源链路（管理员）
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Tool 调用与模型审计
+
 components:
   securitySchemes:
     BearerAuth:
@@ -908,3 +1235,76 @@ components:
           type: object
         enabled:
           type: boolean
+
+    AgentMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: 自然语言指令
+        stream:
+          type: boolean
+          default: false
+
+    AgentReportGenerateRequest:
+      type: object
+      properties:
+        sessionId:
+          type: integer
+        templateCode:
+          type: string
+          example: TPL-OPS-001
+        naturalLanguage:
+          type: string
+          description: 可选 NL 描述，与 templateCode 二选一或组合
+        params:
+          type: object
+          properties:
+            companyId:
+              type: integer
+            projectId:
+              type: integer
+            month:
+              type: string
+              example: "2026-08"
+        outputFormats:
+          type: array
+          items:
+            type: string
+            enum: [html, pptx, pdf, docx]
+
+    AgentCitation:
+      type: object
+      properties:
+        claimKey:
+          type: string
+        claimValue:
+          type: string
+        toolName:
+          type: string
+        apiPath:
+          type: string
+        toolCallId:
+          type: integer
+        verified:
+          type: boolean
+
+    AgentReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, verified, approved, exported]
+        previewUrl:
+          type: string
+        verified:
+          type: boolean
+        citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCitation'

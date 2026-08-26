@@ -1,0 +1,24 @@
+Title,Section,Priority,Type,References,Steps,Expected Result
+PC 正确登录,认证与权限,P0,Functional,TC-AUTH-001 FR-AUTH-001,输入正确账号密码验证码,返回 token 进入首页
+验证码错误,认证与权限,P0,Functional,TC-AUTH-002,错误验证码登录,code=40000
+Token 过期刷新,认证与权限,P0,Functional,TC-AUTH-003,access 过期后用 refresh,新 token 可用
+无权限菜单,认证与权限,P0,Functional,TC-AUTH-004,办事员访问系统配置,code=40300
+数据权限隔离,认证与权限,P0,Functional,TC-AUTH-005,A 公司用户查 B 公司资产,无数据或 40301
+新增房产资产,资产台账,P0,Functional,TC-AST-001 FR-AST-001,填必填项保存,台账可见租控=空置
+导入资产 Excel,资产台账,P0,Functional,TC-AST-002,上传模板文件,成功条数正确失败行提示
+租控禁止手改,资产台账,P0,Functional,TC-AST-003,API 直接改 lease_control_status,拒绝 code=40900
+创建合同并审批,定价与合同,P0,Functional,TC-CON-001 FR-CON-001,添加租赁→审批→通过,合同 active 租控=在租
+自动生成缴费计划,定价与合同,P0,Functional,TC-CON-002,审批通过,payment_plan 条数正确
+低于底价签约,定价与合同,P0,Functional,TC-CON-003,租金低于底价提交,阻断或超低价审批流
+退租清场闭环,定价与合同,P0,Functional,TC-CON-005 FR-VAC-001,退租→验收→结算,租控=空置
+黑名单拦截,公开招租,P0,Functional,TC-TEN-003 FR-TEN-003,黑名单租户签约,code=42202
+账单生成与收款,收费与发票,P0,Functional,TC-BIL-001 FR-BIL-001,计划到期生成账单,账单状态正确
+幂等重复收款,收费与发票,P0,Functional,TC-BIL-003,相同 Idempotency-Key 重复提交,40901 或返回原结果
+欠费催缴升级,催缴,P1,Functional,TC-DUN-001 FR-DUN-001,超期未缴逐级升级,L1→L2→L3 记录正确
+经营看板指标,看板,P1,Functional,TC-DSH-001 FR-DSH-001,打开经营看板,出租率收缴率等指标展示
+模板生成经营月报,智能Agent,P1,Functional,TC-AI-001 FR-AI-007,选模板+范围生成,HTML预览可打开且指标可溯源
+NL生成收缴报告,智能Agent,P1,Functional,TC-AI-004 FR-AI-009,自然语言描述意图,报告数值与看板一致
+Agent越权阻断,智能Agent,P1,Security,TC-AI-005 NFR-AI-002,A公司用户查B公司,40301或无数据
+处置闭环,资产退出,P0,Functional,TC-LOOP-006 FR-DISP-001,处置申请到已退出,租控=已退出且备案可导出
+占用闭环,资产运营,P0,Functional,TC-LOOP-007 FR-OCC-001,占用到解除,租控回空置
+退款闭环,收费,P0,Functional,TC-LOOP-010 FR-REF-001,退款审批冲正,账单状态正确回写

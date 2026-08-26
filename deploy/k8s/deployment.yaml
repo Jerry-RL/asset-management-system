@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ams-api
+  namespace: ams
+  labels:
+    app.kubernetes.io/name: ams-api
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ams-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ams-api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/ams-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: ams-api-config
+            - secretRef:
+                name: ams-api-secret
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              memory: 1Gi
+              cpu: "1"

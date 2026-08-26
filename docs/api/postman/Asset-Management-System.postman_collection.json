@@ -1,0 +1,228 @@
+{
+  "info": {
+    "_postman_id": "ams-api-v1",
+    "name": "Asset Management System API",
+    "description": "资产经营管理系统 REST API v1。完整 Schema 见 ../openapi.yaml；可 Postman → Import → Link 导入 OpenAPI 同步全部路径。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1"
+    },
+    {
+      "key": "clientType",
+      "value": "admin"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "PC Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "  pm.environment.set('accessToken', json.data.accessToken);",
+                  "  pm.environment.set('refreshToken', json.data.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Type", "value": "{{clientType}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"changeme\",\n  \"captchaId\": \"demo\",\n  \"captchaCode\": \"0000\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/refresh"
+          }
+        },
+        {
+          "name": "WeChat Login (Tenant MP)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Type", "value": "tenant-mp" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"wx-login-code\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/wechat/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "Ready",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/health/ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assets",
+      "item": [
+        {
+          "name": "List Assets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Client-Type", "value": "{{clientType}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/assets?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["assets"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Asset",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Type", "value": "{{clientType}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": 1,\n  \"name\": \"示例商铺 A101\",\n  \"assetType\": \"property\",\n  \"area\": 120.5\n}"
+            },
+            "url": "{{baseUrl}}/assets"
+          }
+        },
+        {
+          "name": "Get Asset QR Code",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Client-Type", "value": "{{clientType}}" }],
+            "url": "{{baseUrl}}/assets/1/qrcode"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contracts",
+      "item": [
+        {
+          "name": "List Contracts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Client-Type", "value": "{{clientType}}" }],
+            "url": "{{baseUrl}}/contracts?page=1&pageSize=10"
+          }
+        },
+        {
+          "name": "Create Contract",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Type", "value": "{{clientType}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": 1,\n  \"tenantId\": 1,\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2027-08-31\",\n  \"rentAmount\": 5000,\n  \"depositAmount\": 10000,\n  \"paymentCycle\": \"monthly\"\n}"
+            },
+            "url": "{{baseUrl}}/contracts"
+          }
+        },
+        {
+          "name": "Approve Contract",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Client-Type", "value": "{{clientType}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": "{{baseUrl}}/contracts/1/approve"
+          }
+        },
+        {
+          "name": "Vacate Contract",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Type", "value": "{{clientType}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vacateDate\": \"2026-12-31\",\n  \"reason\": \"lease_expired\"\n}"
+            },
+            "url": "{{baseUrl}}/contracts/1/vacate"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Billing",
+      "item": [
+        {
+          "name": "List Bills",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Client-Type", "value": "{{clientType}}" }],
+            "url": "{{baseUrl}}/billing/bills?page=1&pageSize=10"
+          }
+        }
+      ]
+    }
+  ]
+}
