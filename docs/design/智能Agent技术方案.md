@@ -3,7 +3,7 @@
 | 版本 | V1.0 |
 |------|------|
 | 日期 | 2026-08-26 |
-| 依据 | SRS V2.2 §4.26、§5.7；DSD V1.3 |
+| 依据 | SRS V2.4 §4.26、§5.7；DSD V1.6 |
 | 受众 | 架构师、后端、前端、安全、运维、产品 |
 
 ---
@@ -349,7 +349,7 @@ flowchart LR
 ```
 
 - **小规模**：Agent 逻辑作为 `intelligence` 模块与 API 同进程，LLM 通过 HTTP 调内网推理服务。
-- **中大规模**：报告渲染、长任务异步化（BullMQ），独立 Worker 池；GPU 节点仅部署 LLM。
+- **中大规模**：报告渲染、长任务异步化（JobRunr），可独立 Worker 实例；GPU 节点仅部署 LLM。
 
 环境变量：`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_DEFAULT_MODEL`、`AGENT_REQUIRE_PRIVATE=true`。
 
