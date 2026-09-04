@@ -48,14 +48,16 @@ export const LeaseControlStatus = {
 - 列表页：统一 `useTableQuery` 封装分页筛选
 - API 类型从 `packages/api-types`（OpenAPI 生成）引用
 
-## 5. 后端（Node.js + Express）
+## 5. 后端（Java + Spring Boot）
 
-- 分层：`routes → controllers → services → repositories`
-- 数据访问：**Knex**（DDL 由 Flyway 管理，见 ADR-0010）
-- 统一 `AppError` + 错误码（见 api/README.md）
-- 写操作：事务 + 幂等（Redis Idempotency-Key）
-- 输入校验：Zod / Joi，与 OpenAPI schema 对齐
-- 日志：每个请求注入 `traceId`
+- 分层：`controller → service → mapper`（DTO/Entity 分离）
+- 数据访问：**MyBatis-Plus**（DDL 由 Flyway 管理，见 ADR-0017）
+- 统一 `ApiResponse` + 业务异常 + 错误码（见 api/README.md）
+- 写操作：`@Transactional` + Redis 幂等（Idempotency-Key）
+- 输入校验：Jakarta Validation（`@Valid`），与 OpenAPI schema 对齐
+- 日志：MDC `traceId`（TraceIdFilter）
+- 包名：`com.ams.modules.{domain}`、`com.ams.platform.{capability}`
+- 禁止跨模块直接注入其他模块的 Mapper
 
 ## 6. 数据库
 
@@ -120,6 +122,7 @@ fix(billing): prevent duplicate payment with idempotency key
 
 | 工具 | 用途 | 路径 |
 |------|------|------|
+| Maven | Java 构建与测试 | `backend/pom.xml` |
 | ESLint + Prettier | TS/JS 格式与规则 | `eslint.config.js`、`.prettierrc` |
 | EditorConfig | 编辑器统一缩进 | `.editorconfig` |
 | Husky + lint-staged | 提交前 lint（backend 脚手架后启用） | 见 setup-pre-commit |

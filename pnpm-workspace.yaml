@@ -1,5 +1,4 @@
 packages:
-  - backend
   - admin-web
   - miniprogram-tenant
   - miniprogram-worker

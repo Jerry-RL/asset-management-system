@@ -9,20 +9,24 @@
 
 | 阶段 | 核心文档 |
 |------|----------|
-| 立项 | 项目章程、商业论证 |
-| 需求 | SRS V2.2、用户故事地图、业务闭环评审报告 |
-| 设计 | 概要设计 V1.1、**DSD V1.3**、技术选型、智能 Agent、OpenAPI |
-| 开发 | 数据库设计、ADR、代码规范 |
-| 测试 | 测试计划、用例、性能报告 |
+| 立项 | 项目章程、商业论证、开发计划 |
+| 需求 | SRS V2.3、用户故事地图 |
+| 设计 | 概要设计、DSD V1.5、**技术选型 V2.0（Java）**、OpenAPI |
+| 开发 | 数据库设计、ADR-0016~0018、代码规范 |
+| 测试 | 测试计划、用例 |
 | 运维 | 部署手册、应急预案 |
-| 交接 | 用户手册、系统交接文档 |
 
-## 技术栈（规划）
+## 技术栈
 
-- Backend: Node.js, Express, PostgreSQL, Redis
-- Admin: React, TypeScript, Tailwind CSS
-- Mini Program: 微信用户端 / 工作端
-- Auth: JWT
+| 层次 | 选型 |
+|------|------|
+| **Backend** | **JDK 21, Spring Boot 3.3, MyBatis-Plus, Flyway, JobRunr** |
+| Admin | React, TypeScript, Vite, Tailwind CSS |
+| Mini Program | 微信用户端 / 工作端 |
+| Data | PostgreSQL 15, Redis 7 |
+| Auth | Spring Security + JWT |
+
+详见 [docs/design/技术选型说明书.md](docs/design/技术选型说明书.md)、[ADR-0016](docs/adr/0016-java-spring-boot-backend.md)。
 
 ## 仓库
 
@@ -31,17 +35,23 @@ https://github.com/Jerry-RL/asset-management-system
 ## 快速命令
 
 ```bash
-# 安装文档/ lint 工具
-pnpm install
-
-# 预览与校验 API 文档
-pnpm api:preview
-pnpm api:lint
-
-# 代码格式
-pnpm lint
-pnpm format
-
 # 本地依赖（PostgreSQL / Redis / MinIO）
 cd docker && docker compose up -d
+
+# 后端 API（需 JDK 21 + Maven）
+cd backend && mvn spring-boot:run
+
+# 文档与 OpenAPI 校验
+pnpm install
+pnpm api:lint
+pnpm lint
+```
+
+## 工程结构
+
+```
+backend/          # Java Maven Spring Boot
+admin-web/        # React（待脚手架）
+miniprogram-*/    # 微信小程序（待脚手架）
+docs/             # 全生命周期文档
 ```

@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: ams-api
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ams
+    username: ams
+    password: ams_dev_password
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+org:
+  jobrunr:
+    background-job-server:
+      enabled: true
+    dashboard:
+      enabled: true
+      port: 8000
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+
+ams:
+  jwt:
+    access-secret: ${JWT_ACCESS_SECRET:dev-access-secret-change-me-min-32-chars!!}
+    refresh-secret: ${JWT_REFRESH_SECRET:dev-refresh-secret-change-me-min-32-chars!}
+    access-expiration-minutes: 120
+    refresh-expiration-days: 7
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} traceId=%X{traceId} - %msg%n"

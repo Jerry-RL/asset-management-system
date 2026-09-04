@@ -1,7 +1,8 @@
 # ADR-0002: 模块化单体优先于微服务
 
-- **状态**：Accepted
+- **状态**：Accepted（后端实现见 [ADR-0016](./0016-java-spring-boot-backend.md)）
 - **日期**：2026-08-26
+- **更新**：2026-08-27 — 后端由 Node.js 调整为 **Java Spring Boot**，架构模式不变
 
 ## 上下文
 
@@ -9,10 +10,10 @@ SRS 要求可扩展至集群/微服务，但当前规模按 200 在线用户设�
 
 ## 决策
 
-一期采用 **模块化单体**（Node.js + Express）：
+一期采用 **模块化单体**（**Spring Boot 3**）：
 
-- 按领域分包：`asset`、`lease`、`contract`、`billing`、`maintenance`、`system` 等
-- 模块间通过服务层调用，禁止跨模块直接访问其他模块的 Repository
+- 按领域分包：`com.ams.modules.asset`、`lease`、`contract`、`billing`、`maintenance`、`system` 等
+- 模块间通过 Service 层调用，禁止跨模块直接访问其他模块的 Mapper
 - 预留后续按模块拆分为微服务的能力（边界清晰、无循环依赖）
 
 ## 备选方案

@@ -13,12 +13,15 @@
 | [ADR-0007](./0007-object-storage-attachments.md) | 附件走对象存储 | Accepted |
 | [ADR-0008](./0008-llm-agent-architecture.md) | 私有化 LLM Agent 与 Tool-First 编排 | Accepted |
 | [ADR-0009](./0009-lightweight-approval-engine.md) | 轻量自研审批引擎 | Accepted |
-| [ADR-0010](./0010-knex-with-flyway.md) | Knex 查询 + Flyway 管理 Schema | Accepted |
-| [ADR-0011](./0011-bullmq-async-jobs.md) | BullMQ 异步任务队列 | Accepted |
-| [ADR-0012](./0012-pnpm-monorepo-structure.md) | pnpm Monorepo 工程结构 | Accepted |
+| [ADR-0010](./0010-knex-with-flyway.md) | Knex 查询 + Flyway 管理 Schema | Superseded by [0017](./0017-mybatis-plus-flyway.md) |
+| [ADR-0011](./0011-bullmq-async-jobs.md) | BullMQ 异步任务队列 | Superseded by [0018](./0018-jobrunr-async-jobs.md) |
+| [ADR-0012](./0012-pnpm-monorepo-structure.md) | 混合 Monorepo（Maven + pnpm） | Accepted |
 | [ADR-0013](./0013-in-process-domain-events.md) | 进程内领域事件驱动通知 | Accepted |
 | [ADR-0014](./0014-wechat-native-miniprogram.md) | 微信小程序原生开发（一期） | Accepted |
 | [ADR-0015](./0015-data-classification-and-encryption.md) | 数据分类分级与加密策略 | Accepted |
+| [ADR-0016](./0016-java-spring-boot-backend.md) | Java Spring Boot 后端主栈 | Accepted |
+| [ADR-0017](./0017-mybatis-plus-flyway.md) | MyBatis-Plus + Flyway | Accepted |
+| [ADR-0018](./0018-jobrunr-async-jobs.md) | JobRunr 异步任务 | Accepted |
 
 **状态说明**：Proposed / Accepted / Deprecated / Superseded
 
