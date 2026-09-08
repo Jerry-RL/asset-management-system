@@ -24,4 +24,8 @@ public class User extends BaseEntity {
     private Long companyId;
     private Integer status;
     private LocalDateTime lastLoginAt;
+    /** 微信 openid（小程序登录绑定） */
+    private String wechatOpenid;
+    /** 关联租户（租户端账号） */
+    private Long tenantId;
 }

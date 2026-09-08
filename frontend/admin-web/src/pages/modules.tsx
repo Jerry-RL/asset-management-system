@@ -1,4 +1,5 @@
 import type { ResourceConfig } from '@/components/ResourcePage';
+import { ASSET_QUICK_ACTIONS } from '@/lib/assetQuickActions';
 import * as L from '@/lib/labels';
 
 // ============================================================================
@@ -16,154 +17,108 @@ export interface MenuGroup {
 }
 
 export const MENU: MenuGroup[] = [
+  // 展示优先级：日常作业 → 经营闭环 → 档案查询 → 现场 → 决策/配置
   {
-    title: '首页与工作台',
+    title: '工作台',
     items: [
-      { path: '/', title: '经营看板' },
-      { path: '/dashboard/consolidate', title: '集团合并看板' },
-    ],
-  },
-  {
-    title: '经营分析',
-    items: [
+      { path: '/', title: '应用中心' },
+      { path: '/ops-calendar', title: '经营日历' },
+      { path: '/dashboard', title: '经营看板' },
+      { path: '/asset-map', title: '资产地图' },
+      { path: '/reports', title: '数据报表' },
       { path: '/business-plans', title: '经营计划与预算' },
       { path: '/dashboard/consolidate', title: '集团合并看板' },
     ],
   },
   {
-    title: '风险管控',
+    title: '协同管控',
     items: [
-      { path: '/alerts/rules', title: '预警配置' },
+      { path: '/tasks', title: '任务管理' },
+      { path: '/approvals', title: '审批中心' },
+      { path: '/notifications', title: '消息通知' },
       { path: '/alerts/records', title: '预警提醒与记录' },
+      { path: '/alerts/rules', title: '预警配置' },
+      { path: '/regulation/reports', title: '监管报送' },
     ],
   },
   {
-    title: '资产台账',
-    items: [
-      { path: '/projects', title: '项目管理' },
-      { path: '/assets', title: '资产台账' },
-    ],
-  },
-  {
-    title: '资债权证',
-    items: [
-      { path: '/certificates', title: '权证信息' },
-      { path: '/mortgages', title: '抵押列表' },
-      { path: '/asset-transfers', title: '资产调拨' },
-      { path: '/evaluations', title: '评估申请' },
-    ],
-  },
-  {
-    title: '资产招租',
-    items: [
-      { path: '/lease-listings', title: '招租管理' },
-      { path: '/tender/announcements', title: '公开招租' },
-      { path: '/tenants', title: '客商/租户管理' },
-    ],
-  },
-  {
-    title: '资产运营',
-    items: [
-      { path: '/disposals', title: '资产处置' },
-      { path: '/occupations', title: '临时占用' },
-      { path: '/self-uses', title: '资产自用' },
-    ],
-  },
-  {
-    title: '合同管理',
+    title: '招租与合同',
     items: [
       { path: '/contracts', title: '合同管理' },
       { path: '/vacate-orders', title: '退租清场与保证金' },
+      { path: '/lease-listings', title: '招租管理' },
+      { path: '/tender/announcements', title: '公开招租' },
+      { path: '/tenants', title: '客商/租户管理' },
+      { path: '/lease-bundles', title: '组合/拆分租赁' },
+      { path: '/contract-templates', title: '合同模板' },
     ],
   },
   {
-    title: '定价与计费',
+    title: '收费财务',
     items: [
       { path: '/billing/bills', title: '账单（收费大厅）' },
+      { path: '/payments/pending-confirm', title: '现场收款待确认' },
+      { path: '/dunning/auto', title: '自动化催缴' },
+      { path: '/dunning/records', title: '催缴记录' },
+      { path: '/payments', title: '收款记录' },
+      { path: '/invoices', title: '发票管理' },
+      { path: '/adjustments/fee-reliefs', title: '费用减免' },
+      { path: '/adjustments/rent-adjusts', title: '租金调价' },
+      { path: '/refunds', title: '退款冲正' },
       { path: '/meters', title: '表计档案与抄表' },
       { path: '/apportion-configs', title: '公摊配置' },
-    ],
-  },
-  {
-    title: '收费与发票',
-    items: [
-      { path: '/payments', title: '收款记录' },
-      { path: '/refunds', title: '退款冲正' },
-      { path: '/invoices', title: '发票管理' },
       { path: '/invoice-tax-rates', title: '发票税率' },
       { path: '/finance/bank-flows', title: '银行对账' },
       { path: '/finance/vouchers', title: '财务凭证' },
     ],
   },
   {
-    title: '履约催缴',
-    items: [{ path: '/dunning/records', title: '催缴记录' }],
+    title: '资产档案',
+    items: [
+      { path: '/assets', title: '资产台账' },
+      { path: '/projects', title: '项目管理' },
+      { path: '/certificates', title: '权证信息' },
+      { path: '/evaluations', title: '评估申请' },
+      { path: '/mortgages', title: '抵押列表' },
+      { path: '/asset-transfers', title: '资产调拨' },
+      { path: '/assets/structure-logs', title: '拆分合并日志' },
+      { path: '/fixed-assets', title: '固资清单' },
+      { path: '/fixed-assets/inventories', title: '固资盘点' },
+      { path: '/intangible-assets', title: '无形资产台账' },
+    ],
   },
   {
-    title: '巡检维修',
+    title: '现场运维',
     items: [
       { path: '/repairs', title: '报修工单' },
-      { path: '/vendors', title: '维修公司' },
       { path: '/inspections', title: '巡查记录' },
-    ],
-  },
-  {
-    title: '任务中心',
-    items: [{ path: '/tasks', title: '任务管理' }],
-  },
-  {
-    title: '空置盘活',
-    items: [{ path: '/revitalization', title: '盘活任务' }],
-  },
-  {
-    title: '合规监管',
-    items: [{ path: '/regulation/reports', title: '监管报送' }],
-  },
-  {
-    title: '消息待办',
-    items: [{ path: '/notifications', title: '消息通知' }],
-  },
-  {
-    title: '固定资产',
-    items: [{ path: '/fixed-assets', title: '固资清单' }],
-  },
-  {
-    title: '无形资产',
-    items: [{ path: '/intangible-assets', title: '无形资产台账' }],
-  },
-  {
-    title: '组织架构',
-    items: [
-      { path: '/org/companies', title: '公司管理' },
-      { path: '/org/departments', title: '部门管理' },
-      { path: '/system/users', title: '人员维护' },
-    ],
-  },
-  {
-    title: '运营管理',
-    items: [{ path: '/tenants', title: '租户管理' }],
-  },
-  {
-    title: '系统配置',
-    items: [{ path: '/config/versions', title: '参数版本留痕' }],
-  },
-  {
-    title: '系统管理',
-    items: [
-      { path: '/system/roles', title: '角色权限' },
-      { path: '/system/menus', title: '菜单管理' },
+      { path: '/revitalization', title: '空置盘活' },
+      { path: '/asset-audits', title: '经营性盘点' },
+      { path: '/occupations', title: '临时占用' },
+      { path: '/self-uses', title: '资产自用' },
+      { path: '/disposals', title: '资产处置' },
+      { path: '/vendors', title: '维修公司' },
     ],
   },
   {
     title: '智能中心',
     items: [
-      { path: '/intelligence/templates', title: '报告模板' },
+      { path: '/intelligence/reports', title: 'Agent 报告' },
       { path: '/intelligence/sessions', title: 'Agent 会话' },
+      { path: '/intelligence/templates', title: '报告模板' },
     ],
   },
   {
-    title: '期初迁移',
-    items: [{ path: '/migrations/batches', title: '迁移批次与试算平衡' }],
+    title: '系统设置',
+    items: [
+      { path: '/system/users', title: '人员维护' },
+      { path: '/system/roles', title: '角色权限' },
+      { path: '/org/companies', title: '公司管理' },
+      { path: '/org/departments', title: '部门管理' },
+      { path: '/system/menus', title: '菜单管理' },
+      { path: '/config/versions', title: '参数版本留痕' },
+      { path: '/migrations/batches', title: '期初迁移' },
+    ],
   },
 ];
 
@@ -194,7 +149,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'name', label: '项目名称' },
       { key: 'address', label: '地址' },
       { key: 'companyId', label: '经营公司ID' },
-      { key: 'status', label: '状态' },
+      { key: 'status', label: '状态', map: L.ENABLE_STATUS },
     ],
     fields: [
       { name: 'name', label: '项目名称', required: true },
@@ -208,7 +163,12 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     title: '资产台账',
     listPath: '/assets',
     create: true,
+    update: true,
     detailPath: (id) => `/assets/${id}`,
+    detailLink: (id) => `/assets/${id}/dossier`,
+    qrcodePath: (id) => `/assets/${id}/qrcode`,
+    exportPath: '/io/assets/export',
+    importPath: '/io/assets/import',
     columns: [
       { key: 'assetNo', label: '资产编号' },
       { key: 'name', label: '名称' },
@@ -217,10 +177,10 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'leaseControlStatus', label: '租控状态', map: L.LEASE_CONTROL_STATUS },
       { key: 'operatingCompanyId', label: '经营公司' },
     ],
-    filters: [
+    tagFilters: [
       {
         key: 'assetType',
-        label: '类型',
+        label: '资产类型',
         options: Object.entries(L.ASSET_TYPE).map(([value, label]) => ({ value, label })),
       },
       {
@@ -241,19 +201,28 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       },
       { name: 'area', label: '面积(㎡)', type: 'number' },
       { name: 'projectId', label: '项目ID', type: 'number' },
+      { name: 'operatingCompanyId', label: '经营公司ID', type: 'number' },
+      { name: 'propertyCompanyId', label: '产权公司ID', type: 'number' },
       { name: 'sourceType', label: '来源类型' },
       { name: 'ownershipType', label: '权属' },
+      { name: 'usageType', label: '用途' },
+      { name: 'structureType', label: '结构' },
       { name: 'province', label: '省' },
       { name: 'city', label: '市' },
       { name: 'district', label: '区' },
       { name: 'address', label: '坐落地址', type: 'textarea' },
+      { name: 'baseRentFloor', label: '备案底价', type: 'number' },
+      { name: 'baseRentAssessed', label: '评估租金', type: 'number' },
+      { name: 'marketRefRent', label: '市场参考价', type: 'number' },
     ],
+    rowActions: ASSET_QUICK_ACTIONS,
   },
   tenants: {
     title: '租户/客商管理',
     listPath: '/tenants',
     create: true,
     detailPath: (id) => `/tenants/${id}`,
+    importPath: '/io/tenants/import',
     columns: [
       { key: 'name', label: '名称' },
       { key: 'phone', label: '手机号' },
@@ -304,6 +273,18 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { name: 'rentNegotiable', label: '可面议', type: 'boolean' },
     ],
   },
+  'lease-bundles': {
+    title: '组合/拆分租赁',
+    listPath: '/lease-bundles',
+    columns: [
+      { key: 'bundleNo', label: '组合编号' },
+      { key: 'bundleType', label: '类型', map: { combo: '组合', split: '拆分' } },
+      { key: 'rentMode', label: '计租模式' },
+      { key: 'totalRent', label: '总租金' },
+      { key: 'status', label: '状态', map: { draft: '草稿', active: '生效', closed: '已关闭' } },
+      { key: 'masterContractId', label: '主合同ID' },
+    ],
+  },
   'tender/announcements': {
     title: '公开招租公告',
     listPath: '/tender/announcements',
@@ -333,12 +314,19 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     listPath: '/contracts',
     create: true,
     detailPath: (id) => `/contracts/${id}`,
+    detailLink: (id) => `/contracts/${id}`,
+    detailLinkLabel: '预览',
     columns: [
       { key: 'contractNo', label: '合同编号' },
       { key: 'assetId', label: '资产ID' },
       { key: 'tenantId', label: '租户ID' },
+      { key: 'startDate', label: '起租日' },
+      { key: 'endDate', label: '到期日' },
+      { key: 'leaseArea', label: '租赁面积(㎡)' },
       { key: 'rentType', label: '租金类型', map: L.RENT_TYPE },
       { key: 'rentAmount', label: '周期租金' },
+      { key: 'depositAmount', label: '保证金' },
+      { key: 'paymentCycle', label: '缴费周期', map: L.PAYMENT_CYCLE },
       { key: 'status', label: '状态', map: L.CONTRACT_STATUS },
     ],
     filters: [{ key: 'status', label: '状态', options: common.contractStatus }],
@@ -347,6 +335,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { name: 'tenantId', label: '租户ID', type: 'number', required: true },
       { name: 'startDate', label: '起租日', type: 'date', required: true },
       { name: 'endDate', label: '到期日', type: 'date', required: true },
+      { name: 'leaseArea', label: '租赁面积(㎡)', type: 'number' },
       {
         name: 'rentType',
         label: '租金类型',
@@ -378,6 +367,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
   'billing/bills': {
     title: '账单（收费大厅）',
     listPath: '/billing/bills',
+    exportPath: '/io/bills/export',
     columns: [
       { key: 'billNo', label: '账单编号' },
       { key: 'contractId', label: '合同ID' },
@@ -438,6 +428,57 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'thirdPartyRefundNo', label: '三方退款单号' },
     ],
   },
+  'adjustments/fee-reliefs': {
+    title: '费用减免',
+    listPath: '/adjustments/fee-reliefs',
+    create: true,
+    createPath: '/adjustments/fee-reliefs',
+    columns: [
+      { key: 'id', label: '申请ID' },
+      { key: 'billId', label: '账单ID' },
+      { key: 'contractId', label: '合同ID' },
+      { key: 'reliefAmount', label: '减免金额' },
+      { key: 'majorFlag', label: '大额', render: (r) => (r.majorFlag ? '是' : '否') },
+      { key: 'status', label: '状态', map: { draft: '草稿', approving: '审批中', rejected: '已驳回', applied: '已生效' } },
+      { key: 'reason', label: '原因' },
+    ],
+    fields: [
+      { name: 'billId', label: '账单ID', required: true },
+      { name: 'reliefAmount', label: '减免金额', type: 'number', required: true },
+      { name: 'reason', label: '原因', required: true },
+      { name: 'fileIds', label: '附件ID列表' },
+    ],
+  },
+  'adjustments/rent-adjusts': {
+    title: '租金调价',
+    listPath: '/adjustments/rent-adjusts',
+    create: true,
+    createPath: '/adjustments/rent-adjusts',
+    columns: [
+      { key: 'id', label: '申请ID' },
+      { key: 'contractId', label: '合同ID' },
+      { key: 'oldRentAmount', label: '原租金' },
+      { key: 'newRentAmount', label: '新租金' },
+      { key: 'issuedStrategy', label: '已出账策略', map: { keep: '不变', diff_bill: '补差账单' } },
+      { key: 'status', label: '状态', map: { draft: '草稿', approving: '审批中', rejected: '已驳回', applied: '已生效' } },
+      { key: 'reason', label: '原因' },
+    ],
+    fields: [
+      { name: 'contractId', label: '合同ID', required: true },
+      { name: 'newRentAmount', label: '新租金', type: 'number', required: true },
+      { name: 'effectiveDate', label: '生效日期', type: 'date' },
+      {
+        name: 'issuedStrategy',
+        label: '已出账策略',
+        type: 'select',
+        options: [
+          { value: 'keep', label: '不变' },
+          { value: 'diff_bill', label: '补差账单' },
+        ],
+      },
+      { name: 'reason', label: '原因', required: true },
+    ],
+  },
   invoices: {
     title: '发票管理',
     listPath: '/invoices',
@@ -448,6 +489,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'taxRate', label: '税率' },
       { key: 'taxAmount', label: '税额' },
       { key: 'status', label: '状态', map: L.INVOICE_STATUS },
+      { key: 'thirdPartyNo', label: '平台单号' },
     ],
   },
   'invoice-tax-rates': {
@@ -477,7 +519,15 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       {
         key: 'method',
         label: '方式',
-        map: { sms: '短信', notice_post: '催缴单', lawyer_letter: '律师函', legal: '法务' },
+        map: {
+          sms: '短信',
+          notice_post: '催缴单',
+          notice: '催缴单',
+          lawyer_letter: '律师函',
+          legal: '法务',
+          eviction: '清退',
+          system: '系统',
+        },
       },
       { key: 'result', label: '回款结果' },
       { key: 'createdAt', label: '时间' },
@@ -534,9 +584,9 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'assetId', label: '资产ID' },
       { key: 'inspectorId', label: '巡查人ID' },
       { key: 'planDate', label: '巡查日期' },
-      { key: 'result', label: '结果' },
+      { key: 'result', label: '结果', map: { normal: '正常', hazard: '有隐患', abnormal: '异常' } },
       { key: 'hazardDesc', label: '隐患描述' },
-      { key: 'status', label: '状态' },
+      { key: 'status', label: '状态', map: { pending: '待巡查', done: '已完成', overdue: '已逾期' } },
     ],
     fields: [
       { name: 'assetId', label: '资产ID', type: 'number', required: true },
@@ -629,7 +679,10 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       },
       { key: 'reason', label: '原因' },
       { key: 'assessedValue', label: '评估价' },
+      { key: 'bookValue', label: '账面价值' },
       { key: 'actualAmount', label: '实际金额' },
+      { key: 'pnlAmount', label: '损益' },
+      { key: 'pnlType', label: '损益类型', map: { gain: '收益', loss: '亏损' } },
       { key: 'status', label: '状态', map: L.DISPOSAL_STATUS },
     ],
     fields: [
@@ -645,6 +698,8 @@ export const RESOURCES: Record<string, ResourceConfig> = {
         ],
       },
       { name: 'reason', label: '原因', type: 'textarea' },
+      { name: 'assessedValue', label: '评估价', type: 'number' },
+      { name: 'bookValue', label: '账面价值', type: 'number' },
     ],
   },
   occupations: {
@@ -708,6 +763,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
         map: { applying: '申请中', accepted: '已受理', evaluating: '评估中', reported: '已出具' },
       },
       { key: 'resultValue', label: '评估价' },
+      { key: 'reportFileId', label: '报告附件ID' },
     ],
     fields: [
       { name: 'assetId', label: '资产ID', type: 'number', required: true },
@@ -746,6 +802,40 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { name: 'planType', label: '盘活方案' },
       { name: 'assigneeId', label: '责任人ID', type: 'number' },
       { name: 'targetDate', label: '目标日', type: 'date' },
+    ],
+  },
+  'asset-audits': {
+    title: '经营性盘点计划',
+    listPath: '/asset-audits',
+    create: true,
+    columns: [
+      { key: 'planNo', label: '计划编号' },
+      { key: 'title', label: '标题' },
+      { key: 'projectId', label: '项目ID' },
+      { key: 'scopeType', label: '范围', map: { full: '全盘', sample: '抽盘' } },
+      {
+        key: 'status',
+        label: '状态',
+        map: { draft: '草稿', in_progress: '进行中', completed: '已完成', cancelled: '已取消' },
+      },
+      { key: 'plannedStart', label: '计划开始' },
+      { key: 'plannedEnd', label: '计划结束' },
+    ],
+    fields: [
+      { name: 'title', label: '标题', required: true },
+      { name: 'projectId', label: '项目ID', type: 'number' },
+      {
+        name: 'scopeType',
+        label: '范围',
+        type: 'select',
+        options: [
+          { value: 'full', label: '全盘' },
+          { value: 'sample', label: '抽盘' },
+        ],
+      },
+      { name: 'plannedStart', label: '计划开始', type: 'date' },
+      { name: 'plannedEnd', label: '计划结束', type: 'date' },
+      { name: 'remark', label: '备注' },
     ],
   },
   'business-plans': {
@@ -787,7 +877,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     columns: [
       { key: 'title', label: '标题' },
       { key: 'content', label: '内容' },
-      { key: 'bizType', label: '业务类型' },
+      { key: 'bizType', label: '业务类型', map: L.BIZ_TYPE },
       { key: 'channel', label: '渠道', map: { in_app: '站内信', sms: '短信', mp: '小程序' } },
       { key: 'readAt', label: '已读时间' },
       { key: 'createdAt', label: '创建时间' },
@@ -805,16 +895,59 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'originalValue', label: '原值' },
       { key: 'netValue', label: '净值' },
       { key: 'userName', label: '使用人' },
-      { key: 'status', label: '状态' },
+      {
+        key: 'status',
+        label: '状态',
+        map: {
+          in_stock: '在库',
+          in_use: '在用',
+          loaned: '借出',
+          disposed: '已处置',
+        },
+      },
     ],
     fields: [
       { name: 'assetNo', label: '资产编号', required: true },
       { name: 'name', label: '名称', required: true },
       { name: 'assetType', label: '类型' },
+      { name: 'companyId', label: '公司ID', type: 'number' },
       { name: 'originalValue', label: '原值', type: 'number' },
       { name: 'netValue', label: '净值', type: 'number' },
       { name: 'userName', label: '使用人' },
       { name: 'location', label: '位置' },
+      {
+        name: 'status',
+        label: '状态',
+        type: 'select',
+        options: [
+          { value: 'in_stock', label: '在库' },
+          { value: 'in_use', label: '在用' },
+          { value: 'loaned', label: '借出' },
+          { value: 'disposed', label: '已处置' },
+        ],
+      },
+    ],
+  },
+  'fixed-assets/inventories': {
+    title: '固资盘点',
+    listPath: '/fixed-assets/inventories',
+    create: true,
+    columns: [
+      { key: 'planNo', label: '盘点单号' },
+      { key: 'title', label: '标题' },
+      { key: 'companyId', label: '公司ID' },
+      {
+        key: 'status',
+        label: '状态',
+        map: { draft: '草稿', counting: '盘点中', closed: '已关闭' },
+      },
+      { key: 'plannedDate', label: '计划日期' },
+      { key: 'closedAt', label: '关闭时间' },
+    ],
+    fields: [
+      { name: 'companyId', label: '公司ID', type: 'number' },
+      { name: 'title', label: '标题' },
+      { name: 'plannedDate', label: '计划日期', type: 'date' },
     ],
   },
   'intangible-assets': {
@@ -829,7 +962,11 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'originalValue', label: '原值' },
       { key: 'netValue', label: '净值' },
       { key: 'expiryDate', label: '到期日' },
-      { key: 'status', label: '状态' },
+      {
+        key: 'status',
+        label: '状态',
+        map: { active: '有效', expired: '已到期', amortized: '已摊销', disposed: '已处置' },
+      },
     ],
     fields: [
       { name: 'assetNo', label: '编号', required: true },
@@ -1029,13 +1166,17 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     create: true,
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'company_id', label: '公司ID' },
-      { key: 'project_id', label: '项目ID' },
+      { key: 'companyId', label: '公司ID' },
+      { key: 'projectId', label: '项目ID' },
       {
-        key: 'apportion_basis',
+        key: 'apportionBasis',
         label: '分摊口径',
         map: { area: '按面积', meter: '按表数', head: '按人头', usage: '按用量' },
       },
+      { key: 'unitPriceWater', label: '水单价' },
+      { key: 'unitPriceElectric', label: '电单价' },
+      { key: 'unitPriceGas', label: '气单价' },
+      { key: 'minimumUsage', label: '最低用量' },
       { key: 'enabled', label: '启用', render: (r) => (r.enabled ? '是' : '否') },
     ],
     fields: [
@@ -1052,6 +1193,10 @@ export const RESOURCES: Record<string, ResourceConfig> = {
           { value: 'usage', label: '按用量' },
         ],
       },
+      { name: 'unitPriceWater', label: '水单价', type: 'number' },
+      { name: 'unitPriceElectric', label: '电单价', type: 'number' },
+      { name: 'unitPriceGas', label: '气单价', type: 'number' },
+      { name: 'minimumUsage', label: '最低用量', type: 'number' },
       { name: 'enabled', label: '启用', type: 'boolean' },
     ],
   },
@@ -1076,7 +1221,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     listPath: '/finance/vouchers',
     columns: [
       { key: 'voucherNo', label: '凭证号' },
-      { key: 'bizType', label: '业务类型' },
+      { key: 'bizType', label: '业务类型', map: L.BIZ_TYPE },
       { key: 'bizId', label: '业务单ID' },
       { key: 'status', label: '状态', map: { pending: '待推送', pushed: '已推送' } },
       { key: 'pushedAt', label: '推送时间' },
@@ -1092,6 +1237,19 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'startDate', label: '起' },
       { key: 'endDate', label: '止' },
       { key: 'status', label: '状态', map: L.MORTGAGE_STATUS },
+      { key: 'releaseStatus', label: '解押审批' },
+    ],
+  },
+  'assets/structure-logs': {
+    title: '拆分合并日志',
+    listPath: '/assets/structure-logs',
+    columns: [
+      { key: 'id', label: '日志ID' },
+      { key: 'opType', label: '操作', map: { split: '拆分', merge: '合并' } },
+      { key: 'sourceAssetIds', label: '源资产' },
+      { key: 'resultAssetIds', label: '结果资产' },
+      { key: 'remark', label: '备注' },
+      { key: 'createdAt', label: '时间' },
     ],
   },
   certificates: {
@@ -1121,6 +1279,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       },
       { key: 'status', label: '状态', map: L.TRANSFER_STATUS },
       { key: 'effectiveDate', label: '生效日期' },
+      { key: 'handoverJson', label: '交接清单' },
     ],
     fields: [
       { name: 'assetId', label: '资产ID', type: 'number', required: true },

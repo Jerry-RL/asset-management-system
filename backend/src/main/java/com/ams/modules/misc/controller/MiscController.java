@@ -8,6 +8,7 @@ import com.ams.modules.evaluation.service.EvaluationService;
 import com.ams.modules.migration.entity.MigrationBatch;
 import com.ams.modules.migration.entity.MigrationImportLog;
 import com.ams.modules.migration.service.MigrationService;
+import com.ams.modules.plan.dto.PlanDeviationResult;
 import com.ams.modules.plan.entity.BusinessPlan;
 import com.ams.modules.plan.service.BusinessPlanService;
 import com.ams.modules.revitalization.entity.RevitalizationTask;
@@ -63,6 +64,13 @@ public class MiscController {
         return ApiResponse.ok(dashboardService.consolidate(), TraceIdUtil.get());
     }
 
+    @GetMapping("/dashboard/consolidate/drill")
+    public ApiResponse<Map<String, Object>> consolidateDrill(
+            @RequestParam(required = false) Long companyId,
+            @RequestParam(required = false) Long projectId) {
+        return ApiResponse.ok(dashboardService.drill(companyId, projectId), TraceIdUtil.get());
+    }
+
     // ---- 评估 ----
     @GetMapping("/evaluations")
     public ApiResponse<List<EvaluationRequest>> evaluations(@RequestParam(required = false) Long assetId) {
@@ -75,11 +83,27 @@ public class MiscController {
         return ApiResponse.ok(evaluationService.apply(request), TraceIdUtil.get());
     }
 
+    @PostMapping("/evaluations/{id}/accept")
+    @Audited(module = "evaluation", action = "accept")
+    public ApiResponse<EvaluationRequest> accept(@PathVariable Long id) {
+        return ApiResponse.ok(evaluationService.accept(id), TraceIdUtil.get());
+    }
+
+    @PostMapping("/evaluations/{id}/evaluating")
+    @Audited(module = "evaluation", action = "evaluating")
+    public ApiResponse<EvaluationRequest> evaluating(@PathVariable Long id) {
+        return ApiResponse.ok(evaluationService.startEvaluating(id), TraceIdUtil.get());
+    }
+
     @PostMapping("/evaluations/{id}/result")
     @Audited(module = "evaluation", action = "record_result")
     public ApiResponse<EvaluationRequest> recordResult(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         BigDecimal value = new BigDecimal(body.get("resultValue").toString());
-        return ApiResponse.ok(evaluationService.recordResult(id, value), TraceIdUtil.get());
+        Long reportFileId = body.get("reportFileId") == null ? null
+                : Long.valueOf(body.get("reportFileId").toString());
+        Boolean syncFloor = body.get("syncFloor") == null ? null
+                : Boolean.parseBoolean(body.get("syncFloor").toString());
+        return ApiResponse.ok(evaluationService.recordResult(id, value, reportFileId, syncFloor), TraceIdUtil.get());
     }
 
     // ---- 盘活 ----
@@ -98,6 +122,11 @@ public class MiscController {
     @Audited(module = "revitalization", action = "update_status")
     public ApiResponse<RevitalizationTask> updateRevitalization(@PathVariable Long id, @RequestBody Map<String, String> body) {
         return ApiResponse.ok(revitalizationService.updateStatus(id, body.get("status")), TraceIdUtil.get());
+    }
+
+    @GetMapping("/revitalization/dashboard")
+    public ApiResponse<Map<String, Object>> revitalizationDashboard() {
+        return ApiResponse.ok(revitalizationService.dashboard(), TraceIdUtil.get());
     }
 
     // ---- 经营计划 ----
@@ -120,6 +149,17 @@ public class MiscController {
         return ApiResponse.ok(businessPlanService.update(id, plan), TraceIdUtil.get());
     }
 
+    @GetMapping("/business-plans/{id}/deviation")
+    public ApiResponse<PlanDeviationResult> planDeviation(@PathVariable Long id) {
+        return ApiResponse.ok(businessPlanService.evaluate(id), TraceIdUtil.get());
+    }
+
+    @PostMapping("/business-plans/scan-deviations")
+    @Audited(module = "plan", action = "scan_deviations")
+    public ApiResponse<List<PlanDeviationResult>> scanPlanDeviations() {
+        return ApiResponse.ok(businessPlanService.scanDeviations(), TraceIdUtil.get());
+    }
+
     // ---- 期初迁移 ----
     @GetMapping("/migrations/batches")
     public ApiResponse<List<MigrationBatch>> migrationBatches() {
@@ -131,6 +171,33 @@ public class MiscController {
     public ApiResponse<MigrationBatch> createBatch(@RequestBody Map<String, Object> body) {
         LocalDate cutoverDate = LocalDate.parse(body.get("cutoverDate").toString());
         return ApiResponse.ok(migrationService.createBatch(cutoverDate, (String) body.get("sourceFile")), TraceIdUtil.get());
+    }
+
+    @PostMapping("/migrations/batches/{batchId}/import")
+    @Audited(module = "migration", action = "import_rows")
+    public ApiResponse<Map<String, Object>> importRows(
+            @PathVariable Long batchId, @RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) body.get("rows");
+        return ApiResponse.ok(migrationService.importRows(batchId, (String) body.get("bizType"), rows),
+                TraceIdUtil.get());
+    }
+
+    @PostMapping("/migrations/batches/{batchId}/init-lease-control")
+    @Audited(module = "migration", action = "init_lease_control")
+    public ApiResponse<Map<String, Object>> initLeaseControl(@PathVariable Long batchId) {
+        return ApiResponse.ok(migrationService.initLeaseControl(batchId), TraceIdUtil.get());
+    }
+
+    @PostMapping("/migrations/batches/{batchId}/init-dunning")
+    @Audited(module = "migration", action = "init_dunning")
+    public ApiResponse<Integer> initDunning(@PathVariable Long batchId) {
+        return ApiResponse.ok(migrationService.initDunning(batchId), TraceIdUtil.get());
+    }
+
+    @GetMapping("/migrations/batches/{batchId}/logs")
+    public ApiResponse<List<MigrationImportLog>> migrationLogs(@PathVariable Long batchId) {
+        return ApiResponse.ok(migrationService.listLogs(batchId), TraceIdUtil.get());
     }
 
     @PostMapping("/migrations/batches/{batchId}/reconcile")

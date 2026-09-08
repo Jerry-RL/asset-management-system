@@ -14,10 +14,14 @@ Page({
             if (data && data.accessToken) {
               setAuth(data.accessToken, data.user);
               wx.switchTab({ url: '/pages/index/index' });
-            } else {
-              // 未绑定身份 → 跳身份绑定
-              wx.redirectTo({ url: '/pages/bind/bind' });
+              return;
             }
+            if (data && data.needBind) {
+              wx.setStorageSync('bindTicket', data.bindTicket || '');
+              wx.redirectTo({ url: '/pages/bind/bind' });
+              return;
+            }
+            wx.redirectTo({ url: '/pages/bind/bind' });
           })
           .catch((err) => {
             wx.showToast({ title: err.message, icon: 'none' });

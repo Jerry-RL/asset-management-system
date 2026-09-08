@@ -6,6 +6,7 @@ import com.ams.common.web.TraceIdUtil;
 import com.ams.modules.contract.entity.Contract;
 import com.ams.modules.contract.entity.VacateOrder;
 import com.ams.modules.contract.service.ContractService;
+import com.ams.modules.contract.service.ESignService;
 import com.ams.modules.contract.service.VacateService;
 import com.ams.platform.approval.entity.ApprovalInstance;
 import com.ams.platform.security.Audited;
@@ -30,10 +31,13 @@ public class ContractController {
 
     private final ContractService contractService;
     private final VacateService vacateService;
+    private final ESignService eSignService;
 
-    public ContractController(ContractService contractService, VacateService vacateService) {
+    public ContractController(
+            ContractService contractService, VacateService vacateService, ESignService eSignService) {
         this.contractService = contractService;
         this.vacateService = vacateService;
+        this.eSignService = eSignService;
     }
 
     @GetMapping("/contracts")
@@ -52,8 +56,15 @@ public class ContractController {
 
     @PostMapping("/contracts")
     @Audited(module = "contract", action = "create")
-    public ApiResponse<Contract> create(@RequestBody Contract contract) {
-        return ApiResponse.ok(contractService.create(contract), TraceIdUtil.get());
+    public ApiResponse<Contract> create(@RequestBody Map<String, Object> body) {
+        Contract contract = mapContract(body);
+        boolean special = body.get("requestSpecialApproval") != null
+                && Boolean.parseBoolean(body.get("requestSpecialApproval").toString());
+        if (special) {
+            contract.setSpecialApprovalRequired(true);
+        }
+        return ApiResponse.ok(contractService.create(contract, special
+                || Boolean.TRUE.equals(contract.getSpecialApprovalRequired())), TraceIdUtil.get());
     }
 
     @PostMapping("/contracts/{contractId}/submit")
@@ -79,11 +90,56 @@ public class ContractController {
         return ApiResponse.ok(contractService.renew(contractId, newEndDate, rent), TraceIdUtil.get());
     }
 
+    @PostMapping("/contracts/{contractId}/transfer")
+    @Audited(module = "contract", action = "transfer")
+    public ApiResponse<Contract> transfer(@PathVariable Long contractId, @RequestBody Map<String, Object> body) {
+        Long newTenantId = Long.valueOf(body.get("newTenantId").toString());
+        BigDecimal rent = body.get("rentAmount") == null ? null : new BigDecimal(body.get("rentAmount").toString());
+        return ApiResponse.ok(contractService.transfer(contractId, newTenantId, rent), TraceIdUtil.get());
+    }
+
+    @PostMapping("/contracts/{contractId}/change-party")
+    @Audited(module = "contract", action = "change_party")
+    public ApiResponse<Contract> changeParty(@PathVariable Long contractId, @RequestBody Map<String, Object> body) {
+        Long newTenantId = Long.valueOf(body.get("newTenantId").toString());
+        return ApiResponse.ok(contractService.changeParty(contractId, newTenantId), TraceIdUtil.get());
+    }
+
+    @PostMapping("/contracts/{contractId}/change-area")
+    @Audited(module = "contract", action = "change_area")
+    public ApiResponse<Contract> changeArea(@PathVariable Long contractId, @RequestBody Map<String, Object> body) {
+        BigDecimal area = new BigDecimal(body.get("leaseArea").toString());
+        BigDecimal rent = body.get("rentAmount") == null ? null : new BigDecimal(body.get("rentAmount").toString());
+        return ApiResponse.ok(contractService.changeArea(contractId, area, rent), TraceIdUtil.get());
+    }
+
+    @PostMapping("/contracts/{contractId}/early-terminate")
+    @Audited(module = "contract", action = "early_terminate")
+    public ApiResponse<Map<String, Object>> earlyTerminate(
+            @PathVariable Long contractId, @RequestBody Map<String, Object> body) {
+        BigDecimal penalty = body.get("penaltyAmount") == null ? null
+                : new BigDecimal(body.get("penaltyAmount").toString());
+        return ApiResponse.ok(contractService.earlyTerminate(contractId,
+                (String) body.get("reason"), penalty), TraceIdUtil.get());
+    }
+
     @PostMapping("/contracts/{contractId}/void")
     @Audited(module = "contract", action = "void")
     public ApiResponse<Void> voidContract(@PathVariable Long contractId) {
         contractService.voidContract(contractId);
         return ApiResponse.ok(null, TraceIdUtil.get());
+    }
+
+    // ---- 电子签 ----
+    @PostMapping("/contracts/{contractId}/esign/start")
+    @Audited(module = "esign", action = "start")
+    public ApiResponse<Map<String, Object>> esignStart(@PathVariable Long contractId) {
+        return ApiResponse.ok(eSignService.start(contractId), TraceIdUtil.get());
+    }
+
+    @GetMapping("/contracts/{contractId}/esign")
+    public ApiResponse<Map<String, Object>> esignStatus(@PathVariable Long contractId) {
+        return ApiResponse.ok(eSignService.status(contractId), TraceIdUtil.get());
     }
 
     // ---- 退租 ----
@@ -106,7 +162,8 @@ public class ContractController {
         BigDecimal water = toDecimal(body.get("waterReading"));
         BigDecimal electric = toDecimal(body.get("electricReading"));
         return ApiResponse.ok(vacateService.submitInspection(vacateOrderId, water, electric,
-                (String) body.get("remark")), TraceIdUtil.get());
+                (String) body.get("remark"),
+                body.get("fileIds") == null ? null : body.get("fileIds").toString()), TraceIdUtil.get());
     }
 
     @PostMapping("/vacate-orders/{vacateOrderId}/settlement")
@@ -117,5 +174,40 @@ public class ContractController {
 
     private BigDecimal toDecimal(Object v) {
         return v == null ? null : new BigDecimal(v.toString());
+    }
+
+    private Contract mapContract(Map<String, Object> body) {
+        Contract c = new Contract();
+        if (body.get("assetId") != null) {
+            c.setAssetId(Long.valueOf(body.get("assetId").toString()));
+        }
+        if (body.get("tenantId") != null) {
+            c.setTenantId(Long.valueOf(body.get("tenantId").toString()));
+        }
+        if (body.get("startDate") != null) {
+            c.setStartDate(LocalDate.parse(body.get("startDate").toString()));
+        }
+        if (body.get("endDate") != null) {
+            c.setEndDate(LocalDate.parse(body.get("endDate").toString()));
+        }
+        if (body.get("rentAmount") != null) {
+            c.setRentAmount(new BigDecimal(body.get("rentAmount").toString()));
+        }
+        if (body.get("depositAmount") != null) {
+            c.setDepositAmount(new BigDecimal(body.get("depositAmount").toString()));
+        }
+        if (body.get("leaseArea") != null) {
+            c.setLeaseArea(new BigDecimal(body.get("leaseArea").toString()));
+        }
+        if (body.get("rentType") != null) {
+            c.setRentType(body.get("rentType").toString());
+        }
+        if (body.get("paymentCycle") != null) {
+            c.setPaymentCycle(body.get("paymentCycle").toString());
+        }
+        if (body.get("remark") != null) {
+            c.setRemark(body.get("remark").toString());
+        }
+        return c;
     }
 }

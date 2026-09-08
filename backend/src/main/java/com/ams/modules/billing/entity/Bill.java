@@ -28,9 +28,11 @@ public class Bill extends BaseEntity {
     private LocalDate dueDate;
     private BigDecimal amount;         // 应收本金
     private BigDecimal paidAmount;     // 已核销本金
+    private BigDecimal reducedAmount;  // 已减免金额
     private BigDecimal lateFeeAmount;  // 累计应计滞纳金
     private BigDecimal lateFeePaidAmount; // 已核销滞纳金
     private String status;             // pending_issue/unpaid/partial_paid/paid/reduced/voided
     private Integer dunningLevel;
     private String source;             // system/migration
+    private String remark;
 }

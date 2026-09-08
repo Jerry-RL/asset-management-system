@@ -47,6 +47,15 @@ public class IntelligenceController {
         return ApiResponse.ok(intelligenceService.listTemplates(), TraceIdUtil.get());
     }
 
+    @PostMapping("/chat")
+    @Audited(module = "intelligence", action = "chat")
+    public ApiResponse<Map<String, Object>> chat(@RequestBody Map<String, Object> body) {
+        Long sessionId = body.get("sessionId") == null ? null : Long.valueOf(body.get("sessionId").toString());
+        Long companyId = body.get("companyId") == null ? null : Long.valueOf(body.get("companyId").toString());
+        return ApiResponse.ok(intelligenceService.chat(sessionId, (String) body.get("question"), companyId),
+                TraceIdUtil.get());
+    }
+
     @PostMapping("/reports/generate")
     @Audited(module = "intelligence", action = "generate_report")
     public ApiResponse<AgentReport> generate(@RequestBody Map<String, Object> body) {
@@ -54,6 +63,11 @@ public class IntelligenceController {
         Long companyId = body.get("companyId") == null ? null : Long.valueOf(body.get("companyId").toString());
         String templateCode = (String) body.get("templateCode");
         return ApiResponse.ok(intelligenceService.generateReport(sessionId, templateCode, companyId), TraceIdUtil.get());
+    }
+
+    @GetMapping("/reports")
+    public ApiResponse<List<AgentReport>> reports() {
+        return ApiResponse.ok(intelligenceService.listReports(100), TraceIdUtil.get());
     }
 
     @GetMapping("/reports/{reportId}")
@@ -73,9 +87,9 @@ public class IntelligenceController {
     }
 
     @PostMapping("/reports/{reportId}/download")
+    @Audited(module = "intelligence", action = "download_report")
     public ApiResponse<Map<String, Object>> download(@PathVariable Long reportId) {
-        intelligenceService.assertVerified(reportId);
-        return ApiResponse.ok(Map.of("reportId", reportId, "verified", true), TraceIdUtil.get());
+        return ApiResponse.ok(intelligenceService.exportHtml(reportId), TraceIdUtil.get());
     }
 
     @GetMapping("/runs/{runId}/trace")

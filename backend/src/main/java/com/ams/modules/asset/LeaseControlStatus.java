@@ -28,10 +28,10 @@ public final class LeaseControlStatus {
         }
         return switch (from) {
             case VACANT -> switch (to) {
-                case LEASING, SELF_USE, OCCUPIED, DISPOSING -> true;
+                case LEASING, SELF_USE, OCCUPIED, DISPOSING, PARTIAL_LEASED -> true;
                 default -> false;
             };
-            case LEASING -> to.equals(VACANT) || to.equals(LEASED);
+            case LEASING -> to.equals(VACANT) || to.equals(LEASED) || to.equals(PARTIAL_LEASED);
             case LEASED -> to.equals(VACATING) || to.equals(PARTIAL_LEASED);
             case PARTIAL_LEASED -> to.equals(LEASED) || to.equals(VACANT);
             case SELF_USE -> to.equals(VACANT);

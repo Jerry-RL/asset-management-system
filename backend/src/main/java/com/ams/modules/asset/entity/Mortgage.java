@@ -21,6 +21,9 @@ public class Mortgage {
     private LocalDate startDate;
     private LocalDate endDate;
     private String status; // active / released
+    private String releaseStatus; // releasing / released / rejected
+    private String releaseRemark;
+    private LocalDateTime releasedAt;
     private Long fileId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

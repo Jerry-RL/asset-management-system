@@ -65,6 +65,7 @@ public class BillService {
             bill.setDueDate(plan.getDueDate());
             bill.setAmount(plan.getPlannedAmount());
             bill.setPaidAmount(java.math.BigDecimal.ZERO);
+            bill.setReducedAmount(java.math.BigDecimal.ZERO);
             bill.setLateFeeAmount(java.math.BigDecimal.ZERO);
             bill.setLateFeePaidAmount(java.math.BigDecimal.ZERO);
             bill.setStatus(BillStatus.UNPAID);
@@ -104,6 +105,10 @@ public class BillService {
     }
 
     public void updateBillStatus(Bill bill) {
+        billMapper.updateById(bill);
+    }
+
+    public void update(Bill bill) {
         billMapper.updateById(bill);
     }
 

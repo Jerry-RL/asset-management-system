@@ -5,6 +5,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { HomePage } from '@/pages/HomePage';
 import { AssetsPage } from '@/pages/AssetsPage';
 import { AssetDetailPage } from '@/pages/AssetDetailPage';
+import { ScanAssetPage } from '@/pages/ScanAssetPage';
 import { BillsPage } from '@/pages/BillsPage';
 import { BillDetailPage } from '@/pages/BillDetailPage';
 import { RepairPage } from '@/pages/RepairPage';
@@ -25,6 +26,8 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* 一产一码公开扫码页，免登录 */}
+        <Route path="/scan/:id" element={<ScanAssetPage />} />
         <Route
           path="/"
           element={

@@ -7,8 +7,10 @@ import com.ams.modules.asset.entity.AssetTransfer;
 import com.ams.modules.asset.entity.Mortgage;
 import com.ams.modules.asset.service.CertificateService;
 import com.ams.modules.asset.service.TransferService;
+import com.ams.platform.approval.entity.ApprovalInstance;
 import com.ams.platform.security.Audited;
 import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -74,6 +76,19 @@ public class CertificateController {
         return ApiResponse.ok(certificateService.releaseMortgage(id), TraceIdUtil.get());
     }
 
+    @PostMapping("/mortgages/{id}/release/submit")
+    @Audited(module = "certificate", action = "submit_release")
+    public ApiResponse<ApprovalInstance> submitRelease(
+            @PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
+        String remark = body == null ? null : body.get("remark");
+        return ApiResponse.ok(certificateService.submitRelease(id, remark), TraceIdUtil.get());
+    }
+
+    @GetMapping("/mortgages/expiring")
+    public ApiResponse<List<Mortgage>> expiring(@RequestParam(defaultValue = "30") int withinDays) {
+        return ApiResponse.ok(certificateService.listExpiring(withinDays), TraceIdUtil.get());
+    }
+
     @GetMapping("/asset-transfers")
     public ApiResponse<List<AssetTransfer>> transfers(@RequestParam(required = false) Long assetId) {
         return ApiResponse.ok(transferService.list(assetId), TraceIdUtil.get());
@@ -89,5 +104,10 @@ public class CertificateController {
     @Audited(module = "certificate", action = "approve_transfer")
     public ApiResponse<AssetTransfer> approveTransfer(@PathVariable Long id) {
         return ApiResponse.ok(transferService.approve(id), TraceIdUtil.get());
+    }
+
+    @GetMapping("/asset-transfers/{id}")
+    public ApiResponse<AssetTransfer> transfer(@PathVariable Long id) {
+        return ApiResponse.ok(transferService.get(id), TraceIdUtil.get());
     }
 }

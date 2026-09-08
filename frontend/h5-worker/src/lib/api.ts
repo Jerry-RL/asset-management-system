@@ -16,6 +16,8 @@ export interface LoginUser {
   id: number;
   username: string;
   name: string;
+  companyId?: number;
+  tenantId?: number;
   roles: string[];
 }
 

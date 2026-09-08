@@ -53,7 +53,10 @@ public class TenderController {
         Boolean depositPaid = body.get("depositPaid") != null && Boolean.parseBoolean(body.get("depositPaid").toString());
         BigDecimal depositAmount = body.get("depositAmount") == null ? null
                 : new BigDecimal(body.get("depositAmount").toString());
-        return ApiResponse.ok(listingService.apply(id, tenantId, depositPaid, depositAmount), TraceIdUtil.get());
+        Long materialsFileId = body.get("materialsFileId") == null ? null
+                : Long.valueOf(body.get("materialsFileId").toString());
+        return ApiResponse.ok(listingService.apply(id, tenantId, depositPaid, depositAmount, materialsFileId),
+                TraceIdUtil.get());
     }
 
     @PostMapping("/applications/{id}/audit")
@@ -77,5 +80,17 @@ public class TenderController {
             @PathVariable Long id, @RequestBody Map<String, Object> body) {
         Long winnerApplicationId = Long.valueOf(body.get("winnerApplicationId").toString());
         return ApiResponse.ok(listingService.finalizeResult(id, winnerApplicationId), TraceIdUtil.get());
+    }
+
+    @PostMapping("/applications/{id}/refund-deposit")
+    @Audited(module = "tender", action = "refund_deposit")
+    public ApiResponse<TenderApplication> refundDeposit(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
+        String remark = body == null ? null : body.get("remark");
+        return ApiResponse.ok(listingService.refundDeposit(id, remark), TraceIdUtil.get());
+    }
+
+    @GetMapping("/announcements/{id}/filing-package")
+    public ApiResponse<Map<String, Object>> filingPackage(@PathVariable Long id) {
+        return ApiResponse.ok(listingService.getFilingPackage(id), TraceIdUtil.get());
     }
 }

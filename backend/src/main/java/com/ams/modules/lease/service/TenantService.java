@@ -8,11 +8,14 @@ import com.ams.modules.lease.entity.TenantCreditLog;
 import com.ams.modules.lease.mapper.TenantCreditLogMapper;
 import com.ams.modules.lease.mapper.TenantMapper;
 import com.ams.platform.security.FieldEncryptionService;
+import com.ams.platform.security.LoginUser;
 import com.ams.platform.security.MaskingService;
+import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,14 +29,17 @@ public class TenantService {
     private final TenantMapper tenantMapper;
     private final TenantCreditLogMapper creditLogMapper;
     private final FieldEncryptionService encryptionService;
+    private final MaskingService maskingService;
 
     public TenantService(
             TenantMapper tenantMapper,
             TenantCreditLogMapper creditLogMapper,
-            FieldEncryptionService encryptionService) {
+            FieldEncryptionService encryptionService,
+            MaskingService maskingService) {
         this.tenantMapper = tenantMapper;
         this.creditLogMapper = creditLogMapper;
         this.encryptionService = encryptionService;
+        this.maskingService = maskingService;
     }
 
     public PageResult<Tenant> page(long page, long pageSize, String keyword, Boolean blacklist) {
@@ -125,6 +131,18 @@ public class TenantService {
         }
     }
 
+    /** 信用分门槛（招租报名/签约），默认 ≥60。 */
+    public void assertCreditEligible(Long tenantId) {
+        Tenant tenant = tenantMapper.selectById(tenantId);
+        if (tenant == null) {
+            throw new AppException(ErrorCode.NOT_FOUND, "租户不存在");
+        }
+        int score = tenant.getCreditScore() == null ? 100 : tenant.getCreditScore();
+        if (score < 60) {
+            throw new AppException(ErrorCode.FORBIDDEN, "客商信用分过低，禁止报名/签约");
+        }
+    }
+
     public List<TenantCreditLog> creditLogs(Long tenantId) {
         return creditLogMapper.selectList(
                 new LambdaQueryWrapper<TenantCreditLog>()
@@ -133,6 +151,20 @@ public class TenantService {
     }
 
     private void maskForDisplay(Tenant tenant) {
-        tenant.setIdNo(null); // 默认不返回证件号明文
+        Set<String> roles = currentRoles();
+        tenant.setPhone(maskingService.apply("phone", tenant.getPhone(), roles));
+        // 证件号默认加密存储，列表不返回明文；有 plain 策略时仍不解密（需单独明文接口）
+        String idPolicy = maskingService.resolvePolicy("id_no", roles);
+        if ("omit".equals(idPolicy) || "mask".equals(idPolicy)) {
+            tenant.setIdNo(null);
+        }
+    }
+
+    private static Set<String> currentRoles() {
+        LoginUser user = SecurityUtils.current();
+        if (user == null || user.getRoles() == null) {
+            return Set.of();
+        }
+        return user.getRoles();
     }
 }

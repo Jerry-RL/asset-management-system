@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -29,6 +30,18 @@ public class ApprovalController {
     @GetMapping("/tasks")
     public ApiResponse<List<ApprovalTask>> tasks() {
         return ApiResponse.ok(approvalEngine.myPendingTasks(), TraceIdUtil.get());
+    }
+
+    @GetMapping("/inbox")
+    public ApiResponse<List<Map<String, Object>>> inbox() {
+        return ApiResponse.ok(approvalEngine.inbox(), TraceIdUtil.get());
+    }
+
+    @GetMapping("/instances")
+    public ApiResponse<List<ApprovalInstance>> instances(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String bizType) {
+        return ApiResponse.ok(approvalEngine.listInstances(status, bizType), TraceIdUtil.get());
     }
 
     @PostMapping("/{instanceId}/approve")

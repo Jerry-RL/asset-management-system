@@ -39,6 +39,35 @@ pnpm build:worker      # 构建 h5-worker
 pnpm build:all         # 构建全部三个 Web 应用
 ```
 
+## 演示账号（demo profile）
+
+统一密码：`admin123`。需启动后端 `demo` profile，重启后由 `DemoDataConsistencyEnricher` 幂等补齐。
+
+### 用户端（h5-tenant / miniprogram-tenant）
+
+| 账号 | 身份 | 手机号 | 说明 |
+|------|------|--------|------|
+| `tenant` | 张三（个人） | 13800000001 | 有生效合同与账单 |
+| `tenant_corp` | 某商贸有限公司 | 13800000002 | 招租报名 / 信用良好 |
+
+### 工作端（h5-worker / miniprogram-worker）
+
+| 账号 | 角色 | 手机号 | 推荐场景 |
+|------|------|--------|----------|
+| `clerk` | 办事员 | 13900000008 | 外勤任务、催缴、现场收款 |
+| `maintenance` | 维修管理员 | 13900000006 | 巡检、报修工单 |
+| `approver` | 审批人员 | 13900000007 | 合同与流程审批 |
+| `operator` | 运营管理员 | 13900000002 | 招租运营 |
+
+微信绑定演示：工作端用上表手机号；用户端用租户手机号。
+
+### PC 管理后台（admin-web）
+
+| 账号 | 角色 |
+|------|------|
+| `admin` | 系统管理员 |
+| `assetmgr` / `finance` / `leader` 等 | 同名角色 |
+
 ## 约定
 
 - OpenAPI 契约位于 `../docs/api/openapi.yaml`。

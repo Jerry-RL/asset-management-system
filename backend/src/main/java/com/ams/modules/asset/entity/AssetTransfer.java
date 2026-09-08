@@ -23,4 +23,6 @@ public class AssetTransfer extends BaseEntity {
     private String status; // draft/approving/approved/completed
     private LocalDate effectiveDate;
     private String reason;
+    /** 交接清单 JSON：合同/欠费/保证金/预收（FR-CERT-002）。 */
+    private String handoverJson;
 }

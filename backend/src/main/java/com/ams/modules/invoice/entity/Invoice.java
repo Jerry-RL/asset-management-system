@@ -26,4 +26,7 @@ public class Invoice extends BaseEntity {
     private String status; // pending_issue/issuing/issued/red_flushing/red_flushed/failed
     private String thirdPartyNo;
     private Long redFlushRefId;
+    private String platformCode;
+    private String pdfUrl;
+    private String failReason;
 }

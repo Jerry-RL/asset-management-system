@@ -14,6 +14,7 @@ import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -121,7 +122,43 @@ public class ApprovalEngine {
         Long userId = SecurityUtils.currentUserIdOrNull();
         return taskMapper.selectList(
                 new LambdaQueryWrapper<ApprovalTask>()
-                        .eq(ApprovalTask::getStatus, "pending"));
+                        .eq(ApprovalTask::getStatus, "pending")
+                        .and(userId != null, w -> w.isNull(ApprovalTask::getAssigneeId)
+                                .or()
+                                .eq(ApprovalTask::getAssigneeId, userId)));
+    }
+
+    /** 审批收件箱：待办任务 + 实例业务信息。 */
+    public List<Map<String, Object>> inbox() {
+        List<ApprovalTask> tasks = myPendingTasks();
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        for (ApprovalTask task : tasks) {
+            ApprovalInstance instance = instanceMapper.selectById(task.getInstanceId());
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("taskId", task.getId());
+            row.put("instanceId", task.getInstanceId());
+            row.put("nodeId", task.getNodeId());
+            row.put("taskStatus", task.getStatus());
+            if (instance != null) {
+                row.put("bizType", instance.getBizType());
+                row.put("bizId", instance.getBizId());
+                row.put("instanceStatus", instance.getStatus());
+                row.put("submittedBy", instance.getSubmittedBy());
+                row.put("submittedAt", instance.getSubmittedAt());
+                row.put("currentNode", instance.getCurrentNode());
+            }
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    public List<ApprovalInstance> listInstances(String status, String bizType) {
+        return instanceMapper.selectList(
+                new LambdaQueryWrapper<ApprovalInstance>()
+                        .eq(status != null, ApprovalInstance::getStatus, status)
+                        .eq(bizType != null, ApprovalInstance::getBizType, bizType)
+                        .orderByDesc(ApprovalInstance::getId)
+                        .last("LIMIT 200"));
     }
 
     /** 按业务类型与业务单号查找进行中的审批实例。 */

@@ -4,7 +4,12 @@ import { api, type LoginUser } from './api';
 interface AuthState {
   token: string | null;
   user: LoginUser | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (
+    username: string,
+    password: string,
+    captchaId: string,
+    captchaCode: string,
+  ) => Promise<void>;
   logout: () => void;
 }
 
@@ -22,18 +27,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return raw ? JSON.parse(raw) : null;
   });
 
-  const login = useCallback(async (username: string, password: string) => {
-    const data = await api.post<{ accessToken: string; user: LoginUser }>('/auth/login', {
-      username,
-      password,
-      captchaId: '',
-      captchaCode: '',
-    });
-    localStorage.setItem('h5worker.token', data.accessToken);
-    localStorage.setItem('h5worker.user', JSON.stringify(data.user));
-    setToken(data.accessToken);
-    setUser(data.user);
-  }, []);
+  const login = useCallback(
+    async (username: string, password: string, captchaId: string, captchaCode: string) => {
+      const data = await api.post<{ accessToken: string; user: LoginUser }>('/auth/login', {
+        username,
+        password,
+        captchaId,
+        captchaCode,
+      });
+      localStorage.setItem('h5worker.token', data.accessToken);
+      localStorage.setItem('h5worker.user', JSON.stringify(data.user));
+      setToken(data.accessToken);
+      setUser(data.user);
+    },
+    [],
+  );
 
   const logout = useCallback(() => {
     localStorage.removeItem('h5worker.token');

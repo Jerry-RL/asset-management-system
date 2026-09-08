@@ -19,21 +19,39 @@ export function BillDetailPage() {
   const { id } = useParams();
   const [bill, setBill] = useState<Bill | null>(null);
   const [paying, setPaying] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const reload = () => {
+    if (!id) return;
+    api
+      .get<Bill>(`/billing/bills/${id}`)
+      .then(setBill)
+      .catch(() => {});
+  };
 
   useEffect(() => {
-    if (id)
-      api
-        .get<Bill>(`/billing/bills/${id}`)
-        .then(setBill)
-        .catch(() => {});
+    reload();
   }, [id]);
 
-  const pay = () => {
+  const pay = async () => {
     setPaying(true);
-    api
-      .post('/billing/payments/wechat', { billIds: [Number(id)] })
-      .catch(() => {})
-      .finally(() => setPaying(false));
+    setMessage('');
+    try {
+      const params = await api.post<{ mock?: boolean; paid?: boolean }>('/billing/payments/wechat', {
+        billIds: [Number(id)],
+        strategy: 'specified',
+      });
+      if (params?.mock || params?.paid) {
+        setMessage('支付成功');
+        reload();
+      } else {
+        setMessage('已发起支付，请在微信内完成付款');
+      }
+    } catch {
+      setMessage('支付失败，请稍后重试');
+    } finally {
+      setPaying(false);
+    }
   };
 
   if (!bill) return <div className="p-8 text-center text-gray-400">加载中...</div>;
@@ -52,13 +70,16 @@ export function BillDetailPage() {
           {bill.lateFeeAmount > 0 && <div>滞纳金：¥{bill.lateFeeAmount}</div>}
         </div>
       </div>
+      {message && <p className="text-center text-sm text-green-600 mt-3">{message}</p>}
       {bill.status !== 'paid' && (
         <button
           className="w-full bg-blue-600 text-white rounded-xl py-3 mt-4 disabled:opacity-50"
           disabled={paying}
           onClick={pay}
+          type="button"
+          aria-label="微信支付缴费"
         >
-          立即缴费
+          {paying ? '支付中...' : '微信支付'}
         </button>
       )}
     </div>

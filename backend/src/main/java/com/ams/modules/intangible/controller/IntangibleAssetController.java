@@ -4,9 +4,9 @@ import com.ams.common.web.ApiResponse;
 import com.ams.common.web.PageResult;
 import com.ams.common.web.TraceIdUtil;
 import com.ams.modules.intangible.entity.IntangibleAsset;
-import com.ams.modules.intangible.mapper.IntangibleAssetMapper;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ams.modules.intangible.service.IntangibleAssetService;
+import com.ams.platform.security.Audited;
+import java.util.Map;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,16 +18,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 无形资产接口（FR-IA-001~004）：台账、评估摊销、到期预警基础。
+ * 无形资产接口（FR-IA-001~004）。
  */
 @RestController
 @RequestMapping("/api/v1/intangible-assets")
 public class IntangibleAssetController {
 
-    private final IntangibleAssetMapper mapper;
+    private final IntangibleAssetService intangibleAssetService;
 
-    public IntangibleAssetController(IntangibleAssetMapper mapper) {
-        this.mapper = mapper;
+    public IntangibleAssetController(IntangibleAssetService intangibleAssetService) {
+        this.intangibleAssetService = intangibleAssetService;
     }
 
     @GetMapping
@@ -36,36 +36,43 @@ public class IntangibleAssetController {
             @RequestParam(defaultValue = "10") long pageSize,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String rightsType) {
-        Page<IntangibleAsset> result = mapper.selectPage(new Page<>(page, pageSize),
-                new LambdaQueryWrapper<IntangibleAsset>()
-                        .eq(rightsType != null, IntangibleAsset::getRightsType, rightsType)
-                        .like(keyword != null && !keyword.isBlank(), IntangibleAsset::getName, keyword)
-                        .orderByDesc(IntangibleAsset::getId));
-        return ApiResponse.ok(PageResult.of(result.getRecords(), result.getTotal(), page, pageSize),
+        return ApiResponse.ok(intangibleAssetService.page(page, pageSize, keyword, rightsType),
                 TraceIdUtil.get());
+    }
+
+    @GetMapping("/summary")
+    public ApiResponse<Map<String, Object>> summary() {
+        return ApiResponse.ok(intangibleAssetService.summary(), TraceIdUtil.get());
     }
 
     @GetMapping("/{id}")
     public ApiResponse<IntangibleAsset> get(@PathVariable Long id) {
-        return ApiResponse.ok(mapper.selectById(id), TraceIdUtil.get());
+        return ApiResponse.ok(intangibleAssetService.get(id), TraceIdUtil.get());
     }
 
     @PostMapping
+    @Audited(module = "intangible", action = "create")
     public ApiResponse<IntangibleAsset> create(@RequestBody IntangibleAsset asset) {
-        mapper.insert(asset);
-        return ApiResponse.ok(asset, TraceIdUtil.get());
+        return ApiResponse.ok(intangibleAssetService.create(asset), TraceIdUtil.get());
     }
 
     @PutMapping("/{id}")
+    @Audited(module = "intangible", action = "update")
     public ApiResponse<IntangibleAsset> update(@PathVariable Long id, @RequestBody IntangibleAsset asset) {
-        asset.setId(id);
-        mapper.updateById(asset);
-        return ApiResponse.ok(mapper.selectById(id), TraceIdUtil.get());
+        return ApiResponse.ok(intangibleAssetService.update(id, asset), TraceIdUtil.get());
     }
 
     @DeleteMapping("/{id}")
+    @Audited(module = "intangible", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
-        mapper.deleteById(id);
+        intangibleAssetService.delete(id);
         return ApiResponse.ok(null, TraceIdUtil.get());
+    }
+
+    @PostMapping("/amortize")
+    @Audited(module = "intangible", action = "amortize")
+    public ApiResponse<Map<String, Object>> amortize() {
+        int n = intangibleAssetService.amortizeMonthly();
+        return ApiResponse.ok(Map.of("amortized", n), TraceIdUtil.get());
     }
 }

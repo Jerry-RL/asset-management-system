@@ -19,4 +19,6 @@ public class Meter {
     private String meterNo;
     private BigDecimal multiplier;
     private Integer status;
+    /** 是否公摊总表（FR-UTIL-006）。 */
+    private Boolean shared;
 }

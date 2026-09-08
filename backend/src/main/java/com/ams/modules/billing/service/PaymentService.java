@@ -100,6 +100,22 @@ public class PaymentService {
         return payment;
     }
 
+    public Payment insert(Payment payment) {
+        if (payment.getPaymentNo() == null) {
+            payment.setPaymentNo(generateNo());
+        }
+        paymentMapper.insert(payment);
+        return payment;
+    }
+
+    public Payment findByOutTradeNo(String outTradeNo) {
+        if (outTradeNo == null || outTradeNo.isBlank()) {
+            return null;
+        }
+        return paymentMapper.selectOne(
+                new LambdaQueryWrapper<Payment>().eq(Payment::getOutTradeNo, outTradeNo));
+    }
+
     public void update(Payment payment) {
         paymentMapper.updateById(payment);
     }

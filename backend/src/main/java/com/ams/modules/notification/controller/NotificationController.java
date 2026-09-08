@@ -3,6 +3,7 @@ package com.ams.modules.notification.controller;
 import com.ams.common.web.ApiResponse;
 import com.ams.common.web.TraceIdUtil;
 import com.ams.modules.notification.entity.Notification;
+import com.ams.modules.notification.entity.NotificationTemplate;
 import com.ams.modules.notification.service.NotificationService;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +29,11 @@ public class NotificationController {
     @GetMapping
     public ApiResponse<List<Notification>> list(@RequestParam(defaultValue = "false") boolean unreadOnly) {
         return ApiResponse.ok(notificationService.list(unreadOnly), TraceIdUtil.get());
+    }
+
+    @GetMapping("/templates")
+    public ApiResponse<List<NotificationTemplate>> templates() {
+        return ApiResponse.ok(notificationService.listTemplates(), TraceIdUtil.get());
     }
 
     @GetMapping("/unread-count")

@@ -29,4 +29,5 @@ public class RepairOrder extends BaseEntity {
     private LocalDateTime acceptedAt;
     private LocalDateTime completedAt;
     private String resultRemark;
+    private Boolean slaBreached;
 }

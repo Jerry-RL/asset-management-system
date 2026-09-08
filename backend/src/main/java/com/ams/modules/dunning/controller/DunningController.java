@@ -2,8 +2,11 @@ package com.ams.modules.dunning.controller;
 
 import com.ams.common.web.ApiResponse;
 import com.ams.common.web.TraceIdUtil;
+import com.ams.modules.dunning.dto.DunningAutoJobResult;
+import com.ams.modules.dunning.dto.DunningQueueItem;
 import com.ams.modules.dunning.entity.DunningRecord;
 import com.ams.modules.dunning.service.DunningService;
+import com.ams.modules.task.entity.Task;
 import com.ams.platform.security.Audited;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 履约催缴接口（FR-DUN-*）。
+ * 履约催缴接口（FR-DUN-* / FR-DUN-ESC-*）。
  */
 @RestController
 @RequestMapping("/api/v1/dunning")
@@ -27,10 +30,28 @@ public class DunningController {
         this.dunningService = dunningService;
     }
 
+    /** 手动触发自动化催缴（与定时任务同逻辑）。 */
+    @PostMapping("/auto-run")
+    @Audited(module = "dunning", action = "auto_run")
+    public ApiResponse<DunningAutoJobResult> autoRun() {
+        return ApiResponse.ok(dunningService.runAutoDunning(), TraceIdUtil.get());
+    }
+
     @PostMapping("/scan")
     @Audited(module = "dunning", action = "scan_overdue")
-    public ApiResponse<Integer> scan() {
-        return ApiResponse.ok(dunningService.scanOverdue(), TraceIdUtil.get());
+    public ApiResponse<DunningAutoJobResult> scan() {
+        return ApiResponse.ok(dunningService.runAutoDunning(), TraceIdUtil.get());
+    }
+
+    @GetMapping("/queue")
+    public ApiResponse<List<DunningQueueItem>> queue(
+            @RequestParam(required = false) Integer minLevel) {
+        return ApiResponse.ok(dunningService.queue(minLevel), TraceIdUtil.get());
+    }
+
+    @GetMapping("/auto-tasks")
+    public ApiResponse<List<Task>> autoTasks() {
+        return ApiResponse.ok(dunningService.listAutoTasks(), TraceIdUtil.get());
     }
 
     @PostMapping("/records")

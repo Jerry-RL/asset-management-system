@@ -23,10 +23,12 @@ public class AssetService {
 
     private final ProjectMapper projectMapper;
     private final AssetMapper assetMapper;
+    private final AssetQrService assetQrService;
 
-    public AssetService(ProjectMapper projectMapper, AssetMapper assetMapper) {
+    public AssetService(ProjectMapper projectMapper, AssetMapper assetMapper, AssetQrService assetQrService) {
         this.projectMapper = projectMapper;
         this.assetMapper = assetMapper;
+        this.assetQrService = assetQrService;
     }
 
     // ---- 项目 ----
@@ -92,9 +94,12 @@ public class AssetService {
         if (asset.getLeaseControlStatus() == null) {
             asset.setLeaseControlStatus("vacant");
         }
+        if (asset.getStructureStatus() == null) {
+            asset.setStructureStatus("active");
+        }
         asset.setVersion(0);
         assetMapper.insert(asset);
-        return asset;
+        return assetQrService.ensureQrCode(asset);
     }
 
     public Asset updateAsset(Long id, Asset asset) {

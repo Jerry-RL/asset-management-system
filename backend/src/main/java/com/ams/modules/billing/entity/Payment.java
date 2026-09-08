@@ -30,4 +30,7 @@ public class Payment extends BaseEntity {
     private String bankReconcileStatus;
     private String remark;
     private String source;
+    private String outTradeNo;
+    private String thirdPartyTxnId;
+    private String payerOpenid;
 }

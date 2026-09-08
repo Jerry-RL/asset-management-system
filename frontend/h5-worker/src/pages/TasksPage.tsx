@@ -13,6 +13,11 @@ interface Task {
 const TYPE_ROUTE: Record<string, string> = {
   repair: '/repair',
   dunning: '/dunning',
+  dunning_l1: '/dunning',
+  dunning_l2: '/dunning',
+  dunning_l3: '/dunning',
+  dunning_l4: '/dunning',
+  dunning_l5: '/dunning',
   contract_approval: '/approval',
   meter: '/meter',
   charge: '/charge',

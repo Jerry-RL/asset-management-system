@@ -19,6 +19,10 @@ public class MigrationBatch {
     private String status; // importing/reconciled/locked
     private String sourceFile;
     private BigDecimal balanceResult;
+    private BigDecimal receivableAmount;
+    private BigDecimal arrearsAmount;
+    private BigDecimal paidAmount;
+    private String reportJson;
     private Long createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime lockedAt;

@@ -67,7 +67,7 @@ public class LeaseControlService {
         }
     }
 
-    /** 断言资产未抵押（处置/划转前校验，FR-MORT-003）。 */
+    /** 断言资产未抵押（处置/划转前校验，FR-MORT-003）。建议改用 CertificateService.assertNotMortgaged。 */
     public void assertNotMortgaged(Long assetId, boolean mortgaged) {
         if (mortgaged) {
             throw new AppException(ErrorCode.BUSINESS_ERROR, "资产处于在押状态，须先解押");

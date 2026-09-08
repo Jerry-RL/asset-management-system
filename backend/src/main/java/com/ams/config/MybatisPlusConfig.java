@@ -1,5 +1,6 @@
 package com.ams.config;
 
+import com.ams.common.mybatis.PgLocalDateTimeTypeHandler;
 import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
@@ -8,6 +9,8 @@ import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInt
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import java.time.LocalDateTime;
 import org.apache.ibatis.reflection.MetaObject;
+import org.apache.ibatis.type.JdbcType;
+import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -23,6 +26,17 @@ public class MybatisPlusConfig {
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.POSTGRE_SQL));
         interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
         return interceptor;
+    }
+
+    /** 覆盖默认 LocalDateTime 处理器，兼容 PostgreSQL TIMESTAMPTZ。 */
+    @Bean
+    public ConfigurationCustomizer pgLocalDateTimeTypeHandlerCustomizer() {
+        return configuration -> {
+            PgLocalDateTimeTypeHandler handler = new PgLocalDateTimeTypeHandler();
+            configuration.getTypeHandlerRegistry().register(LocalDateTime.class, handler);
+            configuration.getTypeHandlerRegistry().register(LocalDateTime.class, JdbcType.TIMESTAMP, handler);
+            configuration.getTypeHandlerRegistry().register(LocalDateTime.class, JdbcType.TIMESTAMP_WITH_TIMEZONE, handler);
+        };
     }
 
     @Bean

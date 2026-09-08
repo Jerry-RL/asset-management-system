@@ -24,6 +24,8 @@ public class TenderApplication {
     private String auditComment;
     private Integer rankNo;
     private String result;
+    private LocalDateTime depositRefundedAt;
+    private String depositRefundRemark;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

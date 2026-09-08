@@ -39,23 +39,78 @@ public class EvaluationService {
         return request;
     }
 
-    /** 结果回写（FR-EVAL-003）：评估价写入资产 base_rent_assessed。 */
     @Transactional
-    public EvaluationRequest recordResult(Long id, BigDecimal resultValue) {
-        EvaluationRequest request = evaluationRequestMapper.selectById(id);
-        if (request == null) {
-            throw new AppException(ErrorCode.NOT_FOUND);
+    public EvaluationRequest accept(Long id) {
+        EvaluationRequest request = require(id);
+        request.setStatus("accepted");
+        evaluationRequestMapper.updateById(request);
+        return request;
+    }
+
+    @Transactional
+    public EvaluationRequest startEvaluating(Long id) {
+        EvaluationRequest request = require(id);
+        request.setStatus("evaluating");
+        evaluationRequestMapper.updateById(request);
+        return request;
+    }
+
+    /**
+     * 结果回写（FR-EVAL-003/004）：评估价写入 base_rent_assessed；
+     * 招租/备案目的同步抬高底价，供低价签约与挂牌引用。
+     */
+    @Transactional
+    public EvaluationRequest recordResult(Long id, BigDecimal resultValue, Long reportFileId, Boolean syncFloor) {
+        EvaluationRequest request = require(id);
+        if (resultValue == null || resultValue.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "评估价须大于 0");
         }
         request.setStatus("reported");
         request.setResultValue(resultValue);
+        if (reportFileId != null) {
+            request.setReportFileId(reportFileId);
+        }
         evaluationRequestMapper.updateById(request);
 
         if (request.getAssetId() != null) {
             Asset asset = assetMapper.selectById(request.getAssetId());
             if (asset != null) {
                 asset.setBaseRentAssessed(resultValue);
+                boolean doSync = syncFloor == null
+                        ? ("lease".equals(request.getPurpose()) || "filing".equals(request.getPurpose()))
+                        : syncFloor;
+                if (doSync) {
+                    BigDecimal floor = asset.getBaseRentFloor();
+                    if (floor == null || floor.compareTo(resultValue) < 0) {
+                        asset.setBaseRentFloor(resultValue);
+                    }
+                }
                 assetMapper.updateById(asset);
             }
+        }
+        return request;
+    }
+
+    /** 有效底价：max(备案/挂牌底价, 评估价)，供签约与招租校验（FR-EVAL-004）。 */
+    public static BigDecimal effectiveFloor(Asset asset) {
+        if (asset == null) {
+            return null;
+        }
+        BigDecimal floor = asset.getBaseRentFloor();
+        BigDecimal assessed = asset.getBaseRentAssessed();
+        if (floor == null) {
+            return assessed;
+        }
+        if (assessed == null) {
+            return floor;
+        }
+        return floor.max(assessed);
+    }
+
+    private EvaluationRequest require(Long id) {
+        EvaluationRequest request = evaluationRequestMapper.selectById(id);
+        if (request == null) {
+            throw new AppException(ErrorCode.NOT_FOUND);
         }
         return request;
     }

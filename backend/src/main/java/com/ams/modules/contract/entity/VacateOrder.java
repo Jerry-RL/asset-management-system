@@ -32,4 +32,11 @@ public class VacateOrder extends BaseEntity {
     private BigDecimal depositRefund;
     private BigDecimal prepayRefund;
     private LocalDateTime settledAt;
+    private BigDecimal rentArrears;
+    private BigDecimal utilityArrears;
+    private BigDecimal lateFeeArrears;
+    private BigDecimal depositDeducted;
+    private BigDecimal prepayDeducted;
+    private BigDecimal penaltyAmount;
+    private String inspectionFileIds;
 }

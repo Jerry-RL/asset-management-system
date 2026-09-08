@@ -256,7 +256,7 @@ CREATE INDEX idx_lease_listing_status ON lease_listing (status);
 CREATE TABLE tender_announcement (
     id                 BIGSERIAL PRIMARY KEY,
     title              VARCHAR(200) NOT NULL,
-    asset_ids          BIGINT[],
+    asset_ids          VARCHAR(500),
     register_deadline  TIMESTAMPTZ,
     display_period_days INTEGER,
     status             VARCHAR(20) NOT NULL DEFAULT 'open', -- open / closed / flowed
@@ -846,7 +846,7 @@ CREATE TABLE dunning_record (
     operator_id BIGINT,
     tenant_feedback VARCHAR(500),
     result      VARCHAR(50),
-    photo_file_ids BIGINT[],
+    photo_file_ids VARCHAR(500),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_dunning_record_bill ON dunning_record (bill_id);

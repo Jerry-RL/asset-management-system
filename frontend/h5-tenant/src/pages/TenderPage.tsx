@@ -21,12 +21,12 @@ export function TenderPage() {
   }, []);
 
   const apply = async (id: number) => {
-    if (!user?.id) {
-      window.alert('请先完成身份绑定');
+    if (!user?.tenantId) {
+      window.alert('请先使用租户账号登录（演示：tenant / admin123）');
       return;
     }
     try {
-      await api.post(`/tender/announcements/${id}/applications`, { tenantId: user.id });
+      await api.post(`/tender/announcements/${id}/applications`, { tenantId: user.tenantId });
       window.alert('报名成功');
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '报名失败');

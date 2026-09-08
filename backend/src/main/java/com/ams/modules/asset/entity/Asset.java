@@ -41,6 +41,14 @@ public class Asset extends BaseEntity {
     private BigDecimal originalValue;
     private String qrCodeUrl;
     private Long parentAssetId;
+    private String vacantReason;
+    private java.time.LocalDateTime vacantSince;
+    private BigDecimal longitude;
+    private BigDecimal latitude;
+    /** active / frozen / merged_out */
+    private String structureStatus;
+    private Long rootAssetId;
+    private String oldAssetNo;
 
     @Version
     private Integer version;

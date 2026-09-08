@@ -20,6 +20,7 @@ public class TenderAnnouncement {
     private Integer displayPeriodDays;
     private String status; // open/closed/flowed
     private String result;
+    private String filingPackageJson;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

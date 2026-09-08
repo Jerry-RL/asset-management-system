@@ -19,6 +19,7 @@ public class AgentReport {
     private String status; // draft/verified/approved/exported
     private String previewPath;
     private String filePath;
+    private String contentHtml;
     private Boolean verified;
     private Long approvedBy;
     private LocalDateTime createdAt;

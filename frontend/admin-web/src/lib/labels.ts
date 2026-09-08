@@ -124,6 +124,22 @@ export const PAYMENT_CONFIRM: Record<string, string> = {
   confirmed: '已到账',
 };
 
+export const PAYMENT_METHOD: Record<string, string> = {
+  cash: '现金',
+  bank_transfer: '转账',
+  wechat: '微信',
+  alipay: '支付宝',
+};
+
+export const CHANNEL: Record<string, string> = {
+  user_mp: '用户端',
+  worker_mp: '工作端',
+  pc: 'PC',
+  in_app: '站内信',
+  sms: '短信',
+  mp: '小程序',
+};
+
 export const METER_TYPE: Record<string, string> = {
   water: '水表',
   electric: '电表',
@@ -152,4 +168,134 @@ export const TRANSFER_STATUS: Record<string, string> = {
   approving: '审批中',
   approved: '已批准',
   completed: '已完成',
+};
+
+export const BIZ_TYPE: Record<string, string> = {
+  contract: '合同审批',
+  contract_low_price: '低价合同审批',
+  contract_special: '特殊合同审批',
+  disposal: '资产处置',
+  disposal_major: '重大资产处置',
+  fee_relief: '费用减免',
+  fee_relief_major: '大额费用减免',
+  rent_adjust: '租金调价',
+  refund: '退款冲正',
+  occupation: '临时占用',
+  self_use: '资产自用',
+  mortgage_release: '解押审批',
+  asset_audit_variance: '盘点差异审批',
+  transfer: '资产调拨',
+  evaluation: '评估申请',
+};
+
+export const AGENT_REPORT_STATUS: Record<string, string> = {
+  draft: '草稿',
+  generating: '生成中',
+  ready: '已生成',
+  verified: '已核验',
+  failed: '失败',
+};
+
+/** 通用启用状态 */
+export const ENABLE_STATUS: Record<string, string> = {
+  '1': '启用',
+  '0': '停用',
+  active: '启用',
+  inactive: '停用',
+  closed: '已关闭',
+};
+
+/** 字段 key → 中文列名（详情/报表兜底，避免直接展示英文 key） */
+export const FIELD_LABELS: Record<string, string> = {
+  id: 'ID',
+  assetId: '资产ID',
+  assetNo: '资产编号',
+  name: '名称',
+  title: '标题',
+  address: '地址',
+  area: '面积(㎡)',
+  assetType: '资产类型',
+  leaseControlStatus: '租控状态',
+  projectId: '项目ID',
+  companyId: '公司ID',
+  operatingCompanyId: '经营公司ID',
+  baseRentFloor: '租金底价',
+  vacantReason: '空置原因',
+  vacantSince: '空置起始',
+  vacantDays: '空置天数',
+  contractId: '合同ID',
+  contractNo: '合同编号',
+  tenantId: '租户ID',
+  status: '状态',
+  startDate: '开始日期',
+  endDate: '结束日期',
+  rentAmount: '租金',
+  depositAmount: '保证金',
+  leaseArea: '租赁面积',
+  billNo: '账单编号',
+  billType: '账单类型',
+  billId: '账单ID',
+  dueDate: '应付日',
+  amount: '金额',
+  paidAmount: '已付金额',
+  lateFeeAmount: '滞纳金',
+  arrears: '欠费',
+  description: '说明',
+  vendorId: '维修公司ID',
+  assigneeId: '经办人ID',
+  completedAt: '完成时间',
+  createdAt: '创建时间',
+  updatedAt: '更新时间',
+  createdBy: '创建人',
+  updatedBy: '更新人',
+  paymentId: '收款ID',
+  paymentNo: '收款单号',
+  method: '方式',
+  channel: '渠道',
+  confirmStatus: '到账状态',
+  paidAt: '收款时间',
+  bizType: '业务类型',
+  bizId: '业务单ID',
+  taskId: '任务ID',
+  instanceId: '实例ID',
+  nodeId: '节点',
+  taskStatus: '任务状态',
+  instanceStatus: '实例状态',
+  currentNode: '当前节点',
+  submittedBy: '提交人',
+  submittedAt: '提交时间',
+  format: '格式',
+  verified: '已核验',
+  reportType: '报表类型',
+  period: '期间',
+  longitude: '经度',
+  latitude: '纬度',
+  city: '城市',
+  province: '省份',
+  phone: '手机号',
+  reason: '原因',
+  result: '结果',
+  remark: '备注',
+};
+
+export const BILL_TYPE: Record<string, string> = {
+  rent: '租金',
+  utility: '水电',
+  other: '其他',
+  deposit: '保证金',
+  late_fee: '滞纳金',
+};
+
+/** 取字段中文名；未知 key 时尽量不把 camelCase 直接甩给用户 */
+export const fieldLabel = (key: string): string => {
+  if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  // 兜底：createdAt → Created At 风格不够中文，直接返回 key 并在调用处可过滤
+  return key;
+};
+
+/** 枚举值 → 中文；无映射时返回原值字符串 */
+export const enumLabel = (map: Record<string, string>, value: unknown, fallback = '-'): string => {
+  if (value == null || value === '') return fallback;
+  const s = String(value);
+  return map[s] ?? s;
 };

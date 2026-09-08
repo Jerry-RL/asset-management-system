@@ -52,7 +52,11 @@ public class MaintenanceController {
     public ApiResponse<RepairOrder> dispatch(@PathVariable Long repairId, @RequestBody Map<String, Object> body) {
         Long vendorId = body.get("vendorId") == null ? null : Long.valueOf(body.get("vendorId").toString());
         Long assigneeId = body.get("assigneeId") == null ? null : Long.valueOf(body.get("assigneeId").toString());
-        return ApiResponse.ok(repairService.dispatch(repairId, vendorId, assigneeId, null, null), TraceIdUtil.get());
+        LocalDateTime resp = body.get("slaResponseDeadline") == null ? null
+                : LocalDateTime.parse(body.get("slaResponseDeadline").toString());
+        LocalDateTime comp = body.get("slaCompleteDeadline") == null ? null
+                : LocalDateTime.parse(body.get("slaCompleteDeadline").toString());
+        return ApiResponse.ok(repairService.dispatch(repairId, vendorId, assigneeId, resp, comp), TraceIdUtil.get());
     }
 
     @PostMapping("/repairs/{repairId}/complete")

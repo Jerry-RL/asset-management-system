@@ -4,6 +4,7 @@ import com.ams.common.web.ApiResponse;
 import com.ams.common.web.TraceIdUtil;
 import com.ams.platform.auth.dto.LoginRequest;
 import com.ams.platform.auth.dto.LoginResponse;
+import com.ams.platform.auth.dto.WechatBindRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -61,5 +62,13 @@ public class AuthController {
             HttpServletRequest request) {
         return ApiResponse.ok(authService.wechatLogin(body.get("code"), clientType, request),
                 TraceIdUtil.get());
+    }
+
+    @PostMapping("/wechat/bind")
+    public ApiResponse<LoginResponse> wechatBind(
+            @Valid @RequestBody WechatBindRequest body,
+            @RequestHeader(value = "X-Client-Type", defaultValue = "tenant-mp") String clientType,
+            HttpServletRequest request) {
+        return ApiResponse.ok(authService.wechatBind(body, clientType, request), TraceIdUtil.get());
     }
 }

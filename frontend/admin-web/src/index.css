@@ -1,9 +1,87 @@
+@import './theme/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
+html,
+body,
+#root {
+  height: 100%;
   margin: 0;
+  overflow: hidden;
+}
+
+body {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: var(--ams-text);
+  background: var(--ams-bg);
+}
+
+/* 细滚动条：侧栏 / 页签 / 主内容 */
+.ams-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 transparent;
+}
+
+.ams-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ams-scroll::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.ams-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.ams-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 页签横向：隐藏原生滚动条，改用左右按钮 */
+.ams-tabs-scroll-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ams-tabs-scroll-hidden::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 兼容旧类名 */
+.ams-tabs-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d9d9d9 transparent;
+}
+
+.ams-tabs-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.ams-tabs-scroll::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 2px;
+}
+
+/* 表格容器：防止撑破布局 */
+.ams-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ams-table-wrap .ant-table {
+  overflow: hidden;
+}
+
+.ams-table-wrap .ant-table-body,
+.ams-table-wrap .ant-table-content {
+  overflow-x: auto !important;
 }

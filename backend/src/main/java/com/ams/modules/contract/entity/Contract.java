@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.Version;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -24,6 +25,9 @@ public class Contract extends BaseEntity {
     @Version
     private Integer version;
     private Long parentContractId;
+    private Long bundleId;
+    /** normal / combo / split */
+    private String leaseMode;
     private LocalDate startDate;
     private LocalDate endDate;
     private BigDecimal leaseArea;
@@ -40,6 +44,22 @@ public class Contract extends BaseEntity {
     private String contractType;
     private String status; // 合同状态机九态
     private String esignStatus;
+    private String esignFlowId;
+    private LocalDateTime esignSignedAt;
+    private Long esignEvidenceFileId;
     private String paymentStatus;
     private String remark;
+    /** fifo / specified / proportional */
+    private String allocationStrategy;
+    private Boolean lateFeeFirst;
+    /** 低于底价，待超低价特批 */
+    private Boolean specialApprovalRequired;
+    /** 超低价特批已通过 */
+    private Boolean belowFloorCleared;
+    /** 生成文档所用模板 */
+    private Long templateId;
+    /** 已生成 Word 文件 ID（file_metadata） */
+    private Long docFileId;
+    /** 填充后的合同正文 HTML（在线预览） */
+    private String docHtml;
 }

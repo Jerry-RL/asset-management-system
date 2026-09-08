@@ -16,6 +16,7 @@ public class RegulationReport {
     private String reportType;
     private String period;
     private String contentJson;
+    private String sourceJson;
     private String status; // draft/reviewed/submitted
     private LocalDateTime submittedAt;
     private Long createdBy;

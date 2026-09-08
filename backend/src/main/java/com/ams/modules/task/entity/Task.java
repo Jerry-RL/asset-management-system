@@ -25,4 +25,6 @@ public class Task extends BaseEntity {
     private String status; // pending/completed
     private Long overdueMinutes;
     private LocalDateTime completedAt;
+    private LocalDateTime remindedAt;
+    private LocalDateTime escalatedAt;
 }

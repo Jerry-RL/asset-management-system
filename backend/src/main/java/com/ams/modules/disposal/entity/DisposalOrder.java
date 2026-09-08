@@ -24,4 +24,10 @@ public class DisposalOrder extends BaseEntity {
     private BigDecimal actualAmount;
     private String counterparty;
     private String status; // draft/approving/rejected/pending_execute/executing/completed
+    /** 处置损益金额（实际 − 账面/评估基准）。 */
+    private BigDecimal pnlAmount;
+    /** gain / loss */
+    private String pnlType;
+    private Long paymentId;
+    private Long voucherId;
 }

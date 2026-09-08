@@ -1,0 +1,15 @@
+:root {
+  --ams-primary: #1677ff;
+  --ams-primary-hover: #4096ff;
+  --ams-bg: #f5f6f8;
+  --ams-sidebar-bg: #ffffff;
+  --ams-sidebar-text: #595959;
+  --ams-sidebar-active-bg: #1677ff;
+  --ams-sidebar-active-text: #ffffff;
+  --ams-border: #f0f0f0;
+  --ams-card-radius: 8px;
+  --ams-text: #1f1f1f;
+  --ams-text-secondary: #8c8c8c;
+  --ams-header-height: 56px;
+  --ams-tabs-height: 40px;
+}

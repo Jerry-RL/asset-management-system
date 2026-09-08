@@ -13,6 +13,7 @@ import com.ams.modules.billing.service.BillService;
 import com.ams.modules.billing.service.PaymentService;
 import com.ams.modules.billing.service.PrepayService;
 import com.ams.modules.billing.service.RefundService;
+import com.ams.modules.billing.service.WechatPayService;
 import com.ams.modules.pricing.entity.PaymentPlan;
 import com.ams.modules.pricing.mapper.PaymentPlanMapper;
 import com.ams.platform.security.Audited;
@@ -42,6 +43,7 @@ public class BillingController {
     private final PrepayService prepayService;
     private final RefundService refundService;
     private final PaymentPlanMapper planMapper;
+    private final WechatPayService wechatPayService;
 
     public BillingController(
             BillService billService,
@@ -49,13 +51,15 @@ public class BillingController {
             AllocationService allocationService,
             PrepayService prepayService,
             RefundService refundService,
-            PaymentPlanMapper planMapper) {
+            PaymentPlanMapper planMapper,
+            WechatPayService wechatPayService) {
         this.billService = billService;
         this.paymentService = paymentService;
         this.allocationService = allocationService;
         this.prepayService = prepayService;
         this.refundService = refundService;
         this.planMapper = planMapper;
+        this.wechatPayService = wechatPayService;
     }
 
     // ---- 缴费计划 ----
@@ -77,6 +81,11 @@ public class BillingController {
         return ApiResponse.ok(billService.page(page, pageSize, contractId, status), TraceIdUtil.get());
     }
 
+    @GetMapping("/billing/bills/{billId}")
+    public ApiResponse<Bill> bill(@PathVariable Long billId) {
+        return ApiResponse.ok(billService.get(billId), TraceIdUtil.get());
+    }
+
     @PostMapping("/billing/issue")
     @Audited(module = "billing", action = "issue_bills")
     public ApiResponse<Integer> issueBills() {
@@ -93,17 +102,30 @@ public class BillingController {
         return ApiResponse.ok(paymentService.page(page, pageSize, channel, confirmStatus), TraceIdUtil.get());
     }
 
-    /** PC 线下收款登记（含核销）。 */
+    /** PC 线下收款登记（含核销）。strategy: fifo|specified|proportional */
     @PostMapping("/billing/bills/{billId}/collect")
     @Audited(module = "billing", action = "collect")
     public ApiResponse<Payment> collect(@PathVariable Long billId, @RequestBody Map<String, Object> body) {
         BigDecimal amount = new BigDecimal(body.get("amount").toString());
         String method = (String) body.get("paymentMethod");
+        String strategy = body.get("strategy") == null ? "specified" : body.get("strategy").toString();
         Bill bill = billService.get(billId);
         Payment payment = paymentService.registerConfirmed(
                 bill.getContractId(), bill.getTenantId(), amount, method, "pc");
-        allocationService.allocate(payment, "fifo");
+        allocationService.allocate(payment, strategy, List.of(billId), null);
         return ApiResponse.ok(payment, TraceIdUtil.get());
+    }
+
+    /** 用户端微信支付（FR-MPU-004）。 */
+    @PostMapping("/billing/payments/wechat")
+    @Audited(module = "billing", action = "wechat_pay")
+    @SuppressWarnings("unchecked")
+    public ApiResponse<Map<String, Object>> wechatPay(@RequestBody Map<String, Object> body) {
+        List<Long> billIds = ((List<?>) body.get("billIds")).stream()
+                .map(v -> Long.valueOf(v.toString()))
+                .toList();
+        String strategy = body.get("strategy") == null ? "specified" : body.get("strategy").toString();
+        return ApiResponse.ok(wechatPayService.createJsapiPayment(billIds, strategy), TraceIdUtil.get());
     }
 
     /** 工作端现场收款登记（待确认）。 */
@@ -120,10 +142,26 @@ public class BillingController {
     /** 财务到账确认（FR-MPW-010）。 */
     @PostMapping("/payments/{paymentId}/confirm")
     @Audited(module = "billing", action = "confirm_arrival")
-    public ApiResponse<Payment> confirmArrival(@PathVariable Long paymentId) {
+    public ApiResponse<Payment> confirmArrival(@PathVariable Long paymentId, @RequestBody(required = false) Map<String, Object> body) {
         Payment payment = paymentService.confirmArrival(paymentId, SecurityUtils.currentUserIdOrNull());
-        allocationService.allocate(payment, "fifo");
+        String strategy = body == null || body.get("strategy") == null ? "fifo" : body.get("strategy").toString();
+        List<Long> billIds = null;
+        if (body != null && body.get("billIds") instanceof List<?> list) {
+            billIds = list.stream().map(v -> Long.valueOf(v.toString())).toList();
+        }
+        allocationService.allocate(payment, strategy, billIds, null);
         return ApiResponse.ok(payment, TraceIdUtil.get());
+    }
+
+    @PostMapping("/payments/{paymentId}/reallocate")
+    @Audited(module = "billing", action = "reallocate")
+    public ApiResponse<BigDecimal> reallocate(@PathVariable Long paymentId, @RequestBody Map<String, Object> body) {
+        String strategy = body.get("strategy") == null ? "fifo" : body.get("strategy").toString();
+        List<Long> billIds = null;
+        if (body.get("billIds") instanceof List<?> list) {
+            billIds = list.stream().map(v -> Long.valueOf(v.toString())).toList();
+        }
+        return ApiResponse.ok(allocationService.reallocate(paymentId, strategy, billIds), TraceIdUtil.get());
     }
 
     @GetMapping("/payments/{paymentId}/allocations")
@@ -135,6 +173,11 @@ public class BillingController {
     @GetMapping("/prepays")
     public ApiResponse<List<Prepay>> prepays(@RequestParam Long contractId) {
         return ApiResponse.ok(prepayService.listByContract(contractId), TraceIdUtil.get());
+    }
+
+    @GetMapping("/prepays/statement")
+    public ApiResponse<Map<String, Object>> prepayStatement(@RequestParam Long contractId) {
+        return ApiResponse.ok(prepayService.statement(contractId), TraceIdUtil.get());
     }
 
     // ---- 退款 ----

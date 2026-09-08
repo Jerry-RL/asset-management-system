@@ -32,6 +32,14 @@ X-Client-Type: admin
 }
 ```
 
+演示环境（`demo` profile）统一密码 `admin123`：
+
+| 端 | 推荐账号 |
+|----|----------|
+| PC | `admin` |
+| 用户端 H5 / 小程序密码登录 | `tenant`（个人）、`tenant_corp`（企业） |
+| 工作端 H5 / 小程序密码登录 | `clerk`、`maintenance`、`approver`、`operator` |
+
 响应：
 
 ```json
@@ -182,6 +190,7 @@ Content-Type: multipart/form-data
 | 任务 | `/tasks` | 任务中心 |
 | 预警 | `/alerts` | 配置、记录 |
 | 看板 | `/dashboard` | 经营指标 |
+| 经营日历 | `/ops-calendar` | 到期/待办聚合与手工提醒 |
 | 盘点盘活 | `/audits`, `/revitalization` | 经营性盘点、空置盘活 |
 | 业财 | `/finance` | 对账、月结 |
 | 智能 | `/intelligence` | Agent 会话、报告生成、溯源 |
