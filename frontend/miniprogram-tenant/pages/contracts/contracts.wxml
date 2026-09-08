@@ -1,0 +1,16 @@
+<view class="page">
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="top">
+        <text class="no">{{item.contractNo}}</text>
+        <text class="status">{{item.status}}</text>
+      </view>
+      <view class="row">资产ID：{{item.assetId}} · 租户ID：{{item.tenantId}}</view>
+      <view class="row">租期：{{item.startDate}} ~ {{item.endDate}}</view>
+      <view class="row">租金：¥{{item.rentAmount}}（{{item.rentType}} / {{item.paymentCycle}}）</view>
+      <view class="row">缴费状态：{{item.paymentStatus}}</view>
+      <view class="link" bindtap="viewFile" data-id="{{item.id}}">查看合同文件 ›</view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无合同</view>
+</view>

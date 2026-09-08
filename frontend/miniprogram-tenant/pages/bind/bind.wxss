@@ -1,0 +1,18 @@
+.field {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+.label {
+  width: 140rpx;
+  color: #666;
+}
+.field input {
+  flex: 1;
+}
+.tip {
+  color: #bbb;
+  font-size: 24rpx;
+  margin-top: 24rpx;
+}

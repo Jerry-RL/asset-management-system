@@ -123,17 +123,17 @@ fix(billing): prevent duplicate payment with idempotency key
 | 工具 | 用途 | 路径 |
 |------|------|------|
 | Maven | Java 构建与测试 | `backend/pom.xml` |
-| ESLint + Prettier | TS/JS 格式与规则 | `eslint.config.js`、`.prettierrc` |
+| ESLint + Prettier | TS/JS 格式与规则 | `frontend/eslint.config.js`、`frontend/.prettierrc` |
 | EditorConfig | 编辑器统一缩进 | `.editorconfig` |
 | Husky + lint-staged | 提交前 lint（backend 脚手架后启用） | 见 setup-pre-commit |
 | commitlint | Commit 格式校验（可选） | — |
 
-根目录命令（需 `pnpm install`）：
+前端命令（在 `frontend/` 目录，需 `pnpm install`）：
 
 ```bash
 pnpm lint          # ESLint
 pnpm format        # Prettier
-pnpm api:lint      # OpenAPI 校验
+pnpm api:lint      # OpenAPI 校验（读取 ../docs/api/openapi.yaml）
 ```
 
 ## 11. Code Review 检查清单

@@ -1,0 +1,27 @@
+.profile {
+  background: #0f766e;
+  color: #fff;
+  padding: 60rpx 24rpx;
+}
+.name {
+  font-size: 40rpx;
+  font-weight: bold;
+}
+.sub {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 24rpx;
+}
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  background: #fff;
+  margin: -30rpx 24rpx 16rpx;
+  border-radius: 12rpx;
+  padding: 20rpx;
+}
+.grid-item {
+  width: 25%;
+  text-align: center;
+  padding: 20rpx 0;
+  font-size: 24rpx;
+}

@@ -1,0 +1,24 @@
+.top {
+  display: flex;
+  justify-content: space-between;
+}
+.desc {
+  font-weight: bold;
+}
+.status {
+  color: #0f766e;
+  font-size: 24rpx;
+}
+.sub {
+  color: #999;
+  font-size: 24rpx;
+  margin: 8rpx 0;
+}
+.btns button {
+  margin-right: 12rpx;
+}
+.empty {
+  text-align: center;
+  color: #bbb;
+  padding: 100rpx;
+}

@@ -1,0 +1,15 @@
+<view class="page">
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card" bindtap="goDetail" data-id="{{item.id}}">
+      <view class="top">
+        <text class="no">{{item.billNo}}</text>
+        <text class="amount">¥{{item.amount}}</text>
+      </view>
+      <view class="sub">到期：{{item.dueDate}} · 已缴 ¥{{item.paidAmount}}</view>
+      <view class="status {{item.status === 'paid' ? 'paid' : 'unpaid'}}">
+        {{item.status === 'paid' ? '已缴' : item.status === 'partial_paid' ? '部分缴' : '待缴'}}
+      </view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无账单</view>
+</view>

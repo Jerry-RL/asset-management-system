@@ -1,0 +1,11 @@
+<view class="page">
+  <view class="tip-card">待签署合同列表（电子签平台对接）</view>
+  <block wx:for="{{contracts}}" wx:key="id">
+    <view class="card">
+      <view class="title">{{item.contractNo}}</view>
+      <view class="sub">资产ID {{item.assetId}} · 状态 {{item.status}}</view>
+      <button class="btn-primary" size="mini" bindtap="sign" data-id="{{item.id}}">在线签署</button>
+    </view>
+  </block>
+  <view wx:if="{{contracts.length === 0}}" class="empty">暂无需签署合同</view>
+</view>

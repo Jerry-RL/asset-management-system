@@ -1,0 +1,17 @@
+<view class="page">
+  <view class="search-bar">
+    <input placeholder="搜索资产编号/名称" bindinput="onInput" value="{{keyword}}" />
+    <button class="btn-primary" size="mini" bindtap="search">搜索</button>
+    <button size="mini" bindtap="scan">扫码</button>
+  </view>
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="title">{{item.name}}</view>
+      <view class="row">编号：{{item.assetNo}}</view>
+      <view class="row">面积：{{item.area}} ㎡</view>
+      <view class="row">租控状态：{{item.leaseControlStatus}}</view>
+      <view class="row">坐落：{{item.province}}{{item.city}}{{item.district}}{{item.address}}</view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">输入关键字或扫码查询</view>
+</view>

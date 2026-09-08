@@ -1,0 +1,13 @@
+<view class="card">
+  <view class="field">
+    <text class="label">选择表计</text>
+    <picker range="{{meters}}" range-key="meterNo" bindchange="onMeterChange">
+      <view class="picker">{{selectedMeter ? selectedMeter.meterNo : '请选择表计'}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <text class="label">本次读数</text>
+    <input type="digit" placeholder="请输入读数" bindinput="onReading" value="{{form.reading}}" />
+  </view>
+  <button class="btn-primary" bindtap="submit" loading="{{loading}}">提交抄表</button>
+</view>

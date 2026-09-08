@@ -1,0 +1,27 @@
+.profile {
+  background: #1f6feb;
+  color: #fff;
+  padding: 60rpx 24rpx;
+}
+.name {
+  font-size: 40rpx;
+  font-weight: bold;
+}
+.phone {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 26rpx;
+}
+.row {
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+}
+.arrow {
+  color: #ccc;
+}
+.logout {
+  margin: 40rpx 24rpx;
+  background: #fff;
+  color: #e8590c;
+}

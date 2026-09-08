@@ -1,0 +1,20 @@
+<view class="card">
+  <view class="field">
+    <text class="label">合同ID</text>
+    <input type="number" placeholder="请输入合同ID" data-field="contractId" bindinput="onInput" />
+  </view>
+  <view class="field">
+    <text class="label">收款金额</text>
+    <input type="digit" placeholder="金额（元）" data-field="amount" bindinput="onInput" />
+  </view>
+  <view class="field">
+    <text class="label">收款方式</text>
+    <radio-group data-field="method" bindchange="onMethodChange">
+      <label><radio value="cash" checked="{{form.method === 'cash'}}" />现金</label>
+      <label><radio value="wechat" checked="{{form.method === 'wechat'}}" />扫码</label>
+      <label><radio value="bank_transfer" checked="{{form.method === 'bank_transfer'}}" />转账</label>
+    </radio-group>
+  </view>
+  <button class="btn-primary" bindtap="submit" loading="{{loading}}">登记现场收款</button>
+  <view class="tip">登记后标记「待确认」，财务到账确认后计入实收</view>
+</view>

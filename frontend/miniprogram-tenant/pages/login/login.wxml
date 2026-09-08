@@ -1,0 +1,8 @@
+<view class="login-wrap">
+  <view class="logo">资管云</view>
+  <view class="sub">资产经营管理 · 用户端</view>
+  <button class="btn-primary login-btn" bindtap="handleLogin" loading="{{loading}}">
+    微信快捷登录
+  </button>
+  <view class="tip">登录即表示同意《用户协议》与《隐私政策》</view>
+</view>

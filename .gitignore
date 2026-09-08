@@ -38,3 +38,6 @@ deploy/k8s/secret.yaml
 
 # Misc
 *.local
+
+# Local toolchain (JDK downloads)
+.tools/

@@ -1,0 +1,13 @@
+<view class="card">
+  <view class="field">
+    <text class="label">绑定资产</text>
+    <picker range="{{assets}}" range-key="name" bindchange="onAssetChange">
+      <view class="picker">{{form.assetId ? form.assetId : '请选择资产'}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <text class="label">报修说明</text>
+    <textarea placeholder="请描述故障情况" bindinput="onDesc" />
+  </view>
+  <button class="btn-primary" bindtap="submit" loading="{{loading}}">提交报修</button>
+</view>

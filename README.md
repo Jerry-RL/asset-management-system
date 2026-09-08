@@ -32,7 +32,7 @@
 
 https://github.com/Jerry-RL/asset-management-system
 
-## 快速命令
+# 快速命令
 
 ```bash
 # 本地依赖（PostgreSQL / Redis / MinIO）
@@ -41,17 +41,20 @@ cd docker && docker compose up -d
 # 后端 API（需 JDK 21 + Maven）
 cd backend && mvn spring-boot:run
 
-# 文档与 OpenAPI 校验
-pnpm install
-pnpm api:lint
-pnpm lint
+# 前端 Monorepo（文档校验 + admin-web + 小程序）
+cd frontend && pnpm install
+pnpm api:lint        # OpenAPI 校验
+pnpm lint            # ESLint
+pnpm build           # 构建 admin-web
 ```
 
 ## 工程结构
 
 ```
-backend/          # Java Maven Spring Boot
-admin-web/        # React（待脚手架）
-miniprogram-*/    # 微信小程序（待脚手架）
-docs/             # 全生命周期文档
+backend/           # Java Maven Spring Boot
+frontend/          # 前端 Monorepo（pnpm workspaces）
+  admin-web/       # PC 管理后台 React
+  miniprogram-*/   # 微信小程序（待脚手架）
+  packages/        # 共享包（api-types 等，待脚手架）
+docs/              # 全生命周期文档
 ```

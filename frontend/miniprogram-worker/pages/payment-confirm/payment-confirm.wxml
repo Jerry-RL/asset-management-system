@@ -1,0 +1,13 @@
+<view class="page">
+  <view class="tip-card">现场收款「待确认」清单（到账确认由财务在 PC 端办理）</view>
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="top">
+        <text class="no">{{item.paymentNo}}</text>
+        <text class="amount">¥{{item.amount}}</text>
+      </view>
+      <view class="sub">合同ID {{item.contractId}} · {{item.method}} · {{item.confirmStatus}}</view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无待确认收款</view>
+</view>

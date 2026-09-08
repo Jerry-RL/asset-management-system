@@ -1,0 +1,22 @@
+.title {
+  font-weight: bold;
+}
+.content {
+  color: #666;
+  margin: 8rpx 0;
+}
+.time {
+  color: #bbb;
+  font-size: 22rpx;
+}
+.unread {
+  border-left: 6rpx solid #1f6feb;
+}
+.read {
+  opacity: 0.7;
+}
+.empty {
+  text-align: center;
+  color: #bbb;
+  padding: 100rpx;
+}

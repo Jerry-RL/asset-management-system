@@ -1,0 +1,14 @@
+.field {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+.label {
+  display: block;
+  color: #666;
+  margin-bottom: 12rpx;
+}
+.tip {
+  color: #bbb;
+  font-size: 24rpx;
+  margin-top: 20rpx;
+}

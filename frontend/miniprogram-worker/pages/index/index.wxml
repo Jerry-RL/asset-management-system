@@ -1,0 +1,20 @@
+<view class="page">
+  <view class="tabs">
+    <view class="tab {{filter === 'all' ? 'active' : ''}}" data-filter="all" bindtap="onFilter">所有任务</view>
+    <view class="tab {{filter === 'mine' ? 'active' : ''}}" data-filter="mine" bindtap="onFilter">个人任务</view>
+  </view>
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="top">
+        <text class="type">{{item.taskType}}</text>
+        <text class="status">{{item.status === 'pending' ? '待办' : '已完成'}}</text>
+      </view>
+      <view class="sub">经办人ID {{item.assigneeId}} · 截止 {{item.deadline}}</view>
+      <view class="btns" wx:if="{{item.status === 'pending'}}">
+        <button class="btn-primary" size="mini" bindtap="handle" data-task="{{item}}">办理</button>
+        <button size="mini" bindtap="complete" data-id="{{item.id}}">完成</button>
+      </view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无任务</view>
+</view>

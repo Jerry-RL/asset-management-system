@@ -3,7 +3,7 @@
 | 版本 | V1.1 |
 |------|------|
 | 日期 | 2026-08-26 |
-| 关联 | DSD V1.6 §10、[技术选型说明书.md](./技术选型说明书.md) |
+| 关联 | DSD V1.7 §10、[技术选型说明书.md](./技术选型说明书.md) |
 
 ---
 
@@ -23,9 +23,9 @@
 
 | 步骤 | 命令 |
 |------|------|
-| 安装 | `pnpm install` + `cd backend && mvn -B verify` |
-| Lint | `pnpm lint` + `pnpm format:check` |
-| OpenAPI | `pnpm api:lint` |
+| 安装 | `cd frontend && pnpm install --frozen-lockfile` + `cd backend && mvn -B verify` |
+| Lint | `cd frontend && pnpm lint` + `pnpm format:check` |
+| OpenAPI | `cd frontend && pnpm api:lint` |
 | 后端 | `mvn -B verify`（`backend/`） |
 
 ### 2.2 main 分支

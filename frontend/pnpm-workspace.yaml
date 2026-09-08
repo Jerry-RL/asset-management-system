@@ -1,0 +1,7 @@
+packages:
+  - admin-web
+  - h5-tenant
+  - h5-worker
+  - miniprogram-tenant
+  - miniprogram-worker
+  - packages/*

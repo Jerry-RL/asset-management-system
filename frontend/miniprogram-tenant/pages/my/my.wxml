@@ -1,0 +1,16 @@
+<view class="page">
+  <view class="profile">
+    <view class="name">{{user.name || '未实名'}}</view>
+    <view class="phone">{{user.username || ''}}</view>
+  </view>
+  <view class="card">
+    <view class="row" bindtap="goContracts">我的合同 <text class="arrow">›</text></view>
+    <view class="row" bindtap="goBills">账单明细 <text class="arrow">›</text></view>
+    <view class="row" bindtap="goRepairs">历史报修 <text class="arrow">›</text></view>
+    <view class="row" bindtap="goVacate">退租申请 <text class="arrow">›</text></view>
+    <view class="row" bindtap="goEsign">电子签约 <text class="arrow">›</text></view>
+    <view class="row" bindtap="goMessages">消息中心 <text class="arrow">›</text></view>
+    <view class="row" bindtap="goBind">身份绑定 <text class="arrow">›</text></view>
+  </view>
+  <button class="logout" bindtap="handleLogout">退出登录</button>
+</view>

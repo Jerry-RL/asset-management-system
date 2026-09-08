@@ -1,0 +1,44 @@
+.header {
+  background: #1f6feb;
+  color: #fff;
+  padding: 40rpx 24rpx 60rpx;
+  display: flex;
+  justify-content: space-between;
+}
+.hi {
+  font-size: 36rpx;
+  font-weight: bold;
+}
+.msg {
+  font-size: 26rpx;
+}
+.grid {
+  display: flex;
+  background: #fff;
+  margin: -30rpx 24rpx 16rpx;
+  border-radius: 12rpx;
+  padding: 30rpx 0;
+}
+.grid-item {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+}
+.grid-item .icon {
+  font-size: 48rpx;
+  display: block;
+  margin-bottom: 8rpx;
+}
+.card-title {
+  font-weight: bold;
+  margin-bottom: 8rpx;
+}
+.row {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+}
+.arrow {
+  color: #ccc;
+}

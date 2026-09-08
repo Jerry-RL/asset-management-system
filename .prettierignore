@@ -1,8 +1,0 @@
-.prettierignore
-node_modules/
-dist/
-build/
-coverage/
-docs/source-material/
-docs/database/schemadoc/output/
-.git/

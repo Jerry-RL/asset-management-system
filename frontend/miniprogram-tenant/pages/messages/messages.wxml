@@ -1,0 +1,10 @@
+<view class="page">
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card {{item.readAt ? 'read' : 'unread'}}" bindtap="read" data-id="{{item.id}}">
+      <view class="title">{{item.title}}</view>
+      <view class="content">{{item.content}}</view>
+      <view class="time">{{item.createdAt}}</view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无消息</view>
+</view>

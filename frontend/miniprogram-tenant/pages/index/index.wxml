@@ -1,0 +1,20 @@
+<view class="page">
+  <view class="header">
+    <view class="hi">您好，{{user.name || '租户'}}</view>
+    <view class="msg" bindtap="goMessages">消息 {{unread ? '(' + unread + ')' : ''}}</view>
+  </view>
+
+  <view class="grid">
+    <view class="grid-item" bindtap="goRepair"><view class="icon">🔧</view><text>报事报修</text></view>
+    <view class="grid-item" bindtap="goBind"><view class="icon">👤</view><text>身份绑定</text></view>
+    <view class="grid-item" bindtap="goPay"><view class="icon">💰</view><text>资产缴费</text></view>
+    <view class="grid-item" bindtap="goAssets"><view class="icon">🏠</view><text>资产招租</text></view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">我的服务</view>
+    <view class="row" bindtap="goContracts">📄 我的合同 <text class="arrow">›</text></view>
+    <view class="row" bindtap="goPay">🧾 账单明细 <text class="arrow">›</text></view>
+    <view class="row" bindtap="goRepair">🔧 历史报修 <text class="arrow">›</text></view>
+  </view>
+</view>

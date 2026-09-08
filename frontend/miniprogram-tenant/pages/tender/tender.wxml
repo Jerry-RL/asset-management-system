@@ -1,0 +1,11 @@
+<view class="page">
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="title">{{item.title}}</view>
+      <view class="sub">报名截止：{{item.registerDeadline}}</view>
+      <view class="sub">公示期：{{item.displayPeriodDays}} 天</view>
+      <button class="btn-primary" size="mini" bindtap="apply" data-id="{{item.id}}">报名</button>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无招租公告</view>
+</view>

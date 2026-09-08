@@ -1,0 +1,10 @@
+<view class="page">
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="desc">{{item.description}}</view>
+      <view class="sub">资产ID {{item.assetId}} · {{item.status}}</view>
+      <view class="time">{{item.createdAt}}</view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无报修记录</view>
+</view>

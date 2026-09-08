@@ -1,7 +1,10 @@
 spring:
   autoconfigure:
     exclude:
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.jobrunr.spring.autoconfigure.JobRunrAutoConfiguration
+      - org.jobrunr.spring.autoconfigure.JobRunrDashboardWebServerAutoConfiguration
+      - org.jobrunr.spring.autoconfigure.JobRunrBackgroundJobServerAutoConfiguration
+      - org.jobrunr.spring.autoconfigure.storage.JobRunrSqlStorageAutoConfiguration
   datasource:
     url: jdbc:h2:mem:ams_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
@@ -20,3 +23,7 @@ org:
       enabled: false
     dashboard:
       enabled: false
+
+ams:
+  scheduling:
+    enabled: false

@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/asset-query/asset-query",
+    "pages/my/my",
+    "pages/charge/charge",
+    "pages/inspect/inspect",
+    "pages/repair/repair",
+    "pages/dunning/dunning",
+    "pages/approval/approval",
+    "pages/vacate/vacate",
+    "pages/meter/meter",
+    "pages/payment-confirm/payment-confirm"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#0f766e",
+    "navigationBarTitleText": "资管云 · 工作端",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f5f6f8"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#0f766e",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "任务中心" },
+      { "pagePath": "pages/asset-query/asset-query", "text": "资产查询" },
+      { "pagePath": "pages/my/my", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

@@ -1,0 +1,26 @@
+.top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+.no {
+  font-weight: bold;
+}
+.status {
+  color: #1f6feb;
+  font-size: 24rpx;
+}
+.row {
+  color: #666;
+  font-size: 24rpx;
+  padding: 6rpx 0;
+}
+.link {
+  color: #1f6feb;
+  margin-top: 12rpx;
+}
+.empty {
+  text-align: center;
+  color: #bbb;
+  padding: 100rpx;
+}

@@ -1,0 +1,38 @@
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.no {
+  color: #333;
+}
+.amount {
+  color: #e8590c;
+  font-weight: bold;
+  font-size: 34rpx;
+}
+.sub {
+  color: #999;
+  font-size: 24rpx;
+  margin-top: 8rpx;
+}
+.status {
+  display: inline-block;
+  padding: 4rpx 16rpx;
+  border-radius: 8rpx;
+  font-size: 22rpx;
+  margin-top: 12rpx;
+}
+.paid {
+  background: #e6f7e6;
+  color: #2e8b57;
+}
+.unpaid {
+  background: #fff0e6;
+  color: #e8590c;
+}
+.empty {
+  text-align: center;
+  color: #bbb;
+  padding: 100rpx;
+}

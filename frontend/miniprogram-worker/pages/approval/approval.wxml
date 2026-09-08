@@ -1,0 +1,13 @@
+<view class="page">
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="title">审批任务 #{{item.id}}</view>
+      <view class="sub">节点 {{item.nodeId}} · 状态 {{item.status}}</view>
+      <view class="btns">
+        <button class="btn-primary" size="mini" bindtap="approve" data-id="{{item.instanceId}}">通过</button>
+        <button size="mini" bindtap="reject" data-id="{{item.instanceId}}">驳回</button>
+      </view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无待审批任务</view>
+</view>

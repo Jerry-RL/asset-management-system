@@ -1,0 +1,20 @@
+<view class="card">
+  <view class="field">
+    <text class="label">选择合同</text>
+    <picker range="{{contracts}}" range-key="contractNo" bindchange="onContractChange">
+      <view class="picker">{{form.contractId ? form.contractId : '请选择合同'}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <text class="label">退租原因</text>
+    <textarea placeholder="请填写退租原因" bindinput="onReason" />
+  </view>
+  <view class="field">
+    <text class="label">期望退租日期</text>
+    <picker mode="date" bindchange="onDate">
+      <view class="picker">{{form.expectedVacateDate || '请选择日期'}}</view>
+    </picker>
+  </view>
+  <button class="btn-primary" bindtap="submit" loading="{{loading}}">提交退租申请</button>
+  <view class="tip">提交后将进入清场验收与费用结算流程</view>
+</view>

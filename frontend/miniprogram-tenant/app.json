@@ -1,0 +1,36 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/assets/assets",
+    "pages/my/my",
+    "pages/login/login",
+    "pages/bind/bind",
+    "pages/asset-detail/asset-detail",
+    "pages/bills/bills",
+    "pages/bill-detail/bill-detail",
+    "pages/repair/repair",
+    "pages/repairs/repairs",
+    "pages/tender/tender",
+    "pages/messages/messages",
+    "pages/contracts/contracts",
+    "pages/vacate/vacate",
+    "pages/esign/esign"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#1f6feb",
+    "navigationBarTitleText": "资管云 · 用户端",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f5f6f8"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#1f6feb",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "主页" },
+      { "pagePath": "pages/assets/assets", "text": "资产租赁" },
+      { "pagePath": "pages/my/my", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

@@ -1,0 +1,13 @@
+<view class="page">
+  <view wx:if="{{asset}}" class="card">
+    <view class="title">{{asset.name}}</view>
+    <view class="row">资产编号：{{asset.assetNo}}</view>
+    <view class="row">类型：{{asset.assetType === 'property' ? '房产类' : '土地类'}}</view>
+    <view class="row">面积：{{asset.area}} ㎡</view>
+    <view class="row">坐落：{{asset.province}}{{asset.city}}{{asset.district}}{{asset.address}}</view>
+    <view class="row">租控状态：{{asset.leaseControlStatus}}</view>
+    <view class="row" wx:if="{{asset.baseRentAssessed}}">评估租金：¥{{asset.baseRentAssessed}}</view>
+  </view>
+  <button class="btn-primary action" bindtap="goTender" wx:if="{{asset && asset.leaseControlStatus === 'leasing'}}">立即报名</button>
+  <button class="action" bindtap="scan">扫码查资产</button>
+</view>

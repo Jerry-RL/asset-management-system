@@ -1,0 +1,13 @@
+<view class="page">
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="top">
+        <text class="title">退租单 #{{item.id}}</text>
+        <text class="status">{{item.status}}</text>
+      </view>
+      <view class="sub">合同ID {{item.contractId}} · 原因 {{item.reason}}</view>
+      <button wx:if="{{item.status === 'applying'}}" class="btn-primary" size="mini" bindtap="inspect" data-id="{{item.id}}">提交清场验收</button>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无清场任务</view>
+</view>

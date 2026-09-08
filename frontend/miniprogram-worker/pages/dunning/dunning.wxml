@@ -1,0 +1,21 @@
+<view class="card">
+  <view class="field">
+    <text class="label">账单ID</text>
+    <input type="number" placeholder="请输入账单ID" data-field="billId" bindinput="onInput" />
+  </view>
+  <view class="field">
+    <text class="label">催缴等级</text>
+    <radio-group data-field="level" bindchange="onLevelChange">
+      <label><radio value="1" checked="{{form.level === 1}}" />L1</label>
+      <label><radio value="2" checked="{{form.level === 2}}" />L2</label>
+      <label><radio value="3" checked="{{form.level === 3}}" />L3</label>
+      <label><radio value="4" checked="{{form.level === 4}}" />L4</label>
+      <label><radio value="5" checked="{{form.level === 5}}" />L5</label>
+    </radio-group>
+  </view>
+  <view class="field">
+    <text class="label">催缴说明</text>
+    <textarea placeholder="张贴/催缴说明" data-field="content" bindinput="onInput" />
+  </view>
+  <button class="btn-primary" bindtap="submit" loading="{{loading}}">提交催缴留痕</button>
+</view>

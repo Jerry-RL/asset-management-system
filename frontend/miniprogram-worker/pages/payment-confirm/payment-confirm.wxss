@@ -1,0 +1,27 @@
+.tip-card {
+  background: #e6f7f6;
+  color: #0f766e;
+  padding: 20rpx 24rpx;
+  font-size: 24rpx;
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+}
+.no {
+  font-weight: bold;
+}
+.amount {
+  color: #e8590c;
+  font-weight: bold;
+}
+.sub {
+  color: #999;
+  font-size: 24rpx;
+  margin-top: 8rpx;
+}
+.empty {
+  text-align: center;
+  color: #bbb;
+  padding: 100rpx;
+}

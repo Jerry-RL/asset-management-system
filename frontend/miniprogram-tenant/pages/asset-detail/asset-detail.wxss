@@ -1,0 +1,12 @@
+.title {
+  font-size: 36rpx;
+  font-weight: bold;
+  margin-bottom: 16rpx;
+}
+.row {
+  padding: 12rpx 0;
+  color: #666;
+}
+.action {
+  margin: 24rpx;
+}

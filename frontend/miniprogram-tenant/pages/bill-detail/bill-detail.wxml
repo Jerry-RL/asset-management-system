@@ -1,0 +1,12 @@
+<view class="page">
+  <view wx:if="{{bill}}" class="card">
+    <view class="amount">¥{{bill.amount}}</view>
+    <view class="row">账单编号：{{bill.billNo}}</view>
+    <view class="row">账单类型：{{bill.billType === 'rent' ? '租金' : bill.billType === 'utility' ? '水电' : '其他'}}</view>
+    <view class="row">账期：{{bill.periodStart}} ~ {{bill.periodEnd}}</view>
+    <view class="row">到期日：{{bill.dueDate}}</view>
+    <view class="row">已核销：¥{{bill.paidAmount}}</view>
+    <view class="row" wx:if="{{bill.lateFeeAmount}}">滞纳金：¥{{bill.lateFeeAmount}}</view>
+  </view>
+  <button wx:if="{{bill && bill.status !== 'paid'}}" class="btn-primary pay-btn" bindtap="pay" loading="{{paying}}">立即缴费</button>
+</view>

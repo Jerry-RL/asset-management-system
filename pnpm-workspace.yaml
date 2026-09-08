@@ -1,5 +1,0 @@
-packages:
-  - admin-web
-  - miniprogram-tenant
-  - miniprogram-worker
-  - packages/*

@@ -1,0 +1,15 @@
+<view class="card">
+  <view class="field">
+    <text class="label">资产ID</text>
+    <input type="number" placeholder="请输入资产ID" data-field="assetId" bindinput="onInput" value="{{form.assetId}}" />
+  </view>
+  <view class="field">
+    <text class="label">巡检结果</text>
+    <input placeholder="正常/异常" data-field="result" bindinput="onInput" value="{{form.result}}" />
+  </view>
+  <view class="field">
+    <text class="label">隐患描述</text>
+    <textarea placeholder="如有隐患请描述，可转报修工单" data-field="hazardDesc" bindinput="onInput" value="{{form.hazardDesc}}" />
+  </view>
+  <button class="btn-primary" bindtap="submit" loading="{{loading}}">提交巡检</button>
+</view>

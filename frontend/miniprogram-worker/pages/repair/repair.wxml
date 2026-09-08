@@ -1,0 +1,16 @@
+<view class="page">
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="card">
+      <view class="top">
+        <text class="desc">{{item.description}}</text>
+        <text class="status">{{item.status}}</text>
+      </view>
+      <view class="sub">资产ID {{item.assetId}} · 报修人 {{item.reporterName}}</view>
+      <view class="btns">
+        <button class="btn-primary" size="mini" bindtap="accept" data-id="{{item.id}}">接单/派工</button>
+        <button size="mini" bindtap="complete" data-id="{{item.id}}">完工</button>
+      </view>
+    </view>
+  </block>
+  <view wx:if="{{list.length === 0}}" class="empty">暂无维修工单</view>
+</view>
