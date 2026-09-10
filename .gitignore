@@ -12,6 +12,9 @@ build/
 .next/
 out/
 
+# TypeScript 增量构建缓存（本地生成，不应入库）
+*.tsbuildinfo
+
 # Logs
 logs/
 *.log
