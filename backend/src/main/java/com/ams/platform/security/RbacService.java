@@ -3,6 +3,7 @@ package com.ams.platform.security;
 import com.ams.common.exception.AppException;
 import com.ams.common.exception.ErrorCode;
 import com.ams.modules.org.entity.User;
+import com.ams.modules.org.service.CompanyTreeService;
 import com.ams.modules.system.entity.Role;
 import com.ams.modules.system.entity.RolePermission;
 import com.ams.modules.system.entity.UserRole;
@@ -11,6 +12,7 @@ import com.ams.modules.system.mapper.RolePermissionMapper;
 import com.ams.modules.system.mapper.UserRoleMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,16 +31,19 @@ public class RbacService {
     private final RoleMapper roleMapper;
     private final RolePermissionMapper rolePermissionMapper;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CompanyTreeService companyTreeService;
 
     public RbacService(
             UserRoleMapper userRoleMapper,
             RoleMapper roleMapper,
             RolePermissionMapper rolePermissionMapper,
-            RedisTemplate<String, Object> redisTemplate) {
+            RedisTemplate<String, Object> redisTemplate,
+            CompanyTreeService companyTreeService) {
         this.userRoleMapper = userRoleMapper;
         this.roleMapper = roleMapper;
         this.rolePermissionMapper = rolePermissionMapper;
         this.redisTemplate = redisTemplate;
+        this.companyTreeService = companyTreeService;
     }
 
     /**
@@ -92,6 +97,8 @@ public class RbacService {
 
     /**
      * 断言数据范围：company 级访问控制（40301）。
+     *
+     * <p>可访问范围 = 用户所属公司 + 其全部下级公司（公司子树）。
      */
     public void assertCompanyAccess(LoginUser user, Long companyId) {
         if (user == null) {
@@ -100,18 +107,17 @@ public class RbacService {
         if (companyId == null || user.isSuperAdmin() || "all".equals(user.getDataScope())) {
             return;
         }
-        if ("company".equals(user.getDataScope()) || "dept".equals(user.getDataScope())
-                || "project".equals(user.getDataScope()) || "self".equals(user.getDataScope())) {
-            if (user.getCompanyId() != null && user.getCompanyId().equals(companyId)) {
-                return;
-            }
+        if (user.getCompanyId() != null && companyScope(user).contains(companyId)) {
+            return;
         }
         throw new AppException(ErrorCode.DATA_SCOPE_FORBIDDEN);
     }
 
     /**
      * 返回用户可访问的 company 集合（用于 SQL company_id IN）。
-     * 空集合表示全量（all / super_admin）。
+     *
+     * <p>空集合表示全量（all / super_admin）。非全量用户返回「所属公司 + 下级公司子树」，
+     * 至少包含自身公司，避免空集合被误判为全量而放大权限。
      */
     public Set<Long> companyScope(LoginUser user) {
         if (user == null) {
@@ -120,10 +126,13 @@ public class RbacService {
         if (user.isSuperAdmin() || "all".equals(user.getDataScope())) {
             return Set.of();
         }
-        if (user.getCompanyId() != null) {
-            return Set.of(user.getCompanyId());
+        if (user.getCompanyId() == null) {
+            return Set.of();
         }
-        return Set.of();
+        Set<Long> subtree = new LinkedHashSet<>();
+        subtree.add(user.getCompanyId());
+        subtree.addAll(companyTreeService.descendantIds(user.getCompanyId()));
+        return subtree;
     }
 
     private String widen(String current, String candidate) {

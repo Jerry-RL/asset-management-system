@@ -14,6 +14,8 @@ import { ContractDetailPage } from '@/pages/ContractDetailPage';
 import { OpsCalendarPage } from '@/pages/OpsCalendarPage';
 import { DunningAutoPage } from '@/pages/DunningAutoPage';
 import { HelpPage } from '@/pages/HelpPage';
+import { SystemDictionaryPage } from '@/pages/SystemDictionaryPage';
+import { OrgStructurePage } from '@/pages/OrgStructurePage';
 import { AdminLayout } from '@/components/AdminLayout';
 import { ResourcePage } from '@/components/ResourcePage';
 import { RESOURCES } from '@/pages/modules';
@@ -51,6 +53,8 @@ export default function App() {
           <Route path="assets/:assetId/dossier" element={<AssetDossierPage />} />
           <Route path="contract-templates" element={<ContractTemplatesPage />} />
           <Route path="contracts/:contractId" element={<ContractDetailPage />} />
+          <Route path="system/dict" element={<SystemDictionaryPage />} />
+          <Route path="org/structure" element={<OrgStructurePage />} />
           {Object.entries(RESOURCES).map(([key, config]) => (
             <Route key={key} path={key} element={<ResourcePage config={config} />} />
           ))}

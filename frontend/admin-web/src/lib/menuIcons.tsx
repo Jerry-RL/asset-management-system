@@ -55,6 +55,8 @@ import {
   EnvironmentOutlined,
   LogoutOutlined,
   CalendarOutlined,
+  BookOutlined,
+  PartitionOutlined,
 } from '@ant-design/icons';
 
 /** 按路由 path 映射菜单/页签/标题图标 */
@@ -110,10 +112,12 @@ export const PATH_ICONS: Record<string, ReactNode> = {
   '/intangible-assets': <CopyrightOutlined />,
   '/org/companies': <ApartmentOutlined />,
   '/org/departments': <TeamOutlined />,
+  '/org/structure': <PartitionOutlined />,
   '/system/users': <UserOutlined />,
   '/config/versions': <SettingOutlined />,
   '/system/roles': <SafetyOutlined />,
   '/system/menus': <MenuOutlined />,
+  '/system/dict': <BookOutlined />,
   '/intelligence/templates': <ExperimentOutlined />,
   '/intelligence/sessions': <RobotOutlined />,
   '/intelligence/reports': <FileTextOutlined />,
@@ -121,13 +125,38 @@ export const PATH_ICONS: Record<string, ReactNode> = {
 };
 
 export const GROUP_ICONS: Record<string, ReactNode> = {
+  // 旧版菜单分组（菜单还原）
+  首页与工作台: <AppstoreOutlined />,
+  经营分析: <BarChartOutlined />,
+  风险管控: <AlertOutlined />,
+  资产台账: <BankOutlined />,
+  资债权证: <FileProtectOutlined />,
+  资产招租: <ShopOutlined />,
+  资产运营: <DeploymentUnitOutlined />,
+  合同管理: <FileTextOutlined />,
+  定价与计费: <PercentageOutlined />,
+  收费与发票: <ReconciliationOutlined />,
+  履约催缴: <PhoneOutlined />,
+  巡检维修: <ToolOutlined />,
+  任务中心: <CarryOutOutlined />,
+  空置盘活: <RocketOutlined />,
+  合规监管: <AuditOutlined />,
+  消息待办: <BellOutlined />,
+  固定资产: <ClusterOutlined />,
+  无形资产: <CopyrightOutlined />,
+  组织架构: <ApartmentOutlined />,
+  运营管理: <TeamOutlined />,
+  系统配置: <SettingOutlined />,
+  系统管理: <SafetyOutlined />,
+  智能中心: <RobotOutlined />,
+  期初迁移: <CloudUploadOutlined />,
+  // 新版分组（保留兼容）
   工作台: <AppstoreOutlined />,
   协同管控: <AlertOutlined />,
   招租与合同: <FileTextOutlined />,
   收费财务: <DollarOutlined />,
   资产档案: <BankOutlined />,
   现场运维: <ToolOutlined />,
-  智能中心: <RobotOutlined />,
   系统设置: <SettingOutlined />,
 };
 

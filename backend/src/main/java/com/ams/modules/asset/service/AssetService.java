@@ -7,10 +7,12 @@ import com.ams.modules.asset.entity.Asset;
 import com.ams.modules.asset.entity.Project;
 import com.ams.modules.asset.mapper.AssetMapper;
 import com.ams.modules.asset.mapper.ProjectMapper;
+import com.ams.modules.org.service.CompanyTreeService;
 import com.ams.platform.security.LoginUser;
 import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -24,11 +26,17 @@ public class AssetService {
     private final ProjectMapper projectMapper;
     private final AssetMapper assetMapper;
     private final AssetQrService assetQrService;
+    private final CompanyTreeService companyTreeService;
 
-    public AssetService(ProjectMapper projectMapper, AssetMapper assetMapper, AssetQrService assetQrService) {
+    public AssetService(
+            ProjectMapper projectMapper,
+            AssetMapper assetMapper,
+            AssetQrService assetQrService,
+            CompanyTreeService companyTreeService) {
         this.projectMapper = projectMapper;
         this.assetMapper = assetMapper;
         this.assetQrService = assetQrService;
+        this.companyTreeService = companyTreeService;
     }
 
     // ---- 项目 ----
@@ -119,13 +127,23 @@ public class AssetService {
         assetMapper.deleteById(id);
     }
 
+    /**
+     * 数据范围：可访问公司集合（本公司 + 全部下级公司子树）。
+     *
+     * @return {@code null} 表示全量（super_admin / all）；否则为限定集合。
+     *         非全量用户若未归属公司，返回哨兵集合而非空集合 —— 空集合会被
+     *         调用处的 {@code !scope.isEmpty()} 判定为「不加条件」，导致越权看到全量数据。
+     */
     private Set<Long> companyScope(LoginUser user) {
         if (user == null || user.isSuperAdmin() || "all".equals(user.getDataScope())) {
             return null; // null 表示全量
         }
-        if (user.getCompanyId() != null) {
-            return Set.of(user.getCompanyId());
+        if (user.getCompanyId() == null) {
+            return Set.of(-1L); // 哨兵：不匹配任何公司，避免退化为全量
         }
-        return Set.of();
+        Set<Long> scope = new LinkedHashSet<>();
+        scope.add(user.getCompanyId());
+        scope.addAll(companyTreeService.descendantIds(user.getCompanyId()));
+        return scope;
     }
 }

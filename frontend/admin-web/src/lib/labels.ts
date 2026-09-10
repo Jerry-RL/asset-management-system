@@ -196,6 +196,16 @@ export const AGENT_REPORT_STATUS: Record<string, string> = {
   failed: '失败',
 };
 
+/** 公司类型（公司管理字典 → 公司类型）；group / subsidiary 为存量数据取值 */
+export const COMPANY_TYPE: Record<string, string> = {
+  group: '集团',
+  provincial_sasac: '省国资委',
+  public_institution: '事业单位',
+  state_owned: '国企',
+  private_enterprise: '私企',
+  subsidiary: '子公司',
+};
+
 /** 通用启用状态 */
 export const ENABLE_STATUS: Record<string, string> = {
   '1': '启用',

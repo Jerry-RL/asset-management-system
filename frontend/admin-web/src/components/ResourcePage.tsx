@@ -121,6 +121,8 @@ export interface RowActionConfig {
 export interface ResourceConfig {
   title: string;
   listPath: string;
+  /** 新增提交路径；缺省与 listPath 相同（少数资源新增走独立端点） */
+  createPath?: string;
   detailPath?: (id: number) => string;
   /** 跳转到独立详情页（优先于抽屉详情） */
   detailLink?: (id: number) => string;
@@ -252,6 +254,10 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   const [actionFieldOptions, setActionFieldOptions] = useState<
     Record<string, { value: string | number; label: string }[]>
   >({});
+  /** 主表单（新增/编辑）的远程下拉选项，按字段名索引 */
+  const [formFieldOptions, setFormFieldOptions] = useState<
+    Record<string, { value: string | number; label: string }[]>
+  >({});
 
   const idField = config.idField ?? 'id';
   const rows = data.list ?? [];
@@ -285,6 +291,33 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.listPath]);
 
+  // 主表单远程下拉：字典等 optionsPath 字段在打开表单前预取，避免选项为空
+  useEffect(() => {
+    const withPath = (config.fields ?? []).filter((f) => f.optionsPath);
+    if (withPath.length === 0) {
+      setFormFieldOptions({});
+      return;
+    }
+    let cancelled = false;
+    const loadOptions = async () => {
+      const next: Record<string, { value: string | number; label: string }[]> = {};
+      await Promise.all(
+        withPath.map(async (f) => {
+          try {
+            next[f.name] = await loadFieldOptions(f);
+          } catch {
+            next[f.name] = f.options ?? [];
+          }
+        }),
+      );
+      if (!cancelled) setFormFieldOptions(next);
+    };
+    void loadOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [config]);
+
   const openDetail = async (row: Row) => {
     const id = row[idField] as number;
     if (id == null) return;
@@ -306,7 +339,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
-      await api.post(config.listPath, values);
+      await api.post(config.createPath ?? config.listPath, values);
       message.success('创建成功');
       setShowCreate(false);
       form.resetFields();
@@ -880,7 +913,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
       >
         <Form form={form} layout="vertical" className="mt-2">
-          {renderFormFields(config.fields ?? [])}
+          {renderFormFields(config.fields ?? [], formFieldOptions)}
         </Form>
       </Modal>
 
@@ -897,7 +930,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
       >
         <Form form={editForm} layout="vertical" className="mt-2">
-          {renderFormFields(config.fields ?? [])}
+          {renderFormFields(config.fields ?? [], formFieldOptions)}
         </Form>
       </Modal>
 

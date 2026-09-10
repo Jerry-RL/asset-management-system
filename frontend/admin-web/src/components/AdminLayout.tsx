@@ -18,8 +18,8 @@ import { getGroupIcon, getPathIcon } from '@/lib/menuIcons';
 import { MENU } from '@/pages/modules';
 import { PageTabs } from './PageTabs';
 
-/** 默认展开：工作台 + 协同管控（日常最高频）；其余折叠，当前路由所在分组自动展开 */
-const DEFAULT_OPEN = new Set(['工作台', '协同管控']);
+/** 默认展开：全部分组（对齐旧版菜单行为）；当前路由所在分组也会自动展开 */
+const DEFAULT_OPEN = new Set(MENU.map((group) => group.title));
 
 /** 路径是否匹配菜单项：精确匹配，或详情子路径（如 /contracts/123） */
 const pathMatchesItem = (pathname: string, itemPath: string) =>

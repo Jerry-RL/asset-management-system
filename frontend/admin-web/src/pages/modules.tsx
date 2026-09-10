@@ -17,108 +17,177 @@ export interface MenuGroup {
 }
 
 export const MENU: MenuGroup[] = [
-  // 展示优先级：日常作业 → 经营闭环 → 档案查询 → 现场 → 决策/配置
   {
-    title: '工作台',
+    title: '首页与工作台',
     items: [
       { path: '/', title: '应用中心' },
       { path: '/ops-calendar', title: '经营日历' },
       { path: '/dashboard', title: '经营看板' },
-      { path: '/asset-map', title: '资产地图' },
-      { path: '/reports', title: '数据报表' },
-      { path: '/business-plans', title: '经营计划与预算' },
       { path: '/dashboard/consolidate', title: '集团合并看板' },
     ],
   },
   {
-    title: '协同管控',
+    title: '经营分析',
     items: [
-      { path: '/tasks', title: '任务管理' },
-      { path: '/approvals', title: '审批中心' },
-      { path: '/notifications', title: '消息通知' },
-      { path: '/alerts/records', title: '预警提醒与记录' },
-      { path: '/alerts/rules', title: '预警配置' },
-      { path: '/regulation/reports', title: '监管报送' },
+      { path: '/business-plans', title: '经营计划与预算' },
+      { path: '/reports', title: '数据报表' },
+      { path: '/dashboard/consolidate', title: '集团合并看板' },
     ],
   },
   {
-    title: '招租与合同',
+    title: '风险管控',
     items: [
-      { path: '/contracts', title: '合同管理' },
-      { path: '/vacate-orders', title: '退租清场与保证金' },
+      { path: '/alerts/rules', title: '预警配置' },
+      { path: '/alerts/records', title: '预警提醒与记录' },
+    ],
+  },
+  {
+    title: '资产台账',
+    items: [
+      { path: '/projects', title: '项目管理' },
+      { path: '/assets', title: '资产台账' },
+      { path: '/assets/structure-logs', title: '拆分合并日志' },
+      { path: '/asset-map', title: '资产地图' },
+    ],
+  },
+  {
+    title: '资债权证',
+    items: [
+      { path: '/certificates', title: '权证信息' },
+      { path: '/mortgages', title: '抵押列表' },
+      { path: '/asset-transfers', title: '资产调拨' },
+      { path: '/evaluations', title: '评估申请' },
+    ],
+  },
+  {
+    title: '资产招租',
+    items: [
       { path: '/lease-listings', title: '招租管理' },
       { path: '/tender/announcements', title: '公开招租' },
       { path: '/tenants', title: '客商/租户管理' },
+    ],
+  },
+  {
+    title: '资产运营',
+    items: [
+      { path: '/disposals', title: '资产处置' },
+      { path: '/occupations', title: '临时占用' },
+      { path: '/self-uses', title: '资产自用' },
+      { path: '/asset-audits', title: '经营性盘点' },
+    ],
+  },
+  {
+    title: '合同管理',
+    items: [
+      { path: '/contracts', title: '合同管理' },
+      { path: '/vacate-orders', title: '退租清场与保证金' },
       { path: '/lease-bundles', title: '组合/拆分租赁' },
       { path: '/contract-templates', title: '合同模板' },
     ],
   },
   {
-    title: '收费财务',
+    title: '定价与计费',
     items: [
       { path: '/billing/bills', title: '账单（收费大厅）' },
-      { path: '/payments/pending-confirm', title: '现场收款待确认' },
-      { path: '/dunning/auto', title: '自动化催缴' },
-      { path: '/dunning/records', title: '催缴记录' },
-      { path: '/payments', title: '收款记录' },
-      { path: '/invoices', title: '发票管理' },
-      { path: '/adjustments/fee-reliefs', title: '费用减免' },
-      { path: '/adjustments/rent-adjusts', title: '租金调价' },
-      { path: '/refunds', title: '退款冲正' },
       { path: '/meters', title: '表计档案与抄表' },
       { path: '/apportion-configs', title: '公摊配置' },
+      { path: '/adjustments/fee-reliefs', title: '费用减免' },
+      { path: '/adjustments/rent-adjusts', title: '租金调价' },
+    ],
+  },
+  {
+    title: '收费与发票',
+    items: [
+      { path: '/payments', title: '收款记录' },
+      { path: '/payments/pending-confirm', title: '现场收款待确认' },
+      { path: '/refunds', title: '退款冲正' },
+      { path: '/invoices', title: '发票管理' },
       { path: '/invoice-tax-rates', title: '发票税率' },
       { path: '/finance/bank-flows', title: '银行对账' },
       { path: '/finance/vouchers', title: '财务凭证' },
     ],
   },
   {
-    title: '资产档案',
+    title: '履约催缴',
     items: [
-      { path: '/assets', title: '资产台账' },
-      { path: '/projects', title: '项目管理' },
-      { path: '/certificates', title: '权证信息' },
-      { path: '/evaluations', title: '评估申请' },
-      { path: '/mortgages', title: '抵押列表' },
-      { path: '/asset-transfers', title: '资产调拨' },
-      { path: '/assets/structure-logs', title: '拆分合并日志' },
-      { path: '/fixed-assets', title: '固资清单' },
-      { path: '/fixed-assets/inventories', title: '固资盘点' },
-      { path: '/intangible-assets', title: '无形资产台账' },
+      { path: '/dunning/records', title: '催缴记录' },
+      { path: '/dunning/auto', title: '自动化催缴' },
     ],
   },
   {
-    title: '现场运维',
+    title: '巡检维修',
     items: [
       { path: '/repairs', title: '报修工单' },
-      { path: '/inspections', title: '巡查记录' },
-      { path: '/revitalization', title: '空置盘活' },
-      { path: '/asset-audits', title: '经营性盘点' },
-      { path: '/occupations', title: '临时占用' },
-      { path: '/self-uses', title: '资产自用' },
-      { path: '/disposals', title: '资产处置' },
       { path: '/vendors', title: '维修公司' },
+      { path: '/inspections', title: '巡查记录' },
+    ],
+  },
+  {
+    title: '任务中心',
+    items: [
+      { path: '/tasks', title: '任务管理' },
+      { path: '/approvals', title: '审批中心' },
+    ],
+  },
+  {
+    title: '空置盘活',
+    items: [{ path: '/revitalization', title: '盘活任务' }],
+  },
+  {
+    title: '合规监管',
+    items: [{ path: '/regulation/reports', title: '监管报送' }],
+  },
+  {
+    title: '消息待办',
+    items: [{ path: '/notifications', title: '消息通知' }],
+  },
+  {
+    title: '固定资产',
+    items: [
+      { path: '/fixed-assets', title: '固资清单' },
+      { path: '/fixed-assets/inventories', title: '固资盘点' },
+    ],
+  },
+  {
+    title: '无形资产',
+    items: [{ path: '/intangible-assets', title: '无形资产台账' }],
+  },
+  {
+    title: '组织架构',
+    items: [
+      { path: '/org/structure', title: '组织架构图谱' },
+      { path: '/org/companies', title: '公司管理' },
+      { path: '/org/departments', title: '部门管理' },
+      { path: '/system/users', title: '人员维护' },
+    ],
+  },
+  {
+    title: '运营管理',
+    items: [{ path: '/tenants', title: '租户管理' }],
+  },
+  {
+    title: '系统配置',
+    items: [{ path: '/config/versions', title: '参数版本留痕' }],
+  },
+  {
+    title: '系统管理',
+    items: [
+      { path: '/system/roles', title: '角色权限' },
+      { path: '/system/menus', title: '菜单管理' },
+      { path: '/system/dict', title: '系统字典' },
     ],
   },
   {
     title: '智能中心',
     items: [
+      { path: '/intelligence/templates', title: '报告模板' },
       { path: '/intelligence/reports', title: 'Agent 报告' },
       { path: '/intelligence/sessions', title: 'Agent 会话' },
-      { path: '/intelligence/templates', title: '报告模板' },
     ],
   },
   {
-    title: '系统设置',
-    items: [
-      { path: '/system/users', title: '人员维护' },
-      { path: '/system/roles', title: '角色权限' },
-      { path: '/org/companies', title: '公司管理' },
-      { path: '/org/departments', title: '部门管理' },
-      { path: '/system/menus', title: '菜单管理' },
-      { path: '/config/versions', title: '参数版本留痕' },
-      { path: '/migrations/batches', title: '期初迁移' },
-    ],
+    title: '期初迁移',
+    items: [{ path: '/migrations/batches', title: '迁移批次与试算平衡' }],
   },
 ];
 
@@ -980,34 +1049,122 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     title: '公司管理',
     listPath: '/org/companies',
     create: true,
+    update: true,
+    deletable: true,
     columns: [
       { key: 'id', label: 'ID' },
       { key: 'name', label: '公司名称' },
-      { key: 'companyType', label: '类型' },
-      { key: 'parentId', label: '上级ID' },
+      { key: 'shortName', label: '公司简称' },
+      { key: 'companyType', label: '类型', map: L.COMPANY_TYPE },
+      { key: 'phone', label: '联系电话' },
+      {
+        key: 'parentId',
+        label: '上级公司',
+        // 母公司（无上级）显式标注；否则展示上级公司名称
+        render: (r) => (r.parentId == null ? '母公司' : String(r.parentName ?? r.parentId)),
+      },
       { key: 'status', label: '状态', map: { '1': '启用', '0': '停用' } },
+      { key: 'createdAt', label: '创建时间' },
+      { key: 'updatedAt', label: '修改时间' },
     ],
     fields: [
       { name: 'name', label: '公司名称', required: true },
-      { name: 'companyType', label: '类型' },
-      { name: 'parentId', label: '上级ID', type: 'number' },
+      { name: 'shortName', label: '公司简称' },
+      {
+        name: 'companyType',
+        label: '公司类型',
+        type: 'select',
+        // 选项取自「公司管理字典 → 公司类型」，字典维护后表单自动同步
+        optionsPath: '/system/dict/items?code=company_type',
+        optionsValueKey: 'value',
+        optionsLabelKey: 'label',
+      },
+      { name: 'address', label: '公司地址', type: 'textarea' },
+      { name: 'phone', label: '联系电话' },
+      {
+        name: 'parentId',
+        label: '上级公司',
+        type: 'select',
+        // 留空即母公司（图谱根节点）；选项取自公司列表
+        optionsPath: '/org/companies',
+        optionsValueKey: 'id',
+        optionsLabelKey: 'name',
+      },
+      {
+        name: 'status',
+        label: '状态',
+        type: 'select',
+        options: [
+          { value: 1, label: '启用' },
+          { value: 0, label: '停用' },
+        ],
+      },
+      { name: 'sort', label: '排序', type: 'number' },
     ],
   },
   'org/departments': {
     title: '部门管理',
     listPath: '/org/departments',
     create: true,
+    update: true,
+    deletable: true,
     columns: [
       { key: 'id', label: 'ID' },
       { key: 'name', label: '部门名称' },
-      { key: 'companyId', label: '公司ID' },
-      { key: 'parentId', label: '上级ID' },
+      // 母公司同样可以直接挂部门，所属公司一律展示名称
+      {
+        key: 'companyId',
+        label: '所属公司',
+        render: (r) => String(r.companyName ?? r.companyId ?? '-'),
+      },
+      {
+        key: 'parentId',
+        label: '上级部门',
+        render: (r) => (r.parentId == null ? '-' : String(r.parentName ?? r.parentId)),
+      },
+      {
+        key: 'type',
+        label: '部门类型',
+        map: { asset_department: '资产部门' },
+      },
+      { key: 'leaderId', label: '负责人ID' },
+      { key: 'sort', label: '排序' },
       { key: 'status', label: '状态', map: { '1': '启用', '0': '停用' } },
+      { key: 'createdAt', label: '创建时间' },
+      { key: 'updatedAt', label: '修改时间' },
     ],
     fields: [
       { name: 'name', label: '部门名称', required: true },
-      { name: 'companyId', label: '公司ID', type: 'number' },
-      { name: 'parentId', label: '上级ID', type: 'number' },
+      {
+        name: 'companyId',
+        label: '所属公司',
+        type: 'select',
+        required: true,
+        optionsPath: '/org/companies',
+        optionsValueKey: 'id',
+        optionsLabelKey: 'name',
+      },
+      {
+        name: 'type',
+        label: '部门类型',
+        type: 'select',
+        // 选项取自「公司管理字典 → 部门类型」
+        optionsPath: '/system/dict/items?code=department_type',
+        optionsValueKey: 'value',
+        optionsLabelKey: 'label',
+      },
+      { name: 'leaderId', label: '负责人ID', type: 'number' },
+      { name: 'sort', label: '排序', type: 'number' },
+      {
+        name: 'status',
+        label: '状态',
+        type: 'select',
+        options: [
+          { value: 1, label: '启用' },
+          { value: 0, label: '停用' },
+        ],
+      },
+      { name: 'remark', label: '备注', type: 'textarea' },
     ],
   },
   'system/users': {
