@@ -13,19 +13,28 @@ import {
   Timeline,
   message,
 } from 'antd';
-import { ArrowLeftOutlined, ReloadOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { AssetQrLabel } from '@/components/AssetQrLabel';
 import { AssetQuickActions } from '@/components/AssetQuickActions';
+import { TableActions } from '@/components/TableActions';
 import { useBackNavigate } from '@/lib/navigation';
 import {
+  ASSET_NATURE,
+  ASSET_OWNERSHIP,
+  ASSET_SOURCE,
   ASSET_TYPE,
+  ASSET_USAGE,
+  ASSET_HOUSE_TYPE,
   BILL_STATUS,
+  BUILDING_PLAN,
+  BUILDING_STRUCTURE,
   CONTRACT_STATUS,
   DISPOSAL_STATUS,
   LEASE_CONTROL_STATUS,
   METER_TYPE,
   MORTGAGE_STATUS,
+  PARTIAL_LEASE_STATUS,
   PAYMENT_CYCLE,
   RENT_TYPE,
   REPAIR_STATUS,
@@ -65,14 +74,33 @@ interface AssetRow {
   name: string;
   assetType?: string;
   area?: number;
+  leaseArea?: number;
+  floorNo?: number;
+  assetCompanyId?: number;
+  assetCompanyName?: string;
+  propertyCompanyId?: number;
+  propertyCompanyName?: string;
+  zoneName?: string;
+  partialLeaseStatus?: string;
+  assetNature?: string;
+  buildingPlan?: string;
+  registeredAt?: string;
+  responsibleDepartmentId?: number;
+  responsibleDepartmentName?: string;
+  responsibleUserId?: number;
+  responsibleUserName?: string;
+  imageUrl?: string;
   leaseControlStatus?: string;
   structureStatus?: string;
   sourceType?: string;
   ownershipType?: string;
+  usageType?: string;
+  houseType?: string;
   province?: string;
   city?: string;
   district?: string;
   address?: string;
+  structureType?: string;
   originalValue?: number;
   baseRentAssessed?: number;
   baseRentFloor?: number;
@@ -83,7 +111,6 @@ interface AssetRow {
   vacantSince?: string;
   projectId?: number;
   operatingCompanyId?: number;
-  propertyCompanyId?: number;
   parentAssetId?: number;
   oldAssetNo?: string;
   qrCodeUrl?: string;
@@ -231,7 +258,9 @@ export function AssetDossierPage() {
         const preview = await api.get<{ previewHtml?: string; contentHtml?: string }>(
           `/contracts/${id}/document/preview`,
         );
-        setContractPreviewHtml(preview?.previewHtml ?? preview?.contentHtml ?? detail.docHtml ?? '');
+        setContractPreviewHtml(
+          preview?.previewHtml ?? preview?.contentHtml ?? detail.docHtml ?? '',
+        );
       } catch {
         setContractPreviewHtml(detail.docHtml ?? '');
       }
@@ -268,10 +297,77 @@ export function AssetDossierPage() {
   const basicItems = useMemo(() => {
     if (!asset) return [];
     return [
+      {
+        key: 'image',
+        label: '资产图片',
+        children: asset.imageUrl ? (
+          <img
+            src={asset.imageUrl}
+            alt="资产图片"
+            className="h-20 rounded-md border border-[var(--ams-border)] object-cover"
+          />
+        ) : (
+          '-'
+        ),
+      },
       { key: 'assetNo', label: '资产编号', children: asset.assetNo },
-      { key: 'name', label: '名称', children: asset.name },
-      { key: 'assetType', label: '类型', children: enumLabel(ASSET_TYPE, asset.assetType) },
-      { key: 'area', label: '面积(㎡)', children: asset.area ?? '-' },
+      { key: 'name', label: '资产名称', children: asset.name },
+      { key: 'assetType', label: '资产类型', children: enumLabel(ASSET_TYPE, asset.assetType) },
+      {
+        key: 'assetCompany',
+        label: '资产公司',
+        children: asset.assetCompanyName ?? asset.assetCompanyId ?? '-',
+      },
+      {
+        key: 'propertyCompany',
+        label: '产权公司',
+        children: asset.propertyCompanyName ?? asset.propertyCompanyId ?? '-',
+      },
+      { key: 'project', label: '项目ID', children: asset.projectId ?? '-' },
+      { key: 'zone', label: '分区', children: asset.zoneName ?? '-' },
+      { key: 'floor', label: '分区楼层', children: asset.floorNo ?? '-' },
+      { key: 'area', label: '资产面积(㎡)', children: asset.area ?? '-' },
+      { key: 'leaseArea', label: '租赁面积(㎡)', children: asset.leaseArea ?? '-' },
+      {
+        key: 'partialLease',
+        label: '部分租赁状态',
+        children: enumLabel(PARTIAL_LEASE_STATUS, asset.partialLeaseStatus),
+      },
+      { key: 'nature', label: '资产性质', children: enumLabel(ASSET_NATURE, asset.assetNature) },
+      { key: 'usage', label: '资产用途', children: enumLabel(ASSET_USAGE, asset.usageType) },
+      {
+        key: 'houseType',
+        label: '资产房型',
+        children: enumLabel(ASSET_HOUSE_TYPE, asset.houseType),
+      },
+      { key: 'source', label: '资产来源', children: enumLabel(ASSET_SOURCE, asset.sourceType) },
+      {
+        key: 'ownership',
+        label: '资产权属',
+        children: enumLabel(ASSET_OWNERSHIP, asset.ownershipType),
+      },
+      {
+        key: 'buildingPlan',
+        label: '建筑规划',
+        children: enumLabel(BUILDING_PLAN, asset.buildingPlan),
+      },
+      {
+        key: 'structureType',
+        label: '建筑结构',
+        children: enumLabel(BUILDING_STRUCTURE, asset.structureType),
+      },
+      { key: 'registeredAt', label: '登记入库时间', children: asset.registeredAt ?? '-' },
+      { key: 'orig', label: '原值(万元)', children: asset.originalValue ?? '-' },
+      {
+        key: 'respDept',
+        label: '责任部门',
+        children: asset.responsibleDepartmentName ?? asset.responsibleDepartmentId ?? '-',
+      },
+      {
+        key: 'respUser',
+        label: '责任人',
+        children: asset.responsibleUserName ?? asset.responsibleUserId ?? '-',
+      },
       {
         key: 'lease',
         label: '租控状态',
@@ -282,19 +378,14 @@ export function AssetDossierPage() {
         label: '结构状态',
         children: statusTag(asset.structureStatus, STRUCTURE_STATUS),
       },
-      { key: 'source', label: '来源', children: asset.sourceType ?? '-' },
-      { key: 'ownership', label: '权属', children: asset.ownershipType ?? '-' },
       {
         key: 'addr',
-        label: '坐落',
-        children: [asset.province, asset.city, asset.district, asset.address]
-          .filter(Boolean)
-          .join(' ') || '-',
+        label: '资产坐落',
+        children:
+          [asset.province, asset.city, asset.district, asset.address].filter(Boolean).join(' ') ||
+          '-',
       },
-      { key: 'project', label: '项目ID', children: asset.projectId ?? '-' },
       { key: 'opCo', label: '经营公司', children: asset.operatingCompanyId ?? '-' },
-      { key: 'propCo', label: '产权公司', children: asset.propertyCompanyId ?? '-' },
-      { key: 'orig', label: '原值', children: asset.originalValue ?? '-' },
       { key: 'rentA', label: '评估租金', children: asset.baseRentAssessed ?? '-' },
       { key: 'rentF', label: '备案底价', children: asset.baseRentFloor ?? '-' },
       { key: 'rentM', label: '市场参考价', children: asset.marketRefRent ?? '-' },
@@ -343,9 +434,7 @@ export function AssetDossierPage() {
             area: asset?.area,
             leaseControlStatus: asset?.leaseControlStatus ?? summary?.leaseControlStatus,
             address: asset
-              ? [asset.province, asset.city, asset.district, asset.address]
-                  .filter(Boolean)
-                  .join('')
+              ? [asset.province, asset.city, asset.district, asset.address].filter(Boolean).join('')
               : undefined,
             qrUrl,
           }}
@@ -422,9 +511,7 @@ export function AssetDossierPage() {
                             <div className="flex flex-wrap items-center gap-2">
                               <Tag>{CATEGORY_LABEL[t.category] ?? t.category}</Tag>
                               <span className="font-medium">{t.title}</span>
-                              {t.status && (
-                                <Tag color="processing">{t.status}</Tag>
-                              )}
+                              {t.status && <Tag color="processing">{t.status}</Tag>}
                               {t.category === 'contract' && t.bizId != null && (
                                 <a
                                   className="text-xs"
@@ -512,16 +599,18 @@ export function AssetDossierPage() {
                         title: '操作',
                         key: 'actions',
                         fixed: 'right',
-                        width: 80,
+                        width: 100,
                         render: (_: unknown, row: Row) => (
-                          <a
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleOpenContract(row);
-                            }}
-                          >
-                            查看
-                          </a>
+                          <TableActions
+                            actions={[
+                              {
+                                key: 'view',
+                                label: '查看',
+                                icon: <EyeOutlined />,
+                                onClick: () => void handleOpenContract(row),
+                              },
+                            ]}
+                          />
                         ),
                       },
                     ]}
@@ -655,7 +744,10 @@ export function AssetDossierPage() {
                           dataIndex: 'status',
                           render: (v) => statusTag(String(v ?? ''), MORTGAGE_STATUS),
                         },
-                        { title: '起止', render: (_, r) => `${r.startDate ?? '-'} ~ ${r.endDate ?? '-'}` },
+                        {
+                          title: '起止',
+                          render: (_, r) => `${r.startDate ?? '-'} ~ ${r.endDate ?? '-'}`,
+                        },
                       ]}
                       locale={{ emptyText: '暂无抵押' }}
                     />
@@ -718,7 +810,10 @@ export function AssetDossierPage() {
                         { title: 'ID', dataIndex: 'id', width: 70 },
                         { title: '状态', dataIndex: 'status', width: 100 },
                         { title: '部门', dataIndex: 'department', width: 120 },
-                        { title: '起止', render: (_, r) => `${r.startDate ?? '-'} ~ ${r.endDate ?? '-'}` },
+                        {
+                          title: '起止',
+                          render: (_, r) => `${r.startDate ?? '-'} ~ ${r.endDate ?? '-'}`,
+                        },
                         { title: '原因', dataIndex: 'reason', ellipsis: true },
                       ]}
                       locale={{ emptyText: '暂无占用' }}
@@ -881,13 +976,17 @@ export function AssetDossierPage() {
         ) : contractDetail ? (
           <div className="space-y-4">
             <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered>
-              <Descriptions.Item label="合同编号">{contractDetail.contractNo ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="合同编号">
+                {contractDetail.contractNo ?? '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="状态">
                 {statusTag(String(contractDetail.status ?? ''), CONTRACT_STATUS)}
               </Descriptions.Item>
               <Descriptions.Item label="租户ID">{contractDetail.tenantId ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="版本">{contractDetail.version ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="起租日">{contractDetail.startDate ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="起租日">
+                {contractDetail.startDate ?? '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="到期日">{contractDetail.endDate ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="租赁面积">
                 {contractDetail.leaseArea ?? '-'}

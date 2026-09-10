@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Empty, Select, Space, Tag, message } from 'antd';
 import { api } from '@/lib/api';
+import { loadAmap, type AMapMap, type MapConfig } from '@/lib/amap';
 import { LEASE_CONTROL_STATUS, enumLabel } from '@/lib/labels';
 import { currentPath } from '@/lib/navigation';
 
@@ -17,12 +18,6 @@ interface MapPoint {
   vacantDays?: number;
   city?: string;
   province?: string;
-}
-
-interface MapConfig {
-  provider: 'amap' | 'canvas';
-  amapKey?: string;
-  amapSecurityCode?: string;
 }
 
 /** Ant Design Tag 色名（详情区） */
@@ -62,30 +57,6 @@ const STATUS_LEGEND = Object.keys(LEASE_CONTROL_STATUS).map((key) => ({
   color: markerColor(key),
 }));
 
-declare global {
-  interface Window {
-    AMap?: any;
-    _AMapSecurityConfig?: { securityJsCode?: string };
-  }
-}
-
-const loadAmap = (key: string, securityCode?: string) =>
-  new Promise<void>((resolve, reject) => {
-    if (window.AMap) {
-      resolve();
-      return;
-    }
-    if (securityCode) {
-      window._AMapSecurityConfig = { securityJsCode: securityCode };
-    }
-    const script = document.createElement('script');
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}`;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('高德地图脚本加载失败'));
-    document.head.appendChild(script);
-  });
-
 const buildMarkerContent = (p: MapPoint, active: boolean) => {
   const color = markerColor(p.leaseControlStatus);
   const size = active ? 18 : 14;
@@ -108,7 +79,7 @@ export function AssetMapPage() {
   const [city, setCity] = useState<string>();
   const [statusFilter, setStatusFilter] = useState<string>();
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const amapRef = useRef<any>(null);
+  const amapRef = useRef<AMapMap | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -143,21 +114,22 @@ export function AssetMapPage() {
     let cancelled = false;
     loadAmap(config.amapKey, config.amapSecurityCode)
       .then(() => {
-        if (cancelled || !mapRef.current || !window.AMap) return;
+        const AMap = window.AMap;
+        if (cancelled || !mapRef.current || !AMap) return;
         if (amapRef.current) {
           amapRef.current.destroy();
           amapRef.current = null;
         }
-        const map = new window.AMap.Map(mapRef.current, {
+        const map = new AMap.Map(mapRef.current, {
           zoom: 12,
           viewMode: '2D',
         });
         const markers = filtered.map((p) => {
-          const marker = new window.AMap.Marker({
+          const marker = new AMap.Marker({
             position: [Number(p.longitude), Number(p.latitude)],
             title: `${p.name}（${enumLabel(LEASE_CONTROL_STATUS, p.leaseControlStatus)}）`,
             content: buildMarkerContent(p, false),
-            offset: new window.AMap.Pixel(0, 0),
+            offset: new AMap.Pixel(0, 0),
           });
           marker.on('click', () => setSelectedId(p.assetId));
           return marker;
@@ -166,7 +138,9 @@ export function AssetMapPage() {
         map.setFitView(markers);
         amapRef.current = map;
       })
-      .catch((e) => message.warning(e instanceof Error ? e.message : '高德地图不可用，已回退平面图'));
+      .catch((e) =>
+        message.warning(e instanceof Error ? e.message : '高德地图不可用，已回退平面图'),
+      );
     return () => {
       cancelled = true;
       if (amapRef.current) {
@@ -256,7 +230,12 @@ export function AssetMapPage() {
           <Card className="lg:col-span-2 !overflow-hidden" styles={{ body: { padding: 0 } }}>
             {useAmap ? (
               <div className="relative">
-                <div ref={mapRef} className="h-[520px] w-full" role="img" aria-label="高德资产地图" />
+                <div
+                  ref={mapRef}
+                  className="h-[520px] w-full"
+                  role="img"
+                  aria-label="高德资产地图"
+                />
                 <MapLegend items={legendItems} />
               </div>
             ) : (

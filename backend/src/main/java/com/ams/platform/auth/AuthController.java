@@ -2,6 +2,7 @@ package com.ams.platform.auth;
 
 import com.ams.common.web.ApiResponse;
 import com.ams.common.web.TraceIdUtil;
+import com.ams.platform.auth.dto.CompanyScopeOptions;
 import com.ams.platform.auth.dto.LoginRequest;
 import com.ams.platform.auth.dto.LoginResponse;
 import com.ams.platform.auth.dto.WechatBindRequest;
@@ -31,6 +32,17 @@ public class AuthController {
     @GetMapping("/captcha")
     public ApiResponse<Map<String, String>> captcha() {
         return ApiResponse.ok(authService.captcha(), TraceIdUtil.get());
+    }
+
+    /**
+     * 顶栏「全局公司切换」可选项。
+     *
+     * <p>切换本身不换 token：前端把选中的公司 ID 放入 {@code X-Company-Id} 请求头，
+     * 由 JWT 过滤器校验后写入当前生效公司（见 JwtAuthenticationFilter#COMPANY_HEADER）。
+     */
+    @GetMapping("/companies")
+    public ApiResponse<CompanyScopeOptions> companies() {
+        return ApiResponse.ok(authService.switchableCompanies(), TraceIdUtil.get());
     }
 
     @PostMapping("/login")

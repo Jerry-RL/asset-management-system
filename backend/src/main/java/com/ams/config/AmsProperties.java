@@ -49,6 +49,8 @@ public class AmsProperties {
         /** 高德 Web JS Key，为空则前端走平面点位图 */
         private String amapKey = "";
         private String amapSecurityCode = "";
+        /** 高德 Web 服务 Key（地址解析用）；为空时回退 amapKey */
+        private String amapWebServiceKey = "";
 
         public String getAmapKey() {
             return amapKey;
@@ -64,6 +66,21 @@ public class AmsProperties {
 
         public void setAmapSecurityCode(String amapSecurityCode) {
             this.amapSecurityCode = amapSecurityCode;
+        }
+
+        public String getAmapWebServiceKey() {
+            return amapWebServiceKey;
+        }
+
+        public void setAmapWebServiceKey(String amapWebServiceKey) {
+            this.amapWebServiceKey = amapWebServiceKey;
+        }
+
+        /** 地址解析实际使用的 Key：优先 Web 服务 Key，缺省回退 JS Key */
+        public String resolveWebServiceKey() {
+            return amapWebServiceKey == null || amapWebServiceKey.isBlank()
+                    ? amapKey
+                    : amapWebServiceKey;
         }
 
         public boolean isEnabled() {

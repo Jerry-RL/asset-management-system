@@ -8,6 +8,8 @@ import com.ams.modules.plan.entity.BusinessPlan;
 import com.ams.modules.plan.mapper.BusinessPlanMapper;
 import com.ams.modules.task.entity.Task;
 import com.ams.modules.task.service.TaskService;
+import com.ams.platform.security.RbacService;
+import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -27,23 +29,28 @@ public class BusinessPlanService {
     private final BusinessPlanMapper planMapper;
     private final DashboardService dashboardService;
     private final TaskService taskService;
+    private final RbacService rbacService;
 
     public BusinessPlanService(
             BusinessPlanMapper planMapper,
             DashboardService dashboardService,
-            TaskService taskService) {
+            TaskService taskService,
+            RbacService rbacService) {
         this.planMapper = planMapper;
         this.dashboardService = dashboardService;
         this.taskService = taskService;
+        this.rbacService = rbacService;
     }
 
     public List<BusinessPlan> list(Long companyId, Integer year) {
-        return planMapper.selectList(
-                new LambdaQueryWrapper<BusinessPlan>()
-                        .eq(companyId != null, BusinessPlan::getCompanyId, companyId)
-                        .eq(year != null, BusinessPlan::getPlanYear, year)
-                        .orderByDesc(BusinessPlan::getPlanYear)
-                        .orderByDesc(BusinessPlan::getPlanMonth));
+        LambdaQueryWrapper<BusinessPlan> wrapper = new LambdaQueryWrapper<BusinessPlan>()
+                .eq(companyId != null, BusinessPlan::getCompanyId, companyId)
+                .eq(year != null, BusinessPlan::getPlanYear, year)
+                .orderByDesc(BusinessPlan::getPlanYear)
+                .orderByDesc(BusinessPlan::getPlanMonth);
+        // 全局公司切换：业务计划按所属公司收敛
+        rbacService.applyCompanyScope(wrapper, SecurityUtils.current(), BusinessPlan::getCompanyId);
+        return planMapper.selectList(wrapper);
     }
 
     public BusinessPlan create(BusinessPlan plan) {

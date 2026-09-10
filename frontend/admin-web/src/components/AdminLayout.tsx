@@ -13,10 +13,12 @@ import {
   QuestionCircleOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '@/lib/auth';
+import { useCompany } from '@/lib/company';
 import { cn } from '@/lib/utils';
 import { getGroupIcon, getPathIcon } from '@/lib/menuIcons';
 import { MENU } from '@/pages/modules';
 import { PageTabs } from './PageTabs';
+import { CompanySwitcher } from './CompanySwitcher';
 
 /** 默认展开：全部分组（对齐旧版菜单行为）；当前路由所在分组也会自动展开 */
 const DEFAULT_OPEN = new Set(MENU.map((group) => group.title));
@@ -46,6 +48,7 @@ const findBestMenuMatch = (pathname: string): { group: string; path: string } | 
 
 export function AdminLayout() {
   const { user, logout } = useAuth();
+  const { scopeVersion } = useCompany();
   const navigate = useNavigate();
   const location = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
@@ -169,6 +172,8 @@ export function AdminLayout() {
             <span className="text-sm text-gray-500 truncate hidden sm:inline">
               资管云平台 · 管理后台
             </span>
+            <span className="hidden sm:block h-4 w-px bg-[var(--ams-border)] shrink-0" />
+            <CompanySwitcher />
           </div>
           <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             <button
@@ -215,8 +220,9 @@ export function AdminLayout() {
 
         <PageTabs />
 
+        {/* 公司切换后重挂载当前路由（key 变化），使各页面按新数据范围重新拉取 */}
         <main className="flex-1 min-h-0 overflow-auto ams-scroll p-3 sm:p-4">
-          <div className="min-w-0 max-w-full">
+          <div className="min-w-0 max-w-full" key={scopeVersion}>
             <Outlet />
           </div>
         </main>

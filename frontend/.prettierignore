@@ -5,3 +5,5 @@ coverage/
 .git/
 pnpm-lock.yaml
 miniprogram-*/
+# 生成文件：中国省市区行政区划数据（按数据集原始排版，避免被格式化撑爆）
+admin-web/src/data/chinaRegions.ts

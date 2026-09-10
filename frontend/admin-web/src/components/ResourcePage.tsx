@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
-  Dropdown,
   Drawer,
   Form,
   Input,
   InputNumber,
   Modal,
   Pagination,
+  Segmented,
   Select,
   Space,
   Switch,
@@ -21,14 +21,22 @@ import {
   SearchOutlined,
   DownloadOutlined,
   UploadOutlined,
-  MoreOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  FileTextOutlined,
+  QrcodeOutlined,
+  AppstoreOutlined,
+  BarsOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import type { MenuProps } from 'antd';
+import type { FormInstance } from 'antd/es/form';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, type PageResult } from '@/lib/api';
 import { confirmDelete } from '@/lib/confirm';
+import { useDictLabelMaps, useDictOptions } from '@/lib/dict';
 import { AssetQrLabel } from '@/components/AssetQrLabel';
+import { CoverImage } from '@/components/CoverImage';
+import { TableActions, type TableActionItem } from '@/components/TableActions';
 import {
   BILL_STATUS,
   BILL_TYPE,
@@ -65,6 +73,17 @@ export interface FieldConfig {
   optionsValueKey?: string;
   optionsLabelKey?: string;
   optionsLabelExtraKey?: string;
+  /**
+   * 依赖字段名：该字段值变化时重新拉取 optionsPath。
+   * optionsPath 内可用 `{字段名}` 占位，如 `/projects/{projectId}/zones`（项目 → 分区联动）。
+   */
+  optionsDependsOn?: string;
+  /** 下拉多选（值以数组提交），如角色分配 */
+  multiple?: boolean;
+  /** 仅新增时展示（编辑时隐藏），如初始密码 */
+  createOnly?: boolean;
+  /** 详情抽屉中隐藏（列表已用名称列展示时避免重复露出原始 ID） */
+  hideInDetail?: boolean;
   required?: boolean;
 }
 
@@ -72,6 +91,11 @@ export interface ColumnConfig {
   key: string;
   label: string;
   map?: Record<string, string>;
+  /**
+   * 系统字典编码：列值按「系统字典 → 资产管理字典」的字典项 value → label 动态映射，
+   * 字典维护后列表/详情自动同步。优先级高于静态 map（静态 map 仅作加载中兜底）。
+   */
+  dictCode?: string;
   render?: (row: Record<string, unknown>) => React.ReactNode;
 }
 
@@ -86,10 +110,67 @@ export interface StatConfig {
   value: string | number;
 }
 
+/**
+ * 顶部统计条数据源。
+ *
+ * <p>配置 {@code statsPath} 后统计条改为实时拉取（与列表共用同一套筛选条件），
+ * 由 {@code statsFormat} 把响应映射为展示项 —— 避免把聚合数字硬编码在配置里。
+ * 未配置时沿用静态 {@link ResourceConfig.stats}。
+ */
+export interface StatSourceConfig {
+  path: string;
+  format: (data: Record<string, unknown>) => StatConfig[];
+}
+
+/** 卡片视图的单个指标 */
+export interface CardMetricConfig {
+  /** 取数字段 */
+  key: string;
+  label: string;
+  /** 单位后缀，如 ㎡ */
+  suffix?: string;
+  /** 小数位（默认按整数展示） */
+  fractionDigits?: number;
+}
+
+/**
+ * 卡片视图配置。
+ *
+ * <p>仅在列表页配置了本项时才出现「列表 / 卡片」切换；卡片字段全部由行数据派生，
+ * 不引入额外的请求。图片为空时回落为占位块，避免出现破图。
+ */
+export interface CardViewConfig {
+  /** 主图字段，默认 imageUrl */
+  imageKey?: string;
+  /** 标题字段，默认 name */
+  titleKey?: string;
+  /** 角标字段（如状态），需同时给出 badgeMap */
+  badgeKey?: string;
+  /** 角标取值 → 文案 */
+  badgeMap?: Record<string, string>;
+  /** 地址拼接字段，默认 ['province','city','district','address'] */
+  addressKeys?: string[];
+  /** 指标区：资产数 / 面积 / 盘活宗数 / 闲置总数 等 */
+  metrics: CardMetricConfig[];
+}
+
 export interface TagFilterConfig {
   key: string;
   label: string;
-  options: { value: string; label: string }[];
+  /** 静态选项；配置 dictCode 时忽略 */
+  options?: { value: string; label: string }[];
+  /**
+   * 选项取自「系统管理 → 系统字典 → 资产管理字典」的字典项（value / label），
+   * 字典维护后筛选项自动同步，无需改代码。
+   */
+  dictCode?: string;
+  /**
+   * 级联父级筛选键：本项的字典选项按「同级筛选 filters[父级键] 的取值」联动过滤，
+   * 父级未选时展示该字典全量项（后端白名单语义，不限制）。
+   */
+  cascadeParentKey?: string;
+  /** 级联引用的父字典编码，默认「项目属性」 */
+  cascadeParentCode?: string;
 }
 
 /** 行内快捷操作：弹窗填表后提交 */
@@ -123,6 +204,10 @@ export interface ResourceConfig {
   listPath: string;
   /** 新增提交路径；缺省与 listPath 相同（少数资源新增走独立端点） */
   createPath?: string;
+  /** 新增跳转到独立页面（优先于弹窗表单，如项目两步走） */
+  createLink?: string;
+  /** 编辑跳转到独立页面（优先于弹窗表单，如项目两步走） */
+  editLink?: (id: number) => string;
   detailPath?: (id: number) => string;
   /** 跳转到独立详情页（优先于抽屉详情） */
   detailLink?: (id: number) => string;
@@ -139,8 +224,12 @@ export interface ResourceConfig {
   filters?: FilterConfig[];
   /** 额外固定查询参数 */
   extraParams?: Record<string, string>;
-  /** 顶部统计条 */
+  /** 顶部统计条（静态文案；需要实时聚合时改用 statsSource） */
   stats?: StatConfig[];
+  /** 顶部统计条（实时拉取，与列表同筛选条件；配置后覆盖 stats） */
+  statsSource?: StatSourceConfig;
+  /** 卡片视图配置（配置后出现「列表 / 卡片」切换） */
+  card?: CardViewConfig;
   /** 标签式筛选（含「不限」） */
   tagFilters?: TagFilterConfig[];
   /** CSV 导入导出 */
@@ -152,44 +241,109 @@ export interface ResourceConfig {
 
 type Row = Record<string, unknown>;
 
-const renderFormFields = (
-  fields: FieldConfig[],
-  dynamicOptions?: Record<string, { value: string | number; label: string }[]>,
-) =>
-  fields.map((f) => {
-    const options = dynamicOptions?.[f.name] ?? f.options ?? [];
-    return (
-      <Form.Item
-        key={f.name}
-        name={f.name}
-        label={f.label}
-        rules={f.required ? [{ required: true, message: `请填写${f.label}` }] : undefined}
-        valuePropName={f.type === 'boolean' ? 'checked' : 'value'}
-      >
-        {f.type === 'select' || f.optionsPath ? (
-          <Select
-            allowClear
-            options={options.map((o) => ({ value: o.value, label: o.label }))}
-            placeholder="请选择"
-            showSearch
-            optionFilterProp="label"
-          />
-        ) : f.type === 'textarea' ? (
-          <Input.TextArea rows={3} />
-        ) : f.type === 'boolean' ? (
-          <Switch />
-        ) : f.type === 'number' ? (
-          <InputNumber className="w-full" />
-        ) : (
-          <Input type={f.type === 'date' ? 'date' : 'text'} />
-        )}
-      </Form.Item>
-    );
-  });
+type FieldOption = { value: string | number; label: string };
 
-const loadFieldOptions = async (field: FieldConfig) => {
-  if (!field.optionsPath) return field.options ?? [];
-  const raw = await api.get<unknown>(field.optionsPath);
+type FieldMode = 'create' | 'edit' | 'action';
+
+/**
+ * 标签式筛选项。
+ *
+ * <p>选项来源：
+ * <ul>
+ *   <li>配置 {@code dictCode}：取自系统字典，字典维护后自动同步；
+ *   <li>配置 {@code cascadeParentKey}：进一步按同级父筛选项的取值联动过滤
+ *       （如「项目属性 → 资产来源」）。
+ * </ul>
+ * 抽成独立组件是为了让字典 Hook 的调用次数不随配置变化（Hooks 规则）。
+ */
+function TagFilterRow({
+  config,
+  filters,
+  onSelect,
+}: {
+  config: TagFilterConfig;
+  filters: Record<string, string>;
+  onSelect: (key: string, value: string) => void;
+}) {
+  const cascadeParentValue = config.cascadeParentKey
+    ? filters[config.cascadeParentKey]
+    : undefined;
+  const dict = useDictOptions(
+    config.dictCode,
+    config.cascadeParentKey
+      ? {
+          parentCode: config.cascadeParentCode ?? 'project_property',
+          parentValue: cascadeParentValue,
+        }
+      : undefined,
+  );
+  // 字典未加载完成时先用静态 options 兜底，避免筛选项「闪空」
+  const options = config.dictCode
+    ? dict.options.length > 0
+      ? dict.options
+      : (config.options ?? [])
+    : (config.options ?? []);
+  const selected = filters[config.key];
+
+  return (
+    <div className="flex items-start gap-2 sm:gap-3 mb-3 text-sm min-w-0">
+      <span className="text-gray-500 shrink-0 pt-0.5 w-16 sm:w-20 truncate" title={config.label}>
+        {config.label}
+      </span>
+      <div className="flex flex-wrap gap-2 min-w-0 flex-1">
+        <Tag
+          color={!selected ? 'blue' : undefined}
+          className="cursor-pointer m-0"
+          onClick={() => onSelect(config.key, '')}
+        >
+          不限
+        </Tag>
+        {options.map((o) => (
+          <Tag
+            key={o.value}
+            color={selected === o.value ? 'blue' : undefined}
+            className="cursor-pointer m-0 max-w-[140px] truncate"
+            title={o.label}
+            onClick={() => onSelect(config.key, String(o.value))}
+          >
+            {o.label}
+          </Tag>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 下拉控件（含远程 optionsPath 字段，加载中显示 loading） */
+const renderFieldControl = (
+  field: FieldConfig,
+  options: FieldOption[] = [],
+  optionsLoading = false,
+) => {
+  if (field.type === 'select' || field.optionsPath) {
+    return (
+      <Select
+        allowClear
+        loading={optionsLoading}
+        mode={field.multiple ? 'multiple' : undefined}
+        options={options}
+        placeholder="请选择"
+        showSearch
+        optionFilterProp="label"
+      />
+    );
+  }
+  if (field.type === 'textarea') return <Input.TextArea rows={3} />;
+  if (field.type === 'boolean') return <Switch />;
+  if (field.type === 'number') return <InputNumber className="w-full" />;
+  return <Input type={field.type === 'date' ? 'date' : 'text'} />;
+};
+
+const fieldRules = (field: FieldConfig) =>
+  field.required ? [{ required: true, message: `请填写${field.label}` }] : undefined;
+
+/** 把远程返回体（数组 / PageResult）按字段配置映射为下拉选项 */
+const toFieldOptions = (raw: unknown, field: FieldConfig): FieldOption[] => {
   let list: Row[] = [];
   if (Array.isArray(raw)) list = raw as Row[];
   else if (raw && typeof raw === 'object') {
@@ -205,6 +359,117 @@ const loadFieldOptions = async (field: FieldConfig) => {
     const extra = ek && item[ek] != null ? `（${String(item[ek])}）` : '';
     return { value, label: `${base}${extra}` };
   });
+};
+
+/**
+ * optionsPath 支持 `{字段名}` 占位。
+ * 占位字段未填时返回 null，表示「暂不拉取」，避免拼出 /projects//zones 这类无效路径。
+ */
+const resolveOptionsPath = (template: string, values: Record<string, unknown>): string | null => {
+  let missing = false;
+  const path = template.replace(/\{(\w+)\}/g, (_match, key: string) => {
+    const value = values[key];
+    if (value === undefined || value === null || value === '') {
+      missing = true;
+      return '';
+    }
+    return encodeURIComponent(String(value));
+  });
+  return missing ? null : path;
+};
+
+/**
+ * 表单字段：远程下拉由字段自身按需拉取（挂载时 + 依赖字段变化时），
+ * 免去打开表单前的统一预取。
+ */
+function ResourceFormField({ field, form }: { field: FieldConfig; form: FormInstance }) {
+  // 无依赖字段时挂一个不存在的名字，保证 useWatch 调用顺序稳定
+  const dependentValue = Form.useWatch(field.optionsDependsOn ?? '__ams_none__', form);
+  const [options, setOptions] = useState<FieldOption[]>(field.options ?? []);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const previousDependentRef = useRef<unknown>(undefined);
+
+  useEffect(() => {
+    if (!field.optionsPath) {
+      setOptions(field.options ?? []);
+      return;
+    }
+    const path = resolveOptionsPath(field.optionsPath, form.getFieldsValue());
+    if (!path) {
+      setOptions([]);
+      return;
+    }
+    let cancelled = false;
+    setOptionsLoading(true);
+    api
+      .get<unknown>(path)
+      .then((raw) => {
+        if (!cancelled) setOptions(toFieldOptions(raw, field));
+      })
+      .catch(() => {
+        if (!cancelled) setOptions(field.options ?? []);
+      })
+      .finally(() => {
+        if (!cancelled) setOptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [field, form, dependentValue]);
+
+  useEffect(() => {
+    if (!field.optionsDependsOn) return;
+    const previous = previousDependentRef.current;
+    previousDependentRef.current = dependentValue;
+    // 首次（含编辑回填）不清空；仅依赖字段真的换值后清掉已选项，避免残留上一项目的分区
+    if (previous !== undefined && previous !== dependentValue) {
+      form.setFieldValue(field.name, undefined);
+    }
+  }, [field, form, dependentValue]);
+
+  return (
+    <Form.Item
+      name={field.name}
+      label={field.label}
+      rules={fieldRules(field)}
+      valuePropName={field.type === 'boolean' ? 'checked' : 'value'}
+    >
+      {renderFieldControl(field, options, optionsLoading)}
+    </Form.Item>
+  );
+}
+
+const renderFormFields = (
+  fields: FieldConfig[],
+  dynamicOptions?: Record<string, FieldOption[]>,
+  mode: FieldMode = 'create',
+  form?: FormInstance,
+) =>
+  fields
+    // 仅在编辑时隐藏「仅新增」字段（如初始密码）
+    .filter((f) => !(mode === 'edit' && f.createOnly))
+    .map((f) => {
+      // 新增/编辑表单：字段自行拉取远程选项（支持依赖联动）
+      if (form) {
+        return <ResourceFormField key={f.name} field={f} form={form} />;
+      }
+      const options = dynamicOptions?.[f.name] ?? f.options ?? [];
+      return (
+        <Form.Item
+          key={f.name}
+          name={f.name}
+          label={f.label}
+          rules={fieldRules(f)}
+          valuePropName={f.type === 'boolean' ? 'checked' : 'value'}
+        >
+          {renderFieldControl(f, options)}
+        </Form.Item>
+      );
+    });
+
+const loadFieldOptions = async (field: FieldConfig) => {
+  if (!field.optionsPath) return field.options ?? [];
+  return toFieldOptions(await api.get<unknown>(field.optionsPath), field);
 };
 
 /** 兼容后端 PageResult 与直接返回 List 两种形态，避免 list 为 undefined 导致白屏。 */
@@ -227,6 +492,132 @@ const normalizePage = (raw: unknown, page = 1, pageSize = 10): PageResult<Row> =
   }
   return { list: [], total: 0, page, pageSize };
 };
+
+/**
+ * 卡片视图：图片 + 名称 + 指标组 + 地址。
+ *
+ * <p>字段全部取自列表行数据（后端已在项目列表里聚合好资产统计），因此切换视图不产生额外请求；
+ * 图片缺失时回落为占位块，避免破图影响观感。
+ */
+function ResourceCardGrid({
+  rows,
+  config,
+  idField,
+  onOpen,
+  onEdit,
+}: {
+  rows: Row[];
+  config: CardViewConfig;
+  idField: string;
+  onOpen: (row: Row) => void;
+  onEdit?: (row: Row) => void;
+}) {
+  const imageKey = config.imageKey ?? 'imageUrl';
+  const titleKey = config.titleKey ?? 'name';
+  const addressKeys = config.addressKeys ?? ['province', 'city', 'district', 'address'];
+
+  return (
+    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {rows.map((row) => {
+        const imageUrl = row[imageKey];
+        const title = String(row[titleKey] ?? '-');
+        const address = addressKeys
+          .map((k) => row[k])
+          .filter((v) => v != null && v !== '')
+          .map(String)
+          .join('');
+        const badge = config.badgeKey ? config.badgeMap?.[String(row[config.badgeKey])] : undefined;
+        return (
+          <div
+            key={String(row[idField] ?? Math.random())}
+            role="button"
+            tabIndex={0}
+            aria-label={title}
+            onClick={() => onOpen(row)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpen(row);
+              }
+            }}
+            className="group border border-[var(--ams-border)] rounded-lg overflow-hidden bg-white hover:shadow-md hover:border-[var(--ams-primary)]/40 transition-all cursor-pointer flex flex-col min-w-0"
+          >
+            <div className="relative aspect-[16/10] bg-gray-50 overflow-hidden shrink-0">
+              {/* 统一封面组件：无图或图片加载失败都回落到占位图，不会出现破图 */}
+              <CoverImage
+                src={typeof imageUrl === 'string' ? imageUrl : undefined}
+                alt={title}
+                className="w-full h-full"
+                imgClassName="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+              />
+              {badge && (
+                <span className="absolute top-2 left-2 px-2 py-0.5 rounded text-xs bg-white/90 text-[var(--ams-primary)] font-medium shadow-sm">
+                  {badge}
+                </span>
+              )}
+            </div>
+
+            <div className="p-3 flex flex-col gap-2 min-w-0 flex-1">
+              <div className="font-medium text-gray-900 truncate" title={title}>
+                {title}
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                {config.metrics.map((m) => {
+                  const raw = row[m.key];
+                  const num = raw == null || raw === '' ? null : Number(raw);
+                  const display =
+                    num != null && Number.isFinite(num)
+                      ? num.toFixed(m.fractionDigits ?? 0)
+                      : '0';
+                  return (
+                    <div key={m.key} className="flex flex-col min-w-0">
+                      <span className="text-[11px] text-gray-500 truncate" title={m.label}>
+                        {m.label}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900 tabular-nums truncate">
+                        {display}
+                        {m.suffix && (
+                          <span className="text-[11px] font-normal text-gray-400 ml-0.5">
+                            {m.suffix}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div
+                className="text-xs text-gray-500 flex items-start gap-1 min-w-0 mt-auto pt-1 border-t border-[var(--ams-border)]"
+                title={address || '-'}
+              >
+                <span className="shrink-0 text-gray-400">地址</span>
+                <span className="truncate">{address || '-'}</span>
+              </div>
+            </div>
+
+            {onEdit && (
+              <div className="px-3 pb-3 flex justify-end">
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<EditOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(row);
+                  }}
+                >
+                  编辑
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function ResourcePage({ config }: { config: ResourceConfig }) {
   const location = useLocation();
@@ -254,14 +645,40 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   const [actionFieldOptions, setActionFieldOptions] = useState<
     Record<string, { value: string | number; label: string }[]>
   >({});
-  /** 主表单（新增/编辑）的远程下拉选项，按字段名索引 */
-  const [formFieldOptions, setFormFieldOptions] = useState<
-    Record<string, { value: string | number; label: string }[]>
-  >({});
+  /** 列表 / 卡片视图；仅在配置了 config.card 时可用 */
+  const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
+  /** 实时统计条（config.statsSource 时生效） */
+  const [dynamicStats, setDynamicStats] = useState<StatConfig[]>([]);
 
   const idField = config.idField ?? 'id';
   const rows = data.list ?? [];
   const pageIcon = getPathIcon(location.pathname);
+
+  // 列上声明的字典编码去重后统一拉取，返回 { 字典编码: { value: label } }
+  const columnDictMaps = useDictLabelMaps(
+    useMemo(
+      () => [...new Set(config.columns.map((c) => c.dictCode).filter(Boolean) as string[])],
+      [config.columns],
+    ),
+  );
+
+  /**
+   * 列值回显优先级：字典映射 > 静态 map > 全局枚举兜底。
+   * 返回 null 表示无可映射文案，由调用方按原始值处理（布尔/数组/空值）。
+   */
+  const resolveColumnLabel = useCallback(
+    (column: ColumnConfig, value: unknown): string | null => {
+      const key = value == null || value === '' ? '' : String(value);
+      if (!key) return null;
+      const dictMap = column.dictCode ? columnDictMaps[column.dictCode] : undefined;
+      if (dictMap?.[key] != null) return dictMap[key];
+      if (column.map?.[key] != null) return column.map[key];
+      const globalMap = GLOBAL_VALUE_MAPS[column.key];
+      if (globalMap?.[key] != null) return globalMap[key];
+      return null;
+    },
+    [columnDictMaps],
+  );
 
   const load = async (p = page, size = pageSize, kw = keyword, flt = filters) => {
     setLoading(true);
@@ -281,6 +698,24 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     } finally {
       setLoading(false);
     }
+    // 统计条与列表同筛选条件（但不受分页影响），故单独拉取；失败时静默保留上一次结果
+    if (config.statsSource) {
+      const statParams = new URLSearchParams();
+      if (kw) statParams.set('keyword', kw);
+      Object.entries(flt).forEach(([k, v]) => {
+        if (v) statParams.set(k, v);
+      });
+      Object.entries(config.extraParams ?? {}).forEach(([k, v]) => statParams.set(k, v));
+      const ssep = config.statsSource.path.includes('?') ? '&' : '?';
+      try {
+        const statsRaw = await api.get<Record<string, unknown>>(
+          `${config.statsSource.path}${ssep}${statParams.toString()}`,
+        );
+        setDynamicStats(config.statsSource.format(statsRaw ?? {}));
+      } catch {
+        setDynamicStats([]);
+      }
+    }
   };
 
   useEffect(() => {
@@ -290,33 +725,6 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     load(1, pageSize, '', {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.listPath]);
-
-  // 主表单远程下拉：字典等 optionsPath 字段在打开表单前预取，避免选项为空
-  useEffect(() => {
-    const withPath = (config.fields ?? []).filter((f) => f.optionsPath);
-    if (withPath.length === 0) {
-      setFormFieldOptions({});
-      return;
-    }
-    let cancelled = false;
-    const loadOptions = async () => {
-      const next: Record<string, { value: string | number; label: string }[]> = {};
-      await Promise.all(
-        withPath.map(async (f) => {
-          try {
-            next[f.name] = await loadFieldOptions(f);
-          } catch {
-            next[f.name] = f.options ?? [];
-          }
-        }),
-      );
-      if (!cancelled) setFormFieldOptions(next);
-    };
-    void loadOptions();
-    return () => {
-      cancelled = true;
-    };
-  }, [config]);
 
   const openDetail = async (row: Row) => {
     const id = row[idField] as number;
@@ -503,7 +911,12 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   };
 
   const setFilterValue = (key: string, value: string) => {
-    const nf = { ...filters, [key]: value };
+    if (filters[key] === value) return; // 重复点击同一标签不重复请求
+    const nf: Record<string, string> = { ...filters, [key]: value };
+    // 级联子项：父级取值变化后清空，避免残留与父级不匹配的选项（如换成土地类还留着「投资建设」）
+    (config.tagFilters ?? []).forEach((tf) => {
+      if (tf.cascadeParentKey === key) nf[tf.key] = '';
+    });
     setFilters(nf);
     setPage(1);
     load(1, pageSize, keyword, nf);
@@ -519,9 +932,8 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       render: (_: unknown, row: Row) => {
         if (c.render) return c.render(row);
         const raw = row[c.key];
-        if (c.map) return c.map[String(raw)] ?? String(raw ?? '-');
-        const globalMap = GLOBAL_VALUE_MAPS[c.key];
-        if (globalMap) return globalMap[String(raw)] ?? String(raw ?? '-');
+        const mapped = resolveColumnLabel(c, raw);
+        if (mapped != null) return mapped;
         if (typeof raw === 'boolean') return raw ? '是' : '否';
         return String(raw ?? '-');
       },
@@ -535,76 +947,67 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       (config.rowActions && config.rowActions.length > 0)
     ) {
       const hasMore =
-        !!config.qrcodePath ||
-        config.deletable ||
-        (config.rowActions?.length ?? 0) > 0;
+        !!config.qrcodePath || config.deletable || (config.rowActions?.length ?? 0) > 0;
       cols.push({
         title: '操作',
         key: '_actions',
         fixed: 'right',
-        width: hasMore ? 220 : config.update ? 160 : 120,
+        width: hasMore ? 180 : config.update ? 150 : 110,
         render: (_: unknown, row: Row) => {
-          const moreItems: MenuProps['items'] = [];
+          const actions: TableActionItem[] = [];
+          if (config.detailPath || config.detailLink) {
+            actions.push({
+              key: 'detail',
+              label: config.detailLink ? (config.detailLinkLabel ?? '档案') : '详情',
+              icon: <FileTextOutlined />,
+              onClick: () => void openDetail(row),
+            });
+          }
+          if (config.update) {
+            actions.push({
+              key: 'edit',
+              label: '编辑',
+              icon: <EditOutlined />,
+              onClick: () => {
+                const rowId = row[idField] as number;
+                if (config.editLink && rowId != null) {
+                  navigate(config.editLink(rowId), {
+                    state: { from: currentPath(location) },
+                  });
+                  return;
+                }
+                void handleOpenEdit(row);
+              },
+            });
+          }
+          const more: TableActionItem[] = [];
           if (config.qrcodePath) {
-            moreItems.push({
+            more.push({
               key: 'qrcode',
               label: '一产一码',
+              icon: <QrcodeOutlined />,
               onClick: () => void handleShowQrcode(row),
             });
           }
           (config.rowActions ?? []).forEach((action) => {
             if (action.visible && !action.visible(row)) return;
-            moreItems.push({
+            more.push({
               key: action.key,
               label: action.label,
-              onClick: () => {
-                void handleOpenRowAction(action, row);
-              },
+              onClick: () => void handleOpenRowAction(action, row),
             });
           });
           if (config.deletable) {
-            moreItems.push({ type: 'divider' });
-            moreItems.push({
+            more.push({
               key: 'delete',
-              danger: true,
               label: '删除',
+              icon: <DeleteOutlined />,
+              danger: true,
+              dividerBefore: true,
               onClick: () => handleDelete(row),
             });
           }
-          return (
-            <Space size="middle" wrap>
-              {(config.detailPath || config.detailLink) && (
-                <a
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openDetail(row);
-                  }}
-                >
-                  {config.detailLink ? config.detailLinkLabel ?? '档案' : '详情'}
-                </a>
-              )}
-              {config.update && (
-                <a
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleOpenEdit(row);
-                  }}
-                >
-                  编辑
-                </a>
-              )}
-              {moreItems.length > 0 && (
-                <Dropdown menu={{ items: moreItems }} trigger={['click']}>
-                  <a
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="更多操作"
-                  >
-                    更多 <MoreOutlined />
-                  </a>
-                </Dropdown>
-              )}
-            </Space>
-          );
+          return <TableActions actions={actions} more={more} max={2} />;
         },
       });
     }
@@ -617,7 +1020,10 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     config.detailLinkLabel,
     config.qrcodePath,
     config.update,
+    config.editLink,
     config.rowActions,
+    // 字典加载完成后需重算列，否则类型等字段会停留在原始值
+    resolveColumnLabel,
   ]);
 
   const tableScrollX = Math.max(720, (config.columns.length + 1) * 140);
@@ -669,6 +1075,18 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               icon={<ReloadOutlined />}
               onClick={() => load(page, pageSize, keyword, filters)}
             />
+            {config.card && (
+              <Segmented
+                size="small"
+                value={viewMode}
+                onChange={(v) => setViewMode(v as 'list' | 'card')}
+                options={[
+                  { value: 'list', icon: <BarsOutlined />, title: '列表模式' },
+                  { value: 'card', icon: <AppstoreOutlined />, title: '卡片模式' },
+                ]}
+                aria-label="切换展示模式"
+              />
+            )}
             <Button
               icon={<UploadOutlined />}
               disabled={!config.importPath}
@@ -732,6 +1150,10 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={() => {
+                  if (config.createLink) {
+                    navigate(config.createLink, { state: { from: currentPath(location) } });
+                    return;
+                  }
                   form.resetFields();
                   setShowCreate(true);
                 }}
@@ -743,9 +1165,9 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         </div>
       </div>
 
-      {config.stats && config.stats.length > 0 && (
+      {(config.statsSource ? dynamicStats : config.stats ?? []).length > 0 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 pb-3 border-b border-[var(--ams-border)] text-sm overflow-hidden">
-          {config.stats.map((s, i) => (
+          {(config.statsSource ? dynamicStats : config.stats ?? []).map((s, i) => (
             <div key={s.label} className="flex items-baseline gap-2 min-w-0">
               {i > 0 && <span className="text-[var(--ams-primary)]/40 hidden sm:inline">|</span>}
               <span className="text-gray-500 shrink-0">{s.label}</span>
@@ -756,48 +1178,56 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       )}
 
       {(config.tagFilters ?? []).map((tf) => (
-        <div key={tf.key} className="flex items-start gap-2 sm:gap-3 mb-3 text-sm min-w-0">
-          <span className="text-gray-500 shrink-0 pt-0.5 w-16 sm:w-20 truncate" title={tf.label}>
-            {tf.label}
-          </span>
-          <div className="flex flex-wrap gap-2 min-w-0 flex-1">
-            <Tag
-              color={!filters[tf.key] ? 'blue' : undefined}
-              className="cursor-pointer m-0"
-              onClick={() => setFilterValue(tf.key, '')}
-            >
-              不限
-            </Tag>
-            {tf.options.map((o) => (
-              <Tag
-                key={o.value}
-                color={filters[tf.key] === o.value ? 'blue' : undefined}
-                className="cursor-pointer m-0 max-w-[140px] truncate"
-                title={o.label}
-                onClick={() => setFilterValue(tf.key, o.value)}
-              >
-                {o.label}
-              </Tag>
-            ))}
-          </div>
-        </div>
+        <TagFilterRow key={tf.key} config={tf} filters={filters} onSelect={setFilterValue} />
       ))}
 
-      <div className="ams-table-wrap">
-        <Table
-          rowKey={(row) => String(row[idField] ?? Math.random())}
-          loading={loading}
-          columns={tableColumns}
-          dataSource={rows}
-          pagination={false}
-          size="middle"
-          scroll={{ x: tableScrollX }}
-          onRow={(row) => ({
-            onClick: () => openDetail(row),
-            className: 'cursor-pointer',
-          })}
-        />
-      </div>
+      {config.card && viewMode === 'card' ? (
+        <>
+          {loading && (
+            <div className="py-6 text-center text-sm text-gray-500">加载中…</div>
+          )}
+          {!loading && rows.length === 0 && (
+            <div className="py-16 text-center text-sm text-gray-400">暂无数据</div>
+          )}
+          {!loading && rows.length > 0 && (
+            <ResourceCardGrid
+              rows={rows}
+              config={config.card}
+              idField={idField}
+              onOpen={openDetail}
+              onEdit={
+                config.update
+                  ? (row) => {
+                      if (config.editLink) {
+                        navigate(config.editLink(Number(row[idField])), {
+                          state: { from: currentPath(location) },
+                        });
+                        return;
+                      }
+                      void handleOpenEdit(row);
+                    }
+                  : undefined
+              }
+            />
+          )}
+        </>
+      ) : (
+        <div className="ams-table-wrap">
+          <Table
+            rowKey={(row) => String(row[idField] ?? Math.random())}
+            loading={loading}
+            columns={tableColumns}
+            dataSource={rows}
+            pagination={false}
+            size="middle"
+            scroll={{ x: tableScrollX }}
+            onRow={(row) => ({
+              onClick: () => openDetail(row),
+              className: 'cursor-pointer',
+            })}
+          />
+        </div>
+      )}
 
       <div className="flex justify-end mt-4 overflow-x-auto ams-scroll">
         <Pagination
@@ -827,23 +1257,30 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
             {Object.entries(detail).map(([k, v]) => {
               const col = config.columns.find((c) => c.key === k);
               const field = (config.fields ?? []).find((f) => f.name === k);
+              if (field?.hideInDetail) return null;
               const label = col?.label ?? field?.label ?? fieldLabel(k);
               // 跳过无中文映射的纯技术字段，避免详情里直接露出英文 key
               if (!col && !field && label === k && /^[a-z][A-Za-z0-9]*$/.test(k)) {
                 return null;
               }
               let display: string;
-              if (col?.map) {
-                display = col.map[String(v)] ?? String(v ?? '-');
-              } else if (GLOBAL_VALUE_MAPS[k]) {
-                display = GLOBAL_VALUE_MAPS[k][String(v)] ?? String(v ?? '-');
+              const mapped = col ? resolveColumnLabel(col, v) : null;
+              if (col?.render) {
+                display = String(col.render(detail as Row) ?? '-');
+              } else if (mapped != null) {
+                display = mapped;
               } else if (typeof v === 'boolean') {
                 display = v ? '是' : '否';
+              } else if (Array.isArray(v)) {
+                display = v.length > 0 ? v.map(String).join('、') : '-';
               } else {
                 display = String(v ?? '-');
               }
               return (
-                <div key={k} className="flex gap-2 border-b border-[var(--ams-border)] py-2 min-w-0">
+                <div
+                  key={k}
+                  className="flex gap-2 border-b border-[var(--ams-border)] py-2 min-w-0"
+                >
                   <dt className="w-24 sm:w-32 text-gray-500 shrink-0 truncate" title={label}>
                     {label}
                   </dt>
@@ -877,12 +1314,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               ? String(qrModal.row.leaseControlStatus ?? '')
               : undefined,
             address: qrModal.row
-              ? [
-                  qrModal.row.province,
-                  qrModal.row.city,
-                  qrModal.row.district,
-                  qrModal.row.address,
-                ]
+              ? [qrModal.row.province, qrModal.row.city, qrModal.row.district, qrModal.row.address]
                   .filter(Boolean)
                   .map(String)
                   .join('')
@@ -892,9 +1324,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
           onDownload={qrModal.url ? () => void handleDownloadQrcode() : undefined}
         />
         <div className="mt-4 flex justify-end">
-          <Button
-            onClick={() => setQrModal({ open: false, loading: false, row: null, url: '' })}
-          >
+          <Button onClick={() => setQrModal({ open: false, loading: false, row: null, url: '' })}>
             关闭
           </Button>
         </div>
@@ -913,7 +1343,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
       >
         <Form form={form} layout="vertical" className="mt-2">
-          {renderFormFields(config.fields ?? [], formFieldOptions)}
+          {renderFormFields(config.fields ?? [], undefined, 'create', form)}
         </Form>
       </Modal>
 
@@ -930,7 +1360,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
       >
         <Form form={editForm} layout="vertical" className="mt-2">
-          {renderFormFields(config.fields ?? [], formFieldOptions)}
+          {renderFormFields(config.fields ?? [], undefined, 'edit', editForm)}
         </Form>
       </Modal>
 
@@ -951,7 +1381,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       >
         {actionCtx && (
           <Form form={actionForm} layout="vertical" className="mt-2">
-            {renderFormFields(actionCtx.action.fields, actionFieldOptions)}
+            {renderFormFields(actionCtx.action.fields, actionFieldOptions, 'action')}
           </Form>
         )}
       </Modal>

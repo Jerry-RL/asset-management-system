@@ -9,6 +9,7 @@ import com.ams.modules.fixedasset.entity.FixedAsset;
 import com.ams.modules.fixedasset.mapper.FaInventoryItemMapper;
 import com.ams.modules.fixedasset.mapper.FaInventoryPlanMapper;
 import com.ams.modules.fixedasset.mapper.FixedAssetMapper;
+import com.ams.platform.security.RbacService;
 import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -35,25 +36,30 @@ public class FixedAssetService {
     private final FixedAssetMapper assetMapper;
     private final FaInventoryPlanMapper planMapper;
     private final FaInventoryItemMapper itemMapper;
+    private final RbacService rbacService;
 
     public FixedAssetService(
             FixedAssetMapper assetMapper,
             FaInventoryPlanMapper planMapper,
-            FaInventoryItemMapper itemMapper) {
+            FaInventoryItemMapper itemMapper,
+            RbacService rbacService) {
         this.assetMapper = assetMapper;
         this.planMapper = planMapper;
         this.itemMapper = itemMapper;
+        this.rbacService = rbacService;
     }
 
     public PageResult<FixedAsset> page(long page, long pageSize, String keyword, String status, Long companyId) {
-        Page<FixedAsset> result = assetMapper.selectPage(new Page<>(page, pageSize),
-                new LambdaQueryWrapper<FixedAsset>()
-                        .eq(status != null, FixedAsset::getStatus, status)
-                        .eq(companyId != null, FixedAsset::getCompanyId, companyId)
-                        .and(keyword != null && !keyword.isBlank(),
-                                w -> w.like(FixedAsset::getName, keyword)
-                                        .or().like(FixedAsset::getAssetNo, keyword))
-                        .orderByDesc(FixedAsset::getId));
+        LambdaQueryWrapper<FixedAsset> wrapper = new LambdaQueryWrapper<FixedAsset>()
+                .eq(status != null, FixedAsset::getStatus, status)
+                .eq(companyId != null, FixedAsset::getCompanyId, companyId)
+                .and(keyword != null && !keyword.isBlank(),
+                        w -> w.like(FixedAsset::getName, keyword)
+                                .or().like(FixedAsset::getAssetNo, keyword))
+                .orderByDesc(FixedAsset::getId);
+        // 全局公司切换：固定资产按所属公司收敛
+        rbacService.applyCompanyScope(wrapper, SecurityUtils.current(), FixedAsset::getCompanyId);
+        Page<FixedAsset> result = assetMapper.selectPage(new Page<>(page, pageSize), wrapper);
         return PageResult.of(result.getRecords(), result.getTotal(), page, pageSize);
     }
 
@@ -223,10 +229,12 @@ public class FixedAssetService {
     }
 
     public List<FaInventoryPlan> listPlans(Long companyId) {
-        return planMapper.selectList(
-                new LambdaQueryWrapper<FaInventoryPlan>()
-                        .eq(companyId != null, FaInventoryPlan::getCompanyId, companyId)
-                        .orderByDesc(FaInventoryPlan::getId));
+        LambdaQueryWrapper<FaInventoryPlan> wrapper = new LambdaQueryWrapper<FaInventoryPlan>()
+                .eq(companyId != null, FaInventoryPlan::getCompanyId, companyId)
+                .orderByDesc(FaInventoryPlan::getId);
+        // 全局公司切换：盘点计划按所属公司收敛
+        rbacService.applyCompanyScope(wrapper, SecurityUtils.current(), FaInventoryPlan::getCompanyId);
+        return planMapper.selectList(wrapper);
     }
 
     public List<FaInventoryItem> listItems(Long planId) {

@@ -86,6 +86,8 @@ ams:
   map:
     amap-key: ${AMAP_KEY:dd3e8bb86157af7db922e66c9590c580}
     amap-security-code: ${AMAP_SECURITY_CODE:}
+    # 地址解析（Web 服务 API）Key，留空则回退 amap-key
+    amap-web-service-key: ${AMAP_WEB_SERVICE_KEY:}
   qr:
     # 手机扫码打开的 H5 根地址（用户端），生产请改为公网域名
     public-base-url: ${AMS_QR_PUBLIC_BASE_URL:http://localhost:5174}

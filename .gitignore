@@ -43,5 +43,8 @@ deploy/k8s/secret.yaml
 *.local
 backend/data/
 
+# 本地 Postgres 数据目录（含运行期数据文件，不应入库）
+.local-data/
+
 # Local toolchain (JDK downloads)
 .tools/

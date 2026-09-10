@@ -7,20 +7,25 @@ import com.ams.modules.lease.mapper.TenantMapper;
 import com.ams.modules.lease.service.TenantService;
 import com.ams.modules.org.entity.User;
 import com.ams.modules.org.mapper.UserMapper;
+import com.ams.modules.org.service.CompanyTreeService;
 import com.ams.modules.system.entity.LoginLog;
 import com.ams.modules.system.mapper.LoginLogMapper;
+import com.ams.platform.auth.dto.CompanyScopeOptions;
 import com.ams.platform.auth.dto.LoginRequest;
 import com.ams.platform.auth.dto.LoginResponse;
 import com.ams.platform.auth.dto.WechatBindRequest;
 import com.ams.platform.integration.wechat.WechatMiniProgramClient;
 import com.ams.platform.security.LoginUser;
 import com.ams.platform.security.RbacService;
+import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -51,6 +56,7 @@ public class AuthService {
     private final WechatMiniProgramClient wechatMiniProgramClient;
     private final TenantMapper tenantMapper;
     private final TenantService tenantService;
+    private final CompanyTreeService companyTreeService;
 
     public AuthService(
             UserMapper userMapper,
@@ -63,7 +69,8 @@ public class AuthService {
             TokenBlacklistService tokenBlacklistService,
             WechatMiniProgramClient wechatMiniProgramClient,
             TenantMapper tenantMapper,
-            TenantService tenantService) {
+            TenantService tenantService,
+            CompanyTreeService companyTreeService) {
         this.userMapper = userMapper;
         this.rbacService = rbacService;
         this.jwtService = jwtService;
@@ -75,6 +82,7 @@ public class AuthService {
         this.wechatMiniProgramClient = wechatMiniProgramClient;
         this.tenantMapper = tenantMapper;
         this.tenantService = tenantService;
+        this.companyTreeService = companyTreeService;
     }
 
     public LoginResponse login(LoginRequest req, String clientType, HttpServletRequest request) {
@@ -333,5 +341,52 @@ public class AuthService {
 
     public Map<String, String> captcha() {
         return captchaService.generate();
+    }
+
+    /**
+     * 顶栏「全局公司切换」可选项（FR-NFR-SEC-002 数据范围）。
+     *
+     * <p>可切换范围 = 用户所属公司及其全部下级公司；super_admin / 数据范围 all 为全部启用公司。
+     * 该范围与 {@code RbacService#companyScope} 同源，保证「能切到」与「能看见」一致。
+     */
+    public CompanyScopeOptions switchableCompanies() {
+        LoginUser user = SecurityUtils.current();
+        if (user == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        boolean unrestricted = user.isSuperAdmin() || "all".equals(user.getDataScope());
+        Set<Long> allowed = rbacService.switchableCompanyIds(user);
+        // 按公司树顺序返回，前端缩进展示时层级才连贯（父在上、子在下）
+        List<CompanyScopeOptions.Item> companies =
+                companyTreeService.listCompaniesTreeOrdered().stream()
+                        .filter(c -> c.getStatus() != null && c.getStatus() == 1)
+                        .filter(c -> unrestricted || allowed.contains(c.getId()))
+                        .map(c -> CompanyScopeOptions.Item.builder()
+                                .id(c.getId())
+                                .name(c.getName())
+                                .shortName(c.getShortName())
+                                .parentId(c.getParentId())
+                                .build())
+                        .toList();
+        return CompanyScopeOptions.builder()
+                .companies(companies)
+                .homeCompanyId(user.getHomeCompanyId())
+                .activeCompanyId(effectiveSelectedCompanyId(user, unrestricted))
+                .unrestricted(unrestricted)
+                .scoped(user.isCompanyScoped())
+                .build();
+    }
+
+    /**
+     * 前端下拉应选中的公司 ID。
+     *
+     * @return null 表示选中「全部公司」（仅不受限账号且未显式切换时出现）；
+     *         其余情况返回生效公司，未切换时即所属公司
+     */
+    private Long effectiveSelectedCompanyId(LoginUser user, boolean unrestricted) {
+        if (unrestricted && !user.isCompanyScoped()) {
+            return null;
+        }
+        return user.getCompanyId();
     }
 }

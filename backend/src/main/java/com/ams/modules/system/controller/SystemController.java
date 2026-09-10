@@ -159,11 +159,20 @@ public class SystemController {
         return ApiResponse.ok(null, TraceIdUtil.get());
     }
 
+    /**
+     * 字典项查询。
+     *
+     * <p>传入 {@code parentCode + parentValue} 时按「字典项级级联」过滤：
+     * 父字典该取值下配置了级联规则，则只返回规则内的字典项；未配置则不限制。
+     */
     @GetMapping("/dict/items")
     public ApiResponse<List<SysDictItem>> dictItems(
             @RequestParam(required = false) Long typeId,
-            @RequestParam(required = false) String code) {
-        return ApiResponse.ok(systemDictService.listItems(typeId, code), TraceIdUtil.get());
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String parentCode,
+            @RequestParam(required = false) String parentValue) {
+        return ApiResponse.ok(
+                systemDictService.listItems(typeId, code, parentCode, parentValue), TraceIdUtil.get());
     }
 
     @PostMapping("/dict/items")
@@ -186,7 +195,7 @@ public class SystemController {
         return ApiResponse.ok(null, TraceIdUtil.get());
     }
 
-    // ---- 字典关联（字典 → 另一字典的若干个字典值，用于关联查询） ----
+    // ---- 字典关联（字典 / 字典项 → 另一字典的若干个字典值） ----
 
     @GetMapping("/dict/relations")
     public ApiResponse<List<SysDictRelation>> dictRelations(
@@ -195,7 +204,7 @@ public class SystemController {
         return ApiResponse.ok(systemDictService.listRelations(sourceTypeId, targetTypeId), TraceIdUtil.get());
     }
 
-    /** 关联查询：按字典分组返回该字典挂接的全部关联值。 */
+    /** 关联查询：按「父字典项 + 目标字典」分组返回该字典挂接的全部关联值。 */
     @GetMapping("/dict/relations/grouped")
     public ApiResponse<Map<String, Object>> dictRelationsGrouped(@RequestParam Long sourceTypeId) {
         return ApiResponse.ok(systemDictService.relationsOfType(sourceTypeId), TraceIdUtil.get());

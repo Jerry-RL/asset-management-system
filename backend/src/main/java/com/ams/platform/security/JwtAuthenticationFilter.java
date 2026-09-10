@@ -25,6 +25,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String AUTH_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
+    /**
+     * 全局公司切换请求头：值为目标公司 ID；缺省 / 非法 / 越权时回落为用户所属公司。
+     * 由 {@code RbacService#isSwitchable} 做服务端校验，客户端无法借此越权。
+     */
+    public static final String COMPANY_HEADER = "X-Company-Id";
 
     private final JwtService jwtService;
     private final UserMapper userMapper;
@@ -58,7 +63,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     User user = userMapper.selectById(userId);
                     if (user != null && user.getStatus() != null && user.getStatus() == 1) {
                         String clientType = claims.get("clientType", String.class);
-                        LoginUser loginUser = rbacService.buildLoginUser(user, clientType);
+                        LoginUser loginUser = rbacService.buildLoginUser(
+                                user, clientType, resolveRequestedCompanyId(request));
                         var authentication = new UsernamePasswordAuthenticationToken(
                                 loginUser, null, List.of());
                         SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -69,5 +75,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
         filterChain.doFilter(request, response);
+    }
+
+    /** 解析全局公司切换请求头；缺失或非法时返回 null（表示不切换）。 */
+    private Long resolveRequestedCompanyId(HttpServletRequest request) {
+        String raw = request.getHeader(COMPANY_HEADER);
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(raw.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 }

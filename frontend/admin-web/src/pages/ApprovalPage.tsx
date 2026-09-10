@@ -4,6 +4,7 @@ import { CheckOutlined, CloseOutlined, ReloadOutlined } from '@ant-design/icons'
 import { api } from '@/lib/api';
 import { confirmDangerous } from '@/lib/confirm';
 import { APPROVAL_STATUS, BIZ_TYPE, TASK_STATUS, enumLabel } from '@/lib/labels';
+import { TableActions } from '@/components/TableActions';
 
 interface InboxRow {
   taskId: number;
@@ -161,28 +162,26 @@ export function ApprovalPage() {
                       title: '操作',
                       key: 'actions',
                       fixed: 'right',
-                      width: 180,
+                      width: 160,
                       render: (_: unknown, row: InboxRow) => (
-                        <Space>
-                          <Button
-                            type="primary"
-                            size="small"
-                            icon={<CheckOutlined />}
-                            aria-label="通过"
-                            onClick={() => handleApprove(row.instanceId)}
-                          >
-                            通过
-                          </Button>
-                          <Button
-                            danger
-                            size="small"
-                            icon={<CloseOutlined />}
-                            aria-label="驳回"
-                            onClick={() => handleReject(row.instanceId)}
-                          >
-                            驳回
-                          </Button>
-                        </Space>
+                        <TableActions
+                          actions={[
+                            {
+                              key: 'approve',
+                              label: '通过',
+                              icon: <CheckOutlined />,
+                              onClick: () => handleApprove(row.instanceId),
+                            },
+                            {
+                              key: 'reject',
+                              label: '驳回',
+                              icon: <CloseOutlined />,
+                              danger: true,
+                              onClick: () => handleReject(row.instanceId),
+                            },
+                          ]}
+                          max={2}
+                        />
                       ),
                     },
                   ]}

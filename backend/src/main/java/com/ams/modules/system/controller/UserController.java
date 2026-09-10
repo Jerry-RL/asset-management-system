@@ -7,6 +7,7 @@ import com.ams.modules.org.entity.User;
 import com.ams.modules.system.service.UserService;
 import java.util.List;
 import java.util.Map;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,8 +35,11 @@ public class UserController {
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long pageSize,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long companyId) {
-        return ApiResponse.ok(userService.page(page, pageSize, keyword, companyId), TraceIdUtil.get());
+            @RequestParam(required = false) Long companyId,
+            @RequestParam(required = false) Long departmentId) {
+        return ApiResponse.ok(
+                userService.page(page, pageSize, keyword, companyId, departmentId),
+                TraceIdUtil.get());
     }
 
     @GetMapping("/{id}")
@@ -52,6 +56,7 @@ public class UserController {
         user.setPhone((String) body.get("phone"));
         user.setCompanyId(body.get("companyId") == null ? null : Long.valueOf(body.get("companyId").toString()));
         user.setDepartmentId(body.get("departmentId") == null ? null : Long.valueOf(body.get("departmentId").toString()));
+        user.setStatus(body.get("status") == null ? 1 : Integer.valueOf(body.get("status").toString()));
         List<Long> roleIds = parseRoleIds(body.get("roleIds"));
         return ApiResponse.ok(userService.create(user, roleIds), TraceIdUtil.get());
     }
@@ -63,8 +68,22 @@ public class UserController {
         user.setPhone((String) body.get("phone"));
         user.setCompanyId(body.get("companyId") == null ? null : Long.valueOf(body.get("companyId").toString()));
         user.setDepartmentId(body.get("departmentId") == null ? null : Long.valueOf(body.get("departmentId").toString()));
+        user.setStatus(body.get("status") == null ? null : Integer.valueOf(body.get("status").toString()));
         List<Long> roleIds = parseRoleIds(body.get("roleIds"));
         return ApiResponse.ok(userService.update(id, user, roleIds), TraceIdUtil.get());
+    }
+
+    /** 启用/停用账号（图谱节点快捷操作）。 */
+    @PutMapping("/{id}/status")
+    public ApiResponse<User> updateStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Integer status = body.get("status") == null ? null : Integer.valueOf(body.get("status").toString());
+        return ApiResponse.ok(userService.updateStatus(id, status), TraceIdUtil.get());
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        userService.delete(id);
+        return ApiResponse.ok(null, TraceIdUtil.get());
     }
 
     @PostMapping("/{id}/reset-password")

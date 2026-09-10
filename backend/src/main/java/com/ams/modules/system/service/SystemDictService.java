@@ -92,6 +92,18 @@ public class SystemDictService {
 
     /** 支持按字典 ID 或字典编码查询；两者同时给出时以 ID 为准。 */
     public List<SysDictItem> listItems(Long typeId, String typeCode) {
+        return listItems(typeId, typeCode, null, null);
+    }
+
+    /**
+     * 支持按字典 ID / 字典编码查询，并按「字典项级级联」过滤。
+     *
+     * <p>{@code parentTypeCode + parentValue} 为父字典的编码与取值：
+     * 若该组合下配置了级联规则，则只返回规则内的字典项；未配置规则时不限制（向后兼容）。
+     * 两者缺一即视为不启用级联过滤。
+     */
+    public List<SysDictItem> listItems(
+            Long typeId, String typeCode, String parentTypeCode, String parentValue) {
         Long resolvedTypeId = typeId;
         if (resolvedTypeId == null && StringUtils.hasText(typeCode)) {
             SysDictType type = typeMapper.selectOne(
@@ -101,10 +113,54 @@ public class SystemDictService {
             }
             resolvedTypeId = type.getId();
         }
-        return itemMapper.selectList(new LambdaQueryWrapper<SysDictItem>()
+        List<SysDictItem> items = itemMapper.selectList(new LambdaQueryWrapper<SysDictItem>()
                 .eq(resolvedTypeId != null, SysDictItem::getTypeId, resolvedTypeId)
                 .orderByAsc(SysDictItem::getSort)
                 .orderByAsc(SysDictItem::getId));
+
+        List<Long> allowed = cascadedItemIds(resolvedTypeId, parentTypeCode, parentValue);
+        if (allowed == null) {
+            return items;
+        }
+        // 级联命中时：只保留白名单内的项，并按级联规则自身的排序展示（字典页可调整先后）
+        Map<Long, SysDictItem> byId = items.stream()
+                .collect(Collectors.toMap(SysDictItem::getId, Function.identity(), (a, b) -> a));
+        return allowed.stream().map(byId::get).filter(Objects::nonNull).toList();
+    }
+
+    /**
+     * 解析级联白名单（按规则 sort 排序）：{@code null} 表示不做限制（未配置任何规则或参数不完整）。
+     */
+    private List<Long> cascadedItemIds(Long childTypeId, String parentTypeCode, String parentValue) {
+        if (childTypeId == null
+                || !StringUtils.hasText(parentTypeCode)
+                || !StringUtils.hasText(parentValue)) {
+            return null;
+        }
+        SysDictType parentType = typeMapper.selectOne(
+                new LambdaQueryWrapper<SysDictType>().eq(SysDictType::getCode, parentTypeCode));
+        if (parentType == null) {
+            return null;
+        }
+        SysDictItem parentItem = itemMapper.selectOne(new LambdaQueryWrapper<SysDictItem>()
+                .eq(SysDictItem::getTypeId, parentType.getId())
+                .eq(SysDictItem::getValue, parentValue));
+        if (parentItem == null) {
+            return null;
+        }
+        List<SysDictRelation> rules = relationMapper.selectList(new LambdaQueryWrapper<SysDictRelation>()
+                .eq(SysDictRelation::getSourceItemId, parentItem.getId())
+                .eq(SysDictRelation::getTargetTypeId, childTypeId)
+                .eq(SysDictRelation::getStatus, 1)
+                .orderByAsc(SysDictRelation::getSort)
+                .orderByAsc(SysDictRelation::getId));
+        if (rules.isEmpty()) {
+            return null;
+        }
+        return rules.stream()
+                .map(SysDictRelation::getTargetItemId)
+                .distinct()
+                .toList();
     }
 
     // ---------------------------------------------------------------- 模块
@@ -225,9 +281,11 @@ public class SystemDictService {
     @Transactional
     public void deleteItem(Long id) {
         requireExists(itemMapper.selectById(id), "字典项不存在");
-        // 被关联引用的字典项一并清理，避免留下悬空关联
+        // 被关联引用的字典项一并清理，避免留下悬空关联（作为被关联项 / 作为级联父项）
         relationMapper.delete(new LambdaQueryWrapper<SysDictRelation>()
                 .eq(SysDictRelation::getTargetItemId, id));
+        relationMapper.delete(new LambdaQueryWrapper<SysDictRelation>()
+                .eq(SysDictRelation::getSourceItemId, id));
         itemMapper.deleteById(id);
     }
 
@@ -243,8 +301,8 @@ public class SystemDictService {
     }
 
     /**
-     * 批量替换某字典的全部关联。未出现在 {@code groups} 中、或 {@code itemIds} 为空的
-     * 目标字典表示不建立关联。
+     * 批量替换某字典的全部关联（含字典级与字典项级）。未出现在 {@code groups} 中、
+     * 或 {@code itemIds} 为空的分组表示不建立关联。
      */
     @Transactional
     public List<SysDictRelation> replaceRelations(SysDictRelationBatch batch) {
@@ -266,6 +324,14 @@ public class SystemDictService {
                 throw new AppException(ErrorCode.BAD_REQUEST, "不能关联字典自身");
             }
             requireExists(typeMapper.selectById(group.getTargetTypeId()), "被关联的字典不存在");
+            // 字典项级关联：父字典项必须属于当前字典
+            if (group.getSourceItemId() != null) {
+                SysDictItem sourceItem = itemMapper.selectById(group.getSourceItemId());
+                if (sourceItem == null
+                        || !sourceItem.getTypeId().equals(batch.getSourceTypeId())) {
+                    throw new AppException(ErrorCode.BAD_REQUEST, "父字典项与当前字典不匹配");
+                }
+            }
             Map<Long, SysDictItem> allowed = listItems(group.getTargetTypeId()).stream()
                     .collect(Collectors.toMap(SysDictItem::getId, Function.identity(), (a, b) -> a));
             for (Long itemId : group.getItemIds() == null ? List.<Long>of() : group.getItemIds()) {
@@ -275,6 +341,7 @@ public class SystemDictService {
                 }
                 SysDictRelation relation = new SysDictRelation();
                 relation.setSourceTypeId(batch.getSourceTypeId());
+                relation.setSourceItemId(group.getSourceItemId());
                 relation.setTargetTypeId(group.getTargetTypeId());
                 relation.setTargetItemId(itemId);
                 relation.setSort(sort++);
@@ -292,7 +359,8 @@ public class SystemDictService {
     }
 
     /**
-     * 关联查询：按字典分组返回该字典挂接的全部关联值。
+     * 关联查询：按「父字典项 + 目标字典」分组返回该字典挂接的全部关联值。
+     * 字典级关联的 {@code sourceItemId} 为空。
      */
     public Map<String, Object> relationsOfType(Long sourceTypeId) {
         SysDictType source = typeMapper.selectById(sourceTypeId);
@@ -302,36 +370,49 @@ public class SystemDictService {
                 .filter(r -> !Integer.valueOf(0).equals(r.getStatus()))
                 .collect(Collectors.toList());
 
-        Map<Long, List<SysDictRelation>> byTarget = relations.stream()
-                .collect(Collectors.groupingBy(
-                        SysDictRelation::getTargetTypeId, LinkedHashMap::new, Collectors.toList()));
+        Map<Long, SysDictItem> sourceItems = listItems(sourceTypeId).stream()
+                .collect(Collectors.toMap(SysDictItem::getId, Function.identity(), (a, b) -> a));
+
+        // 先按父字典项、再按目标字典分组；父字典项为 null 时用 0 占位以支持 LinkedHashMap 排序
+        Map<Long, Map<Long, List<SysDictRelation>>> grouped = new LinkedHashMap<>();
+        relations.forEach(r -> grouped
+                .computeIfAbsent(r.getSourceItemId() == null ? 0L : r.getSourceItemId(),
+                        k -> new LinkedHashMap<>())
+                .computeIfAbsent(r.getTargetTypeId(), k -> new ArrayList<>())
+                .add(r));
 
         List<Map<String, Object>> groups = new ArrayList<>();
-        for (Map.Entry<Long, List<SysDictRelation>> entry : byTarget.entrySet()) {
-            SysDictType target = typeMapper.selectById(entry.getKey());
-            if (target == null) {
-                continue;
-            }
-            Map<Long, SysDictItem> items = listItems(target.getId()).stream()
-                    .collect(Collectors.toMap(SysDictItem::getId, Function.identity(), (a, b) -> a));
-            List<Map<String, Object>> values = new ArrayList<>();
-            for (SysDictRelation relation : entry.getValue()) {
-                SysDictItem item = items.get(relation.getTargetItemId());
-                if (item == null) {
+        for (Map.Entry<Long, Map<Long, List<SysDictRelation>>> bySource : grouped.entrySet()) {
+            SysDictItem sourceItem = sourceItems.get(bySource.getKey());
+            for (Map.Entry<Long, List<SysDictRelation>> entry : bySource.getValue().entrySet()) {
+                SysDictType target = typeMapper.selectById(entry.getKey());
+                if (target == null) {
                     continue;
                 }
-                Map<String, Object> value = new LinkedHashMap<>();
-                value.put("itemId", item.getId());
-                value.put("value", item.getValue());
-                value.put("label", item.getLabel());
-                values.add(value);
+                Map<Long, SysDictItem> items = listItems(target.getId()).stream()
+                        .collect(Collectors.toMap(SysDictItem::getId, Function.identity(), (a, b) -> a));
+                List<Map<String, Object>> values = new ArrayList<>();
+                for (SysDictRelation relation : entry.getValue()) {
+                    SysDictItem item = items.get(relation.getTargetItemId());
+                    if (item == null) {
+                        continue;
+                    }
+                    Map<String, Object> value = new LinkedHashMap<>();
+                    value.put("itemId", item.getId());
+                    value.put("value", item.getValue());
+                    value.put("label", item.getLabel());
+                    values.add(value);
+                }
+                Map<String, Object> group = new LinkedHashMap<>();
+                group.put("sourceItemId", sourceItem == null ? null : sourceItem.getId());
+                group.put("sourceItemValue", sourceItem == null ? null : sourceItem.getValue());
+                group.put("sourceItemLabel", sourceItem == null ? null : sourceItem.getLabel());
+                group.put("targetTypeId", target.getId());
+                group.put("targetTypeCode", target.getCode());
+                group.put("targetTypeName", target.getName());
+                group.put("items", values);
+                groups.add(group);
             }
-            Map<String, Object> group = new LinkedHashMap<>();
-            group.put("targetTypeId", target.getId());
-            group.put("targetTypeCode", target.getCode());
-            group.put("targetTypeName", target.getName());
-            group.put("items", values);
-            groups.add(group);
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -348,6 +429,12 @@ public class SystemDictService {
                 .eq(SysDictRelation::getSourceTypeId, typeId));
         relationMapper.delete(new LambdaQueryWrapper<SysDictRelation>()
                 .eq(SysDictRelation::getTargetTypeId, typeId));
+        // 该字典的字典项若作为父字典项参与级联，关联一并清理，避免悬空
+        List<Long> itemIds = listItems(typeId).stream().map(SysDictItem::getId).toList();
+        if (!itemIds.isEmpty()) {
+            relationMapper.delete(new LambdaQueryWrapper<SysDictRelation>()
+                    .in(SysDictRelation::getSourceItemId, itemIds));
+        }
     }
 
     // ---------------------------------------------------------------- 校验

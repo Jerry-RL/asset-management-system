@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { api, type LoginUser } from './api';
+import { api, clearCompanySelection, type LoginUser } from './api';
 
 interface AuthState {
   token: string | null;
@@ -37,6 +37,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       localStorage.setItem('ams.accessToken', data.accessToken);
       localStorage.setItem('ams.user', JSON.stringify(data.user));
+      // 清掉上一个账号留下的公司选择，避免把越权/失效的公司带进新会话
+      clearCompanySelection();
       setToken(data.accessToken);
       setUser(data.user);
     },
@@ -46,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem('ams.accessToken');
     localStorage.removeItem('ams.user');
+    clearCompanySelection();
     setToken(null);
     setUser(null);
   }, []);

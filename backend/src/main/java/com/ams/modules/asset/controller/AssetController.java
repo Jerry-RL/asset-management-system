@@ -4,10 +4,14 @@ import com.ams.common.web.ApiResponse;
 import com.ams.common.web.PageResult;
 import com.ams.common.web.TraceIdUtil;
 import com.ams.modules.asset.dto.AssetDossier;
+import com.ams.modules.asset.dto.ProjectOverview;
+import com.ams.modules.asset.dto.ProjectSaveRequest;
+import com.ams.modules.asset.dto.ProjectStats;
 import com.ams.modules.asset.entity.Asset;
 import com.ams.modules.asset.entity.AssetCodeMapping;
 import com.ams.modules.asset.entity.AssetStructureLog;
 import com.ams.modules.asset.entity.Project;
+import com.ams.modules.asset.entity.ProjectZone;
 import com.ams.modules.asset.service.AssetDossierService;
 import com.ams.modules.asset.service.AssetQrService;
 import com.ams.modules.asset.service.AssetService;
@@ -63,24 +67,64 @@ public class AssetController {
         return ApiResponse.ok(assetService.pageProjects(page, pageSize, keyword, companyId), TraceIdUtil.get());
     }
 
+    /**
+     * 项目管理顶部统计条：项目数 / 资产宗数 / 资产利用率 / 闲置宗数 / 盘活宗数。
+     *
+     * <p>与 {@code /projects} 使用同一套筛选条件与数据范围，保证统计与列表对账一致。
+     * 路径为字面量，Spring 会优先于 {@code /projects/{id}} 匹配，不会误入详情。
+     */
+    @GetMapping("/projects/summary")
+    public ApiResponse<ProjectStats> projectSummary(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long companyId) {
+        return ApiResponse.ok(assetService.projectStats(keyword, companyId), TraceIdUtil.get());
+    }
+
     @GetMapping("/projects/{id}")
     public ApiResponse<Project> project(@PathVariable Long id) {
         return ApiResponse.ok(assetService.getProject(id), TraceIdUtil.get());
     }
 
+    /** 项目详情页聚合视图：主体 + 资产基本信息 / 资产创收 / 租赁概况 + 分区汇总 */
+    @GetMapping("/projects/{id}/overview")
+    public ApiResponse<ProjectOverview> projectOverview(@PathVariable Long id) {
+        return ApiResponse.ok(assetService.projectOverview(id), TraceIdUtil.get());
+    }
+
+    /** 项目分区列表（第二步配置内容） */
+    @GetMapping("/projects/{id}/zones")
+    public ApiResponse<List<ProjectZone>> projectZones(@PathVariable Long id) {
+        return ApiResponse.ok(assetService.listProjectZones(id), TraceIdUtil.get());
+    }
+
     @PostMapping("/projects")
     @Audited(module = "asset", action = "create_project")
-    public ApiResponse<Project> createProject(@RequestBody Project project) {
-        return ApiResponse.ok(assetService.createProject(project), TraceIdUtil.get());
+    public ApiResponse<Project> createProject(@RequestBody ProjectSaveRequest request) {
+        return ApiResponse.ok(assetService.createProject(request), TraceIdUtil.get());
     }
 
     @PutMapping("/projects/{id}")
     @Audited(module = "asset", action = "update_project")
-    public ApiResponse<Project> updateProject(@PathVariable Long id, @RequestBody Project project) {
-        return ApiResponse.ok(assetService.updateProject(id, project), TraceIdUtil.get());
+    public ApiResponse<Project> updateProject(@PathVariable Long id,
+            @RequestBody ProjectSaveRequest request) {
+        return ApiResponse.ok(assetService.updateProject(id, request), TraceIdUtil.get());
+    }
+
+    @DeleteMapping("/projects/{id}")
+    @Audited(module = "asset", action = "delete_project")
+    public ApiResponse<Void> deleteProject(@PathVariable Long id) {
+        assetService.deleteProject(id);
+        return ApiResponse.ok(null, TraceIdUtil.get());
     }
 
     // ---- 资产 ----
+
+    /**
+     * 资产分页查询。
+     *
+     * @param projectType 「项目属性」筛选（所属项目的 type，取值见
+     *                    sys_dict_type.code = project_property），与「资产来源」级联筛选配合
+     */
     @GetMapping("/assets")
     public ApiResponse<PageResult<Asset>> assets(
             @RequestParam(defaultValue = "1") long page,
@@ -90,9 +134,13 @@ public class AssetController {
             @RequestParam(required = false) String sourceType,
             @RequestParam(required = false) String ownershipType,
             @RequestParam(required = false) String leaseControlStatus,
-            @RequestParam(required = false) Long companyId) {
+            @RequestParam(required = false) String projectType,
+            @RequestParam(required = false) Long companyId,
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) Long zoneId) {
         return ApiResponse.ok(assetService.pageAssets(page, pageSize, assetType, keyword,
-                sourceType, ownershipType, leaseControlStatus, companyId), TraceIdUtil.get());
+                sourceType, ownershipType, leaseControlStatus, companyId, projectType, projectId,
+                zoneId), TraceIdUtil.get());
     }
 
     @GetMapping("/assets/{assetId}")

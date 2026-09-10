@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 /**
@@ -38,6 +39,56 @@ public class CompanyTreeService {
         return companyMapper.selectList(new LambdaQueryWrapper<Company>()
                 .orderByAsc(Company::getSort)
                 .orderByAsc(Company::getId));
+    }
+
+    /**
+     * 公司列表按「公司树深度优先」排序（父节点总在子节点之前）。
+     *
+     * <p>{@link #listCompanies()} 只按 sort/id 排序，同级公司混排会让下拉里的层级缩进失去意义；
+     * 本方法按 parentId 做 DFS 展开，便于公司切换下拉、组织树等展示场景。
+     * 脏数据（父节点不存在）按根节点处理，互为父子成环时按已访问集合截断。
+     */
+    public List<Company> listCompaniesTreeOrdered() {
+        List<Company> all = listCompanies();
+        Set<Long> known = all.stream().map(Company::getId).collect(Collectors.toSet());
+        Map<Long, List<Company>> childrenIndex = new LinkedHashMap<>();
+        List<Company> roots = new ArrayList<>();
+        for (Company c : all) {
+            if (c.getParentId() == null || !known.contains(c.getParentId())) {
+                roots.add(c);
+            } else {
+                childrenIndex.computeIfAbsent(c.getParentId(), k -> new ArrayList<>()).add(c);
+            }
+        }
+        List<Company> ordered = new ArrayList<>(all.size());
+        Set<Long> visited = new HashSet<>();
+        Deque<Company> stack = new ArrayDeque<>();
+        // 逆序压栈，保证弹出顺序与 roots / children 的原有排序一致
+        for (int i = roots.size() - 1; i >= 0; i--) {
+            stack.push(roots.get(i));
+        }
+        while (!stack.isEmpty()) {
+            Company current = stack.pop();
+            if (!visited.add(current.getId())) {
+                continue;
+            }
+            ordered.add(current);
+            List<Company> kids = childrenIndex.getOrDefault(current.getId(), List.of());
+            for (int i = kids.size() - 1; i >= 0; i--) {
+                stack.push(kids.get(i));
+            }
+        }
+        return ordered;
+    }
+
+    /** 公司是否存在且处于启用状态（公司切换的目标校验，避免切到已删除 / 停用 / 不存在的公司）。 */
+    public boolean isActiveCompany(Long companyId) {
+        if (companyId == null) {
+            return false;
+        }
+        return listCompanies().stream()
+                .anyMatch(c -> companyId.equals(c.getId())
+                        && c.getStatus() != null && c.getStatus() == 1);
     }
 
     /** 邻接表：parentId → 子 id 列表。 */

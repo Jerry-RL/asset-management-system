@@ -85,3 +85,69 @@ body {
 .ams-table-wrap .ant-table-content {
   overflow-x: auto !important;
 }
+
+/* ==========================================================================
+   统一「操作」列：文字链接 + 图标（见 components/TableActions.tsx）
+   ========================================================================== */
+.ams-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  max-width: 100%;
+  /* 抵消首个链接的左右内边距，使文字与表头对齐 */
+  margin-left: -6px;
+}
+
+.ams-action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ams-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.ams-action-link:hover {
+  color: var(--ams-primary-hover);
+  background: rgba(22, 119, 255, 0.08);
+}
+
+.ams-action-link:active {
+  background: rgba(22, 119, 255, 0.16);
+}
+
+.ams-action-link:focus-visible {
+  outline: 2px solid rgba(22, 119, 255, 0.35);
+  outline-offset: 1px;
+}
+
+.ams-action-link .anticon {
+  font-size: 12px;
+}
+
+.ams-action-link.is-danger {
+  color: #ff4d4f;
+}
+
+.ams-action-link.is-danger:hover {
+  color: #ff7875;
+  background: rgba(255, 77, 79, 0.08);
+}
+
+.ams-action-link.is-disabled,
+.ams-action-link.is-disabled:hover {
+  color: rgba(0, 0, 0, 0.25);
+  background: transparent;
+  cursor: not-allowed;
+}

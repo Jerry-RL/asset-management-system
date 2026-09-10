@@ -3,6 +3,7 @@ package com.ams.modules.map.controller;
 import com.ams.common.web.ApiResponse;
 import com.ams.common.web.TraceIdUtil;
 import com.ams.config.AmsProperties;
+import com.ams.modules.map.service.GeocodeService;
 import com.ams.modules.map.service.MapService;
 import java.util.HashMap;
 import java.util.List;
@@ -17,10 +18,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class MapController {
 
     private final MapService mapService;
+    private final GeocodeService geocodeService;
     private final AmsProperties amsProperties;
 
-    public MapController(MapService mapService, AmsProperties amsProperties) {
+    public MapController(MapService mapService, GeocodeService geocodeService,
+            AmsProperties amsProperties) {
         this.mapService = mapService;
+        this.geocodeService = geocodeService;
         this.amsProperties = amsProperties;
     }
 
@@ -31,6 +35,14 @@ public class MapController {
         cfg.put("amapKey", amsProperties.getMap().getAmapKey());
         cfg.put("amapSecurityCode", amsProperties.getMap().getAmapSecurityCode());
         return ApiResponse.ok(cfg, TraceIdUtil.get());
+    }
+
+    /** 地址 → 经纬度：项目/资产录入时按地址自动获取坐标。 */
+    @GetMapping("/geocode")
+    public ApiResponse<GeocodeService.GeocodeResult> geocode(
+            @RequestParam String address,
+            @RequestParam(required = false) String city) {
+        return ApiResponse.ok(geocodeService.geocode(address, city), TraceIdUtil.get());
     }
 
     @GetMapping("/points")

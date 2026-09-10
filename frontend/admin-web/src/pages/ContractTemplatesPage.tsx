@@ -15,6 +15,7 @@ import {
 } from 'antd';
 import {
   DownloadOutlined,
+  EditOutlined,
   EyeOutlined,
   FileWordOutlined,
   PlusOutlined,
@@ -22,6 +23,7 @@ import {
   SaveOutlined,
 } from '@ant-design/icons';
 import { api, type PageResult } from '@/lib/api';
+import { TableActions } from '@/components/TableActions';
 
 interface SlotDef {
   key: string;
@@ -270,19 +272,32 @@ export function ContractTemplatesPage() {
             {
               title: '操作',
               key: 'actions',
-              width: 260,
+              width: 220,
               render: (_: unknown, row: ContractTemplate) => (
-                <Space wrap>
-                  <Button size="small" icon={<EyeOutlined />} onClick={() => handlePreview(row)}>
-                    预览
-                  </Button>
-                  <Button size="small" icon={<DownloadOutlined />} onClick={() => handleExport(row)}>
-                    导出 Word
-                  </Button>
-                  <Button size="small" type="link" onClick={() => openEdit(row)}>
-                    编辑
-                  </Button>
-                </Space>
+                <TableActions
+                  actions={[
+                    {
+                      key: 'preview',
+                      label: '预览',
+                      icon: <EyeOutlined />,
+                      onClick: () => handlePreview(row),
+                    },
+                    {
+                      key: 'edit',
+                      label: '编辑',
+                      icon: <EditOutlined />,
+                      onClick: () => openEdit(row),
+                    },
+                  ]}
+                  more={[
+                    {
+                      key: 'export',
+                      label: '导出 Word',
+                      icon: <DownloadOutlined />,
+                      onClick: () => handleExport(row),
+                    },
+                  ]}
+                />
               ),
             },
           ]}

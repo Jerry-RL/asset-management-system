@@ -60,4 +60,35 @@ public class FileController {
                 .contentType(mediaType)
                 .body(new InputStreamResource(in));
     }
+
+    /**
+     * 公开读取对象（{@code ObjectStorageClient#resolveUrl} 的落地端点）。
+     *
+     * <p>上传接口返回的 {@code url} 就是要内嵌到 {@code <img>} / 合同文档里的地址，
+     * 而 {@code <img>} 无法携带 Authorization 头，故本端点放行匿名访问 ——
+     * 安全性由「对象键含随机 UUID、不可枚举」保证（能力型 URL）。
+     *
+     * <p>响应为 inline，便于图片直接渲染；路径经 LocalObjectStorageClient 归一化校验，
+     * 无法借此越出上传根目录。
+     *
+     * @param objectKey 对象键，含目录前缀，如 {@code 2026-09-10/<uuid>_a.png}
+     */
+    @GetMapping("/object/{*objectKey}")
+    public ResponseEntity<InputStreamResource> object(@PathVariable String objectKey) {
+        // 前导斜杠由 {*...} 捕获时带上，需剥离后才能与库中 object_key 对齐
+        String key = objectKey != null && objectKey.startsWith("/") ? objectKey.substring(1) : objectKey;
+        FileMetadata meta = fileService.findByObjectKey(key);
+        if (meta == null) {
+            return ResponseEntity.notFound().build();
+        }
+        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        if (meta.getContentType() != null && !meta.getContentType().isBlank()) {
+            mediaType = MediaType.parseMediaType(meta.getContentType());
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                .contentType(mediaType)
+                .body(new InputStreamResource(fileService.openStream(meta)));
+    }
 }

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Space, Table, Tag, message } from 'antd';
+import { Button, Card, Table, Tag, message } from 'antd';
 import { CheckOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, type PageResult } from '@/lib/api';
 import { confirmDangerous } from '@/lib/confirm';
 import { CHANNEL, PAYMENT_CONFIRM, PAYMENT_METHOD, enumLabel } from '@/lib/labels';
+import { TableActions } from '@/components/TableActions';
 
 interface Payment {
   id: number;
@@ -104,19 +105,19 @@ export function PaymentConfirmPage() {
             {
               title: '操作',
               key: 'actions',
-              width: 120,
+              width: 130,
               render: (_: unknown, row: Payment) => (
-                <Space>
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<CheckOutlined />}
-                    aria-label="确认到账"
-                    onClick={() => handleConfirm(row.id)}
-                  >
-                    确认到账
-                  </Button>
-                </Space>
+                <TableActions
+                  actions={[
+                    {
+                      key: 'confirm',
+                      label: '确认到账',
+                      icon: <CheckOutlined />,
+                      onClick: () => handleConfirm(row.id),
+                    },
+                  ]}
+                  max={2}
+                />
               ),
             },
           ]}

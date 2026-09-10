@@ -8,6 +8,8 @@ import com.ams.modules.org.entity.User;
 import com.ams.modules.org.mapper.CompanyMapper;
 import com.ams.modules.org.mapper.DepartmentMapper;
 import com.ams.modules.org.mapper.UserMapper;
+import com.ams.platform.security.RbacService;
+import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.List;
 import java.util.Map;
@@ -27,21 +29,29 @@ public class OrgService {
     private final DepartmentMapper departmentMapper;
     private final UserMapper userMapper;
     private final CompanyTreeService companyTreeService;
+    private final RbacService rbacService;
 
     public OrgService(
             CompanyMapper companyMapper,
             DepartmentMapper departmentMapper,
             UserMapper userMapper,
-            CompanyTreeService companyTreeService) {
+            CompanyTreeService companyTreeService,
+            RbacService rbacService) {
         this.companyMapper = companyMapper;
         this.departmentMapper = departmentMapper;
         this.userMapper = userMapper;
         this.companyTreeService = companyTreeService;
+        this.rbacService = rbacService;
     }
 
     // ---- 公司 ----
 
-    /** 公司列表（含上级公司名称，便于列表直接展示）。 */
+    /**
+     * 公司列表（含上级公司名称，便于列表直接展示）。
+     *
+     * <p>按当前数据范围收敛：全局公司切换后只返回可访问公司子树，
+     * 避免低权限账号通过公司管理/下拉选项看到完整集团架构。
+     */
     public List<Company> listCompanies() {
         List<Company> companies = companyTreeService.listCompanies();
         Map<Long, String> nameById = companies.stream()
@@ -51,7 +61,11 @@ public class OrgService {
                 c.setParentName(nameById.get(c.getParentId()));
             }
         });
-        return companies;
+        Set<Long> scope = rbacService.companyScope(SecurityUtils.current());
+        if (scope.isEmpty()) {
+            return companies; // 空集合 = 不限公司
+        }
+        return companies.stream().filter(c -> scope.contains(c.getId())).toList();
     }
 
     public Company getCompany(Long id) {
@@ -81,14 +95,20 @@ public class OrgService {
         return companyMapper.selectById(company.getId());
     }
 
+    /**
+     * 编辑公司。
+     *
+     * @param changeParent 调用方是否显式指定了上级公司；为 false 时保持原上级不变，
+     *                     避免局部更新（改名字/停用）被误判为「变更为母公司」
+     */
     @Transactional
-    public Company updateCompany(Long id, Company company) {
-        Company existing = getCompany(id);
+    public Company updateCompany(Long id, Company company, boolean changeParent) {
+        getCompany(id);
         if (!StringUtils.hasText(company.getName())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "公司名称不能为空");
         }
         // 上级变更走防环校验，避免通过普通编辑制造环
-        if (company.getParentId() != null || existing.getParentId() != null) {
+        if (changeParent) {
             companyTreeService.changeParent(id, company.getParentId());
             company.setParentId(null); // 已单独更新，避免重复写入
         }
@@ -122,6 +142,20 @@ public class OrgService {
         return companyTreeService.changeParent(id, parentId);
     }
 
+    /**
+     * 启用/停用公司。
+     *
+     * <p>走独立端点，避免复用 {@link #updateCompany} 时因未传上级而误触发 {@code changeParent}，
+     * 导致子公司被摘挂成根节点。
+     */
+    @Transactional
+    public Company updateCompanyStatus(Long id, Integer status) {
+        Company company = getCompany(id);
+        company.setStatus(status == null ? 1 : status);
+        companyMapper.updateById(company);
+        return companyMapper.selectById(id);
+    }
+
     /** 面包屑：母公司 → 当前公司。 */
     public List<Company> companyPath(Long id) {
         getCompany(id);
@@ -136,12 +170,15 @@ public class OrgService {
 
     // ---- 部门 ----
 
-    /** 部门列表（含所属公司名称、上级部门名称，便于列表直接展示）。 */
+    /** 部门列表（含所属公司名称、上级部门名称，便于列表直接展示）；按当前数据范围收敛。 */
     public List<Department> listDepartments(Long companyId) {
-        List<Department> departments = departmentMapper.selectList(new LambdaQueryWrapper<Department>()
+        LambdaQueryWrapper<Department> wrapper = new LambdaQueryWrapper<Department>()
                 .eq(companyId != null, Department::getCompanyId, companyId)
                 .orderByAsc(Department::getSort)
-                .orderByAsc(Department::getId));
+                .orderByAsc(Department::getId);
+        // 全局公司切换：部门按所属公司收敛
+        rbacService.applyCompanyScope(wrapper, SecurityUtils.current(), Department::getCompanyId);
+        List<Department> departments = departmentMapper.selectList(wrapper);
         if (departments.isEmpty()) {
             return departments;
         }
@@ -214,6 +251,15 @@ public class OrgService {
         }
         department.setId(id);
         department.setCompanyId(companyId);
+        departmentMapper.updateById(department);
+        return departmentMapper.selectById(id);
+    }
+
+    /** 启用/停用部门。 */
+    @Transactional
+    public Department updateDepartmentStatus(Long id, Integer status) {
+        Department department = getDepartment(id);
+        department.setStatus(status == null ? 1 : status);
         departmentMapper.updateById(department);
         return departmentMapper.selectById(id);
     }

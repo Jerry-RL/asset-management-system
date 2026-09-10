@@ -34,8 +34,113 @@ export const BILL_STATUS: Record<string, string> = {
 };
 
 export const ASSET_TYPE: Record<string, string> = {
+  // 项目属性口径（历史数据）
   property: '房产类',
   land: '土地类',
+  // 「资产管理字典 → 资产类型」字典项
+  low_rent_housing: '廉租房',
+  public_rental_housing: '公租房',
+  affordable_housing: '经济适用房',
+  commercial_housing: '商品房',
+  housing_reform: '房改房',
+  resettlement_housing: '安置房',
+  self_use_asset: '自用资产',
+  factory_building: '厂房',
+  gymnasium: '体育馆',
+  residential: '住宅',
+};
+
+/** 部分租赁状态（sys_dict_type.code = partial_lease_status） */
+export const PARTIAL_LEASE_STATUS: Record<string, string> = {
+  support: '支持',
+  not_support: '不支持',
+};
+
+/** 资产性质（sys_dict_type.code = asset_nature） */
+export const ASSET_NATURE: Record<string, string> = {
+  operational: '经营性',
+  public_welfare: '公益性',
+  financial: '金融性',
+  resource: '资源性',
+  self_owned: '自有',
+};
+
+/** 资产来源（sys_dict_type.code = asset_source）；「项目属性」级联决定其可见项 */
+export const ASSET_SOURCE_DICT_CODE = 'asset_source';
+
+export const ASSET_SOURCE: Record<string, string> = {
+  investment_construction: '投资建设',
+  acquisition_reserve: '收储',
+  transferred: '移交资产',
+  allocated_in: '划入',
+  leased_in: '租入',
+  self_funded_construction: '自筹建设',
+  entrusted: '托管',
+  other: '其他',
+  // 土地类专属来源（「项目属性 → 关联字典值」中配置为土地类可见）
+  land_grant: '出让',
+  administrative_allocation: '行政划拨',
+};
+
+/** 资产权属（sys_dict_type.code = asset_ownership） */
+export const ASSET_OWNERSHIP_DICT_CODE = 'asset_ownership';
+
+export const ASSET_OWNERSHIP: Record<string, string> = {
+  joint_operation: '联营资产',
+  entrusted_operation: '委托经营资产',
+  self_owned: '自有资产',
+  custodial: '代管资产',
+  transferred: '移交资产',
+  other: '其他',
+};
+
+/** 建筑规划（sys_dict_type.code = building_plan） */
+export const BUILDING_PLAN: Record<string, string> = {
+  residential_building: '住宅建筑',
+  commercial_building: '商业建筑',
+  office_building: '办公建筑',
+  industrial_building: '工业建筑',
+  public_building: '公共建筑',
+  complex_building: '综合建筑',
+};
+
+/** 建筑结构（sys_dict_type.code = building_structure） */
+export const BUILDING_STRUCTURE: Record<string, string> = {
+  brick_wood: '砖木结构',
+  steel_concrete: '钢混结构',
+  shear_wall: '剪力墙结构',
+  brick_concrete: '砖混结构',
+  frame: '框架结构',
+  circular_single_suspension: '圆形单层悬索结构',
+  gas: '气体结构',
+  tube: '简体结构',
+  mixed: '混合结构',
+  arch: '拱结构',
+  circular_double_suspension: '圆形双层寻索结构',
+  space_frame: '网架结构',
+  mo_structure: '摸结构',
+  space_thin_wall: '空间暴毙结构',
+  flat_slab: '无梁楼盖结构',
+  shell: '壳体结构',
+  orthogonal_cable_net: '双向正交索网结构',
+  truss: '衍架结构',
+  longitudinal_wall_bearing: '纵墙承重',
+};
+
+/** 资产用途（sys_dict_type.code = asset_usage） */
+export const ASSET_USAGE: Record<string, string> = {
+  office: '办公',
+  commercial: '商业',
+  residential: '住宅',
+  garage: '车库',
+};
+
+/** 资产户型（sys_dict_type.code = asset_house_type） */
+export const ASSET_HOUSE_TYPE: Record<string, string> = {
+  one_bed_one_living: '一室一厅',
+  two_bed_one_living: '两室一厅',
+  three_bed_two_living: '三室两厅',
+  four_bed_two_living: '四室两厅',
 };
 
 export const RENT_TYPE: Record<string, string> = {
@@ -215,6 +320,27 @@ export const ENABLE_STATUS: Record<string, string> = {
   closed: '已关闭',
 };
 
+/** 项目类型对应的字典编码：「系统管理 → 系统字典 → 资产管理字典 → 项目属性」 */
+export const PROJECT_TYPE_DICT_CODE = 'project_property';
+
+/**
+ * 项目类型：表单选项与列表映射均取自上述字典，此处仅作字典未就绪时的回显兜底。
+ * property / land 与字典种子数据对齐；park / building / other 为历史数据取值，保留以兼容旧项目展示。
+ */
+export const PROJECT_TYPE: Record<string, string> = {
+  property: '房产类',
+  land: '土地类',
+  park: '园区',
+  building: '楼宇',
+  other: '其他',
+};
+
+/** 项目状态：正常 / 停用 */
+export const PROJECT_STATUS: Record<string, string> = {
+  '1': '正常',
+  '0': '停用',
+};
+
 /** 字段 key → 中文列名（详情/报表兜底，避免直接展示英文 key） */
 export const FIELD_LABELS: Record<string, string> = {
   id: 'ID',
@@ -282,10 +408,47 @@ export const FIELD_LABELS: Record<string, string> = {
   latitude: '纬度',
   city: '城市',
   province: '省份',
+  district: '区/县',
+  type: '类型',
+  imageUrl: '项目图片',
+  imageFileId: '图片附件ID',
+  usageType: '用途',
+  houseType: '资产房型',
+  zones: '分区配置',
+  zoneId: '所属分区',
+  zoneName: '分区',
+  assetArea: '资产面积(㎡)',
+  assetCount: '资产数',
+  idleCount: '闲置宗数',
+  revitalizedCount: '盘活宗数',
+  utilizationRate: '资产利用率(%)',
+  // ---- 资产表单新增字段 ----
+  assetCompanyId: '资产公司',
+  assetCompanyName: '资产公司',
+  propertyCompanyName: '产权公司',
+  floorNo: '分区楼层',
+  partialLeaseStatus: '部分租赁状态',
+  assetNature: '资产性质',
+  buildingPlan: '建筑规划',
+  registeredAt: '登记入库时间',
+  responsibleDepartmentId: '责任部门',
+  responsibleDepartmentName: '责任部门',
+  responsibleUserId: '责任人',
+  responsibleUserName: '责任人',
   phone: '手机号',
   reason: '原因',
   result: '结果',
   remark: '备注',
+  username: '账号',
+  password: '初始密码',
+  departmentId: '所属部门',
+  departmentName: '所属部门',
+  companyName: '所属公司',
+  parentName: '上级',
+  shortName: '简称',
+  roleIds: '角色',
+  roleNames: '角色',
+  lastLoginAt: '最近登录',
 };
 
 export const BILL_TYPE: Record<string, string> = {

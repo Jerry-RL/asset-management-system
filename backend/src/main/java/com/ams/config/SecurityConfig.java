@@ -67,6 +67,9 @@ public class SecurityConfig {
                                                 "/api/v1/callbacks/**",
                                                 "/api/v1/health/**",
                                                 "/api/v1/public/**",
+                                                // 附件「公开对象」读取：<img> 无法携带 Authorization，
+                                                // 安全性由对象键内嵌的随机 UUID（不可枚举）保证
+                                                "/api/v1/files/object/**",
                                                 "/actuator/health",
                                                 "/actuator/info",
                                                 "/swagger-ui/**",

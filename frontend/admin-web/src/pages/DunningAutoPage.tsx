@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, Space, Table, Tag, message } from 'antd';
 import {
+  ArrowRightOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { api } from '@/lib/api';
+import { TableActions } from '@/components/TableActions';
 
 interface DunningQueueItem {
   billId: number;
@@ -233,11 +235,18 @@ export function DunningAutoPage() {
             { title: '截止时间', dataIndex: 'deadline', width: 180 },
             {
               title: '操作',
-              width: 100,
+              width: 110,
               render: () => (
-                <Link to="/tasks" className="text-[var(--ams-primary)] text-sm">
-                  去处理
-                </Link>
+                <TableActions
+                  actions={[
+                    {
+                      key: 'handle',
+                      label: '去处理',
+                      icon: <ArrowRightOutlined />,
+                      to: '/tasks',
+                    },
+                  ]}
+                />
               ),
             },
           ]}

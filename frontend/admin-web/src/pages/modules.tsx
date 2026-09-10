@@ -6,6 +6,13 @@ import * as L from '@/lib/labels';
 // 全量模块注册表：菜单树 + 资源配置（对齐 SRS §3.2 PC 管理后台功能域）
 // ============================================================================
 
+/** 时间展示：ISO 字符串截断到秒并去掉 T，空值显示 - */
+const formatDateTime = (value: unknown): string => {
+  if (!value) return '-';
+  const text = String(value);
+  return text.length >= 19 ? text.slice(0, 19).replace('T', ' ') : text;
+};
+
 export interface MenuItem {
   path: string;
   title: string;
@@ -212,20 +219,94 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     title: '项目管理',
     listPath: '/projects',
     create: true,
+    update: true,
     deletable: true,
+    // 新增/编辑走独立的两步走页面：基本信息 + 分区配置
+    createLink: '/projects/create',
+    editLink: (id) => `/projects/${id}/edit`,
+    // 详情走独立页面（行点击 / 卡片点击 / 「详情」按钮均进入），优先于默认抽屉详情
+    detailLink: (id) => `/projects/${id}`,
+    detailLinkLabel: '详情',
     columns: [
       { key: 'id', label: 'ID' },
       { key: 'name', label: '项目名称' },
-      { key: 'address', label: '地址' },
+      { key: 'province', label: '省' },
+      { key: 'city', label: '市' },
+      { key: 'district', label: '区/县' },
+      { key: 'address', label: '详细地址' },
       { key: 'companyId', label: '经营公司ID' },
-      { key: 'status', label: '状态', map: L.ENABLE_STATUS },
+      // 类型取自「系统字典 → 资产管理字典 → 项目属性」，静态 map 仅作字典加载中兜底
+      { key: 'type', label: '类型', dictCode: L.PROJECT_TYPE_DICT_CODE, map: L.PROJECT_TYPE },
+      // 项目下资产实时统计（后端在列表里聚合，口径见 AssetLeaseGroups）
+      { key: 'assetCount', label: '资产宗数' },
+      { key: 'assetArea', label: '资产面积(㎡)' },
+      { key: 'revitalizedCount', label: '盘活宗数' },
+      { key: 'idleCount', label: '闲置宗数' },
+      {
+        key: 'utilizationRate',
+        label: '资产利用率',
+        render: (row) => `${Number(row.utilizationRate ?? 0).toFixed(1)}%`,
+      },
+      { key: 'status', label: '状态', map: L.PROJECT_STATUS },
     ],
+    /**
+     * 顶部统计条：走 /projects/summary 实时聚合，与列表同筛选条件，
+     * 避免把数字写死在配置里导致与列表对不上账。
+     */
+    statsSource: {
+      path: '/projects/summary',
+      format: (d) => [
+        { label: '项目数', value: Number(d.projectCount ?? 0) },
+        { label: '资产宗数', value: Number(d.assetCount ?? 0) },
+        { label: '资产利用率', value: `${Number(d.utilizationRate ?? 0).toFixed(1)}%` },
+        { label: '闲置宗数', value: Number(d.idleCount ?? 0) },
+      ],
+    },
+    /** 卡片视图：图片 / 名称 / 资产数 / 面积 / 盘活宗数 / 闲置总数 / 地址 */
+    card: {
+      imageKey: 'imageUrl',
+      titleKey: 'name',
+      badgeKey: 'type',
+      badgeMap: L.PROJECT_TYPE,
+      addressKeys: ['province', 'city', 'district', 'address'],
+      metrics: [
+        { key: 'assetCount', label: '资产数', suffix: '宗' },
+        { key: 'assetArea', label: '面积', suffix: '㎡' },
+        { key: 'revitalizedCount', label: '盘活宗数', suffix: '宗' },
+        { key: 'idleCount', label: '闲置总数', suffix: '宗' },
+      ],
+    },
     fields: [
-      { name: 'name', label: '项目名称', required: true },
-      { name: 'address', label: '地址', type: 'textarea' },
-      { name: 'companyId', label: '经营公司ID', type: 'number' },
-      { name: 'longitude', label: '经度', type: 'number' },
-      { name: 'latitude', label: '纬度', type: 'number' },
+      { name: 'name', label: '项目名称' },
+      { name: 'address', label: '详细地址' },
+      { name: 'province', label: '省' },
+      { name: 'city', label: '市' },
+      { name: 'district', label: '区/县' },
+      { name: 'companyId', label: '所属公司' },
+      {
+        name: 'type',
+        label: '类型',
+        type: 'select',
+        // 与项目新增/编辑页一致：选项取自「项目属性」字典
+        optionsPath: `/system/dict/items?code=${L.PROJECT_TYPE_DICT_CODE}`,
+        optionsValueKey: 'value',
+        optionsLabelKey: 'label',
+      },
+      {
+        name: 'status',
+        label: '状态',
+        type: 'select',
+        options: Object.entries(L.PROJECT_STATUS).map(([value, label]) => ({ value, label })),
+      },
+      // 以下为列表聚合出的只读统计，仅用于详情抽屉展示（项目新增/编辑走独立页面）
+      { name: 'assetCount', label: '资产宗数' },
+      { name: 'assetArea', label: '资产面积(㎡)' },
+      { name: 'revitalizedCount', label: '盘活宗数' },
+      { name: 'idleCount', label: '闲置宗数' },
+      { name: 'utilizationRate', label: '资产利用率(%)' },
+      { name: 'longitude', label: '经度' },
+      { name: 'latitude', label: '纬度' },
+      { name: 'imageUrl', label: '项目图片' },
     ],
   },
   assets: {
@@ -233,6 +314,9 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     listPath: '/assets',
     create: true,
     update: true,
+    // 新增/编辑走独立分组表单页（多级联动 + 字典下拉 + 图片预览）
+    createLink: '/assets/create',
+    editLink: (id) => `/assets/${id}/edit`,
     detailPath: (id) => `/assets/${id}`,
     detailLink: (id) => `/assets/${id}/dossier`,
     qrcodePath: (id) => `/assets/${id}/qrcode`,
@@ -241,12 +325,52 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     columns: [
       { key: 'assetNo', label: '资产编号' },
       { key: 'name', label: '名称' },
-      { key: 'assetType', label: '类型', map: L.ASSET_TYPE },
-      { key: 'area', label: '面积(㎡)' },
+      { key: 'assetType', label: '资产类型', map: L.ASSET_TYPE },
+      { key: 'assetCompanyName', label: '资产公司' },
+      { key: 'projectName', label: '项目' },
+      // 项目属性取自所属项目（project.type），决定「资产来源」的可选范围
+      {
+        key: 'projectType',
+        label: '项目属性',
+        dictCode: L.PROJECT_TYPE_DICT_CODE,
+        map: L.PROJECT_TYPE,
+      },
+      { key: 'zoneName', label: '分区' },
+      { key: 'floorNo', label: '分区楼层' },
+      { key: 'area', label: '资产面积(㎡)' },
+      { key: 'leaseArea', label: '租赁面积(㎡)' },
+      { key: 'usageType', label: '用途', map: L.ASSET_USAGE },
+      { key: 'houseType', label: '房型', map: L.ASSET_HOUSE_TYPE },
       { key: 'leaseControlStatus', label: '租控状态', map: L.LEASE_CONTROL_STATUS },
-      { key: 'operatingCompanyId', label: '经营公司' },
+      { key: 'responsibleUserName', label: '责任人' },
     ],
+    /**
+     * 标签式筛选。
+     * 「项目属性 / 资产权属」选项取自「系统管理 → 系统字典 → 资产管理字典」；
+     * 「来源类型」进一步按「项目属性」级联 —— 项目属性未选时展示全部来源，
+     * 选中后只展示该属性可见的来源项（规则见「系统字典 → 项目属性 → 关联字典值」）。
+     */
     tagFilters: [
+      {
+        key: 'projectType',
+        label: '项目属性',
+        dictCode: L.PROJECT_TYPE_DICT_CODE,
+        options: Object.entries(L.PROJECT_TYPE).map(([value, label]) => ({ value, label })),
+      },
+      {
+        key: 'sourceType',
+        label: '来源类型',
+        dictCode: L.ASSET_SOURCE_DICT_CODE,
+        cascadeParentKey: 'projectType',
+        cascadeParentCode: L.PROJECT_TYPE_DICT_CODE,
+        options: Object.entries(L.ASSET_SOURCE).map(([value, label]) => ({ value, label })),
+      },
+      {
+        key: 'ownershipType',
+        label: '资产权属',
+        dictCode: L.ASSET_OWNERSHIP_DICT_CODE,
+        options: Object.entries(L.ASSET_OWNERSHIP).map(([value, label]) => ({ value, label })),
+      },
       {
         key: 'assetType',
         label: '资产类型',
@@ -258,31 +382,47 @@ export const RESOURCES: Record<string, ResourceConfig> = {
         options: Object.entries(L.LEASE_CONTROL_STATUS).map(([value, label]) => ({ value, label })),
       },
     ],
+    /**
+     * 新增/编辑已改为独立页面（见 createLink / editLink），此处的 fields 仅用于
+     * 详情抽屉的中文字段标签映射，不再参与表单渲染。
+     */
     fields: [
-      { name: 'assetNo', label: '资产编号', required: true },
-      { name: 'name', label: '名称', required: true },
-      {
-        name: 'assetType',
-        label: '类型',
-        type: 'select',
-        required: true,
-        options: Object.entries(L.ASSET_TYPE).map(([value, label]) => ({ value, label })),
-      },
-      { name: 'area', label: '面积(㎡)', type: 'number' },
-      { name: 'projectId', label: '项目ID', type: 'number' },
-      { name: 'operatingCompanyId', label: '经营公司ID', type: 'number' },
-      { name: 'propertyCompanyId', label: '产权公司ID', type: 'number' },
-      { name: 'sourceType', label: '来源类型' },
-      { name: 'ownershipType', label: '权属' },
-      { name: 'usageType', label: '用途' },
-      { name: 'structureType', label: '结构' },
-      { name: 'province', label: '省' },
-      { name: 'city', label: '市' },
-      { name: 'district', label: '区' },
-      { name: 'address', label: '坐落地址', type: 'textarea' },
-      { name: 'baseRentFloor', label: '备案底价', type: 'number' },
-      { name: 'baseRentAssessed', label: '评估租金', type: 'number' },
-      { name: 'marketRefRent', label: '市场参考价', type: 'number' },
+      { name: 'assetNo', label: '资产编号' },
+      { name: 'name', label: '名称' },
+      { name: 'assetType', label: '资产类型' },
+      { name: 'assetCompanyId', label: '资产公司' },
+      { name: 'assetCompanyName', label: '资产公司' },
+      { name: 'propertyCompanyId', label: '产权公司' },
+      { name: 'propertyCompanyName', label: '产权公司' },
+      { name: 'projectId', label: '项目ID', hideInDetail: true },
+      { name: 'projectName', label: '项目' },
+      { name: 'projectType', label: '项目属性' },
+      { name: 'zoneId', label: '所属分区', hideInDetail: true },
+      { name: 'zoneName', label: '分区' },
+      { name: 'floorNo', label: '分区楼层' },
+      { name: 'address', label: '资产坐落' },
+      { name: 'area', label: '资产面积(㎡)' },
+      { name: 'leaseArea', label: '租赁面积(㎡)' },
+      { name: 'partialLeaseStatus', label: '部分租赁状态' },
+      { name: 'assetNature', label: '资产性质' },
+      { name: 'houseType', label: '资产房型' },
+      { name: 'usageType', label: '资产用途' },
+      { name: 'sourceType', label: '资产来源' },
+      { name: 'ownershipType', label: '资产权属' },
+      { name: 'buildingPlan', label: '建筑规划' },
+      { name: 'structureType', label: '建筑结构' },
+      { name: 'registeredAt', label: '登记入库时间' },
+      { name: 'originalValue', label: '原值(万元)' },
+      { name: 'responsibleDepartmentId', label: '责任部门' },
+      { name: 'responsibleDepartmentName', label: '责任部门' },
+      { name: 'responsibleUserId', label: '责任人' },
+      { name: 'responsibleUserName', label: '责任人' },
+      { name: 'waterMeterNo', label: '水表号' },
+      { name: 'electricMeterNo', label: '电表号' },
+      { name: 'imageUrl', label: '资产图片' },
+      { name: 'operatingCompanyId', label: '经营公司ID' },
+      { name: 'structureStatus', label: '结构状态' },
+      { name: 'leaseControlStatus', label: '租控状态' },
     ],
     rowActions: ASSET_QUICK_ACTIONS,
   },
@@ -508,7 +648,11 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'contractId', label: '合同ID' },
       { key: 'reliefAmount', label: '减免金额' },
       { key: 'majorFlag', label: '大额', render: (r) => (r.majorFlag ? '是' : '否') },
-      { key: 'status', label: '状态', map: { draft: '草稿', approving: '审批中', rejected: '已驳回', applied: '已生效' } },
+      {
+        key: 'status',
+        label: '状态',
+        map: { draft: '草稿', approving: '审批中', rejected: '已驳回', applied: '已生效' },
+      },
       { key: 'reason', label: '原因' },
     ],
     fields: [
@@ -529,7 +673,11 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'oldRentAmount', label: '原租金' },
       { key: 'newRentAmount', label: '新租金' },
       { key: 'issuedStrategy', label: '已出账策略', map: { keep: '不变', diff_bill: '补差账单' } },
-      { key: 'status', label: '状态', map: { draft: '草稿', approving: '审批中', rejected: '已驳回', applied: '已生效' } },
+      {
+        key: 'status',
+        label: '状态',
+        map: { draft: '草稿', approving: '审批中', rejected: '已驳回', applied: '已生效' },
+      },
       { key: 'reason', label: '原因' },
     ],
     fields: [
@@ -655,7 +803,11 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'planDate', label: '巡查日期' },
       { key: 'result', label: '结果', map: { normal: '正常', hazard: '有隐患', abnormal: '异常' } },
       { key: 'hazardDesc', label: '隐患描述' },
-      { key: 'status', label: '状态', map: { pending: '待巡查', done: '已完成', overdue: '已逾期' } },
+      {
+        key: 'status',
+        label: '状态',
+        map: { pending: '待巡查', done: '已完成', overdue: '已逾期' },
+      },
     ],
     fields: [
       { name: 'assetId', label: '资产ID', type: 'number', required: true },
@@ -1171,19 +1323,66 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     title: '人员维护',
     listPath: '/system/users',
     create: true,
+    update: true,
     columns: [
       { key: 'username', label: '账号' },
       { key: 'name', label: '姓名' },
       { key: 'phone', label: '手机号' },
-      { key: 'companyId', label: '公司ID' },
+      {
+        key: 'companyName',
+        label: '所属公司',
+        render: (r) => String(r.companyName ?? r.companyId ?? '-'),
+      },
+      {
+        key: 'departmentName',
+        label: '所属部门',
+        render: (r) => String(r.departmentName ?? r.departmentId ?? '-'),
+      },
+      {
+        key: 'roleNames',
+        label: '角色',
+        render: (r) =>
+          Array.isArray(r.roleNames) && r.roleNames.length > 0 ? r.roleNames.join('、') : '-',
+      },
       { key: 'status', label: '状态', map: { '1': '启用', '0': '停用' } },
+      { key: 'lastLoginAt', label: '最近登录', render: (r) => formatDateTime(r.lastLoginAt) },
     ],
     fields: [
       { name: 'username', label: '账号', required: true },
-      { name: 'password', label: '初始密码' },
+      { name: 'password', label: '初始密码', createOnly: true },
       { name: 'name', label: '姓名', required: true },
       { name: 'phone', label: '手机号' },
-      { name: 'companyId', label: '公司ID', type: 'number' },
+      {
+        name: 'companyId',
+        label: '所属公司',
+        type: 'select',
+        optionsPath: '/org/companies',
+        optionsLabelExtraKey: 'shortName',
+      },
+      {
+        name: 'departmentId',
+        label: '所属部门',
+        type: 'select',
+        optionsPath: '/org/departments',
+        optionsLabelExtraKey: 'companyName',
+      },
+      {
+        name: 'roleIds',
+        label: '角色',
+        type: 'select',
+        multiple: true,
+        optionsPath: '/system/roles',
+        hideInDetail: true,
+      },
+      {
+        name: 'status',
+        label: '状态',
+        type: 'select',
+        options: [
+          { value: 1, label: '启用' },
+          { value: 0, label: '停用' },
+        ],
+      },
     ],
   },
   'system/roles': {

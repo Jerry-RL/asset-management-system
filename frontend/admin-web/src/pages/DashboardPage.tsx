@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { DashboardOutlined, FundOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, DashboardOutlined, FundOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { LEASE_CONTROL_STATUS, enumLabel } from '@/lib/labels';
 import { DASHBOARD_ICONS } from '@/lib/menuIcons';
+import { TableActions } from '@/components/TableActions';
 
 interface Operations {
   assetTotal?: number;
@@ -181,14 +182,16 @@ export function ConsolidatePage() {
                     : '-'}
                 </td>
                 <td className="py-2">
-                  <button
-                    type="button"
-                    className="text-[var(--ams-primary)]"
-                    aria-label={`下钻公司 ${row.companyId}`}
-                    onClick={() => handleDrillCompany(Number(row.companyId))}
-                  >
-                    下钻
-                  </button>
+                  <TableActions
+                    actions={[
+                      {
+                        key: 'drill',
+                        label: '下钻',
+                        icon: <ArrowRightOutlined />,
+                        onClick: () => handleDrillCompany(Number(row.companyId)),
+                      },
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
@@ -241,18 +244,19 @@ export function ConsolidatePage() {
                           : '-'}
                       </td>
                       <td className="py-2">
-                        <button
-                          type="button"
-                          className="text-[var(--ams-primary)]"
-                          aria-label="下钻项目"
-                          onClick={() =>
-                            handleDrillProject(
-                              row.projectId == null ? null : Number(row.projectId),
-                            )
-                          }
-                        >
-                          查看资产
-                        </button>
+                        <TableActions
+                          actions={[
+                            {
+                              key: 'project',
+                              label: '查看资产',
+                              icon: <ArrowRightOutlined />,
+                              onClick: () =>
+                                handleDrillProject(
+                                  row.projectId == null ? null : Number(row.projectId),
+                                ),
+                            },
+                          ]}
+                        />
                       </td>
                     </>
                   ) : (

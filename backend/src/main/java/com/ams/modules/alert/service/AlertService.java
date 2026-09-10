@@ -16,6 +16,8 @@ import com.ams.modules.contract.entity.Contract;
 import com.ams.modules.contract.mapper.ContractMapper;
 import com.ams.modules.task.entity.Task;
 import com.ams.modules.task.service.TaskService;
+import com.ams.platform.security.RbacService;
+import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,6 +37,7 @@ public class AlertService {
     private final ContractMapper contractMapper;
     private final BillMapper billMapper;
     private final CertificateService certificateService;
+    private final RbacService rbacService;
 
     public AlertService(
             AlertRuleMapper ruleMapper,
@@ -42,20 +45,24 @@ public class AlertService {
             TaskService taskService,
             ContractMapper contractMapper,
             BillMapper billMapper,
-            CertificateService certificateService) {
+            CertificateService certificateService,
+            RbacService rbacService) {
         this.ruleMapper = ruleMapper;
         this.recordMapper = recordMapper;
         this.taskService = taskService;
         this.contractMapper = contractMapper;
         this.billMapper = billMapper;
         this.certificateService = certificateService;
+        this.rbacService = rbacService;
     }
 
     public List<AlertRule> listRules(String alertType) {
-        return ruleMapper.selectList(
-                new LambdaQueryWrapper<AlertRule>()
-                        .eq(alertType != null, AlertRule::getAlertType, alertType)
-                        .orderByAsc(AlertRule::getId));
+        LambdaQueryWrapper<AlertRule> wrapper = new LambdaQueryWrapper<AlertRule>()
+                .eq(alertType != null, AlertRule::getAlertType, alertType)
+                .orderByAsc(AlertRule::getId);
+        // 全局公司切换：预警规则按所属公司收敛
+        rbacService.applyCompanyScope(wrapper, SecurityUtils.current(), AlertRule::getCompanyId);
+        return ruleMapper.selectList(wrapper);
     }
 
     public AlertRule createRule(AlertRule rule) {
@@ -73,11 +80,13 @@ public class AlertService {
     }
 
     public List<AlertRecord> listRecords(String status, Long assigneeId) {
-        return recordMapper.selectList(
-                new LambdaQueryWrapper<AlertRecord>()
-                        .eq(status != null, AlertRecord::getStatus, status)
-                        .eq(assigneeId != null, AlertRecord::getAssigneeId, assigneeId)
-                        .orderByDesc(AlertRecord::getId));
+        LambdaQueryWrapper<AlertRecord> wrapper = new LambdaQueryWrapper<AlertRecord>()
+                .eq(status != null, AlertRecord::getStatus, status)
+                .eq(assigneeId != null, AlertRecord::getAssigneeId, assigneeId)
+                .orderByDesc(AlertRecord::getId);
+        // 全局公司切换：预警记录按所属公司收敛
+        rbacService.applyCompanyScope(wrapper, SecurityUtils.current(), AlertRecord::getCompanyId);
+        return recordMapper.selectList(wrapper);
     }
 
     @Transactional

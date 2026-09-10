@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { confirmDelete } from '@/lib/confirm';
+import { TableActions } from '@/components/TableActions';
 
 // ============================================================================
 // 系统字典：左侧模块 → 右侧字典 Tab → 字典项，支持对单个字典单独新增字典项
@@ -61,20 +62,35 @@ interface SysDictModule {
   types: SysDictType[];
 }
 
-/** 字典关联：字典挂接另一字典下的若干个字典值 */
+/**
+ * 字典关联：
+ *   sourceItemId 为空  → 字典级关联（整本字典挂接另一字典的若干个字典值，仅关联查询）
+ *   sourceItemId 非空  → 字典项级级联（父字典该项决定子字典可见项白名单）
+ */
 interface SysDictRelation {
   id: number;
   sourceTypeId: number;
+  sourceItemId?: number | null;
   targetTypeId: number;
   targetItemId: number;
   sort: number;
   status: number;
 }
 
-/** 关联编辑草稿：一个目标字典 + 选中的字典值 */
+/** 关联编辑草稿：父字典项（可空）+ 一个目标字典 + 选中的字典值 */
 interface RelationDraft {
+  sourceItemId?: number;
   targetTypeId?: number;
   itemIds: number[];
+}
+
+/** 关联只读展示：一组「父字典项 → 目标字典 → 字典值」 */
+interface RelationGroupView {
+  sourceItemId: number | null;
+  sourceItemLabel: string | null;
+  targetTypeId: number;
+  targetTypeName: string;
+  items: { value: string; label: string }[];
 }
 
 type EditorKind = 'module' | 'type' | 'item';
@@ -148,9 +164,7 @@ export function SystemDictionaryPage() {
   };
 
   // 关联查询：当前字典挂接的关联字典值（只读展示）
-  const [activeRelations, setActiveRelations] = useState<
-    { targetTypeName: string; items: { value: string; label: string }[] }[]
-  >([]);
+  const [activeRelations, setActiveRelations] = useState<RelationGroupView[]>([]);
 
   useEffect(() => {
     if (!activeTypeId) {
@@ -160,9 +174,9 @@ export function SystemDictionaryPage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const data = await api.get<{
-          groups: { targetTypeName: string; items: { value: string; label: string }[] }[];
-        }>(`/system/dict/relations/grouped?sourceTypeId=${activeTypeId}`);
+        const data = await api.get<{ groups: RelationGroupView[] }>(
+          `/system/dict/relations/grouped?sourceTypeId=${activeTypeId}`,
+        );
         if (!cancelled) setActiveRelations(data.groups ?? []);
       } catch {
         if (!cancelled) setActiveRelations([]);
@@ -192,13 +206,18 @@ export function SystemDictionaryPage() {
       const list = await api.get<SysDictRelation[]>(
         `/system/dict/relations?sourceTypeId=${sourceTypeId}`,
       );
-      const grouped = new Map<number, number[]>();
+      const grouped = new Map<string, RelationDraft>();
       list.forEach((r) => {
-        grouped.set(r.targetTypeId, [...(grouped.get(r.targetTypeId) ?? []), r.targetItemId]);
+        const key = `${r.sourceItemId ?? ''}|${r.targetTypeId}`;
+        const draft = grouped.get(key) ?? {
+          sourceItemId: r.sourceItemId ?? undefined,
+          targetTypeId: r.targetTypeId,
+          itemIds: [],
+        };
+        draft.itemIds.push(r.targetItemId);
+        grouped.set(key, draft);
       });
-      setRelationDrafts(
-        [...grouped.entries()].map(([targetTypeId, itemIds]) => ({ targetTypeId, itemIds })),
-      );
+      setRelationDrafts([...grouped.values()]);
     } catch (e) {
       setRelationDrafts([]);
       message.error(e instanceof Error ? e.message : '加载字典关联失败');
@@ -214,7 +233,11 @@ export function SystemDictionaryPage() {
   const saveRelations = async (sourceTypeId: number, force: boolean) => {
     const groups = relationDrafts
       .filter((d) => d.targetTypeId && d.itemIds.length > 0)
-      .map((d) => ({ targetTypeId: d.targetTypeId, itemIds: d.itemIds }));
+      .map((d) => ({
+        sourceItemId: d.sourceItemId,
+        targetTypeId: d.targetTypeId,
+        itemIds: d.itemIds,
+      }));
     if (!force && relationDrafts.length === 0) return;
     await api.put('/system/dict/relations', { sourceTypeId, groups });
   };
@@ -373,15 +396,27 @@ export function SystemDictionaryPage() {
     {
       title: '操作',
       key: '_actions',
-      width: 130,
+      width: 150,
       fixed: 'right',
       render: (_, row) => (
-        <Space size="middle">
-          <a onClick={() => openEditor('item', row)}>编辑</a>
-          <a className="text-red-500" onClick={() => handleDeleteItem(row)}>
-            删除
-          </a>
-        </Space>
+        <TableActions
+          actions={[
+            {
+              key: 'edit',
+              label: '编辑',
+              icon: <EditOutlined />,
+              onClick: () => openEditor('item', row),
+            },
+            {
+              key: 'delete',
+              label: '删除',
+              icon: <DeleteOutlined />,
+              danger: true,
+              onClick: () => handleDeleteItem(row),
+            },
+          ]}
+          max={2}
+        />
       ),
     },
   ];
@@ -554,15 +589,17 @@ export function SystemDictionaryPage() {
 
                       {activeRelations.length > 0 && (
                         <div className="mb-3 rounded border border-blue-100 bg-blue-50/40 p-2 text-xs">
-                          <div className="text-gray-400 mb-1">关联字典值</div>
+                          <div className="text-gray-400 mb-1">
+                            关联字典值（带字典项的为级联规则，决定子字典下拉可见项）
+                          </div>
                           <div className="space-y-1">
                             {activeRelations.map((group) => (
                               <div
-                                key={group.targetTypeName}
+                                key={`${group.sourceItemId ?? 'all'}-${group.targetTypeId}`}
                                 className="flex flex-wrap items-center gap-1"
                               >
                                 <span className="text-gray-500 shrink-0">
-                                  {group.targetTypeName}：
+                                  {group.sourceItemLabel ?? '整本字典'} → {group.targetTypeName}：
                                 </span>
                                 {group.items.map((item) => (
                                   <Tag key={item.value} className="m-0">
@@ -606,7 +643,10 @@ export function SystemDictionaryPage() {
         confirmLoading={submitting}
         destroyOnHidden
         centered
-        width={Math.min(520, typeof window !== 'undefined' ? window.innerWidth - 32 : 520)}
+        width={Math.min(
+          editorKind === 'type' ? 780 : 520,
+          typeof window !== 'undefined' ? window.innerWidth - 32 : 780,
+        )}
       >
         <Form form={form} layout="vertical" className="mt-2">
           {editorKind !== 'item' && (
@@ -644,21 +684,31 @@ export function SystemDictionaryPage() {
             <div className="border-t border-[var(--ams-border)] pt-3 mt-1">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-gray-700">关联字典值</div>
+                  <div className="text-sm font-medium text-gray-700">关联字典值 / 级联规则</div>
                   <div className="text-xs text-gray-400 mt-0.5">
-                    挂接其他字典下的部分字典值，用于关联查询（不参与提交校验）
+                    选择「字典项」时表示级联规则：父字典该项决定子字典下拉的可见项；
+                    不选「字典项」则表示整本字典挂接，仅用于关联查询
                   </div>
                 </div>
                 <Button
                   size="small"
                   icon={<PlusOutlined />}
                   onClick={() =>
-                    setRelationDrafts((prev) => [...prev, { targetTypeId: undefined, itemIds: [] }])
+                    setRelationDrafts((prev) => [
+                      ...prev,
+                      { sourceItemId: undefined, targetTypeId: undefined, itemIds: [] },
+                    ])
                   }
                 >
-                  添加关联字典
+                  添加关联
                 </Button>
               </div>
+
+              {editorKind === 'type' && !editing && (
+                <div className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded px-2 py-1.5 mb-2">
+                  新建字典尚无字典项，保存后重新打开即可按字典项配置级联规则
+                </div>
+              )}
 
               {relationLoading ? (
                 <div className="py-4 text-center text-xs text-gray-400">加载中…</div>
@@ -672,12 +722,30 @@ export function SystemDictionaryPage() {
                     const options = itemsOfType(draft.targetTypeId);
                     return (
                       <div
-                        key={`${index}-${draft.targetTypeId ?? 'new'}`}
+                        key={`${index}-${draft.sourceItemId ?? 'all'}-${draft.targetTypeId ?? 'new'}`}
                         className="rounded border border-gray-100 bg-gray-50/60 p-2"
                       >
                         <div className="flex items-start gap-2">
                           <Select
-                            className="!w-[46%] shrink-0"
+                            className="!w-[26%] shrink-0"
+                            value={draft.sourceItemId}
+                            allowClear
+                            disabled={!editing}
+                            showSearch
+                            optionFilterProp="label"
+                            placeholder="整本字典"
+                            options={(editing as SysDictType | null)?.items?.map((item) => ({
+                              value: item.id,
+                              label: item.label,
+                            }))}
+                            onChange={(v?: number) =>
+                              setRelationDrafts((prev) =>
+                                prev.map((d, i) => (i === index ? { ...d, sourceItemId: v } : d)),
+                              )
+                            }
+                          />
+                          <Select
+                            className="!w-[32%] shrink-0"
                             value={draft.targetTypeId}
                             showSearch
                             optionFilterProp="label"
@@ -688,7 +756,7 @@ export function SystemDictionaryPage() {
                             onChange={(v: number) =>
                               setRelationDrafts((prev) =>
                                 prev.map((d, i) =>
-                                  i === index ? { targetTypeId: v, itemIds: [] } : d,
+                                  i === index ? { ...d, targetTypeId: v, itemIds: [] } : d,
                                 ),
                               )
                             }
@@ -715,7 +783,7 @@ export function SystemDictionaryPage() {
                             danger
                             type="text"
                             icon={<DeleteOutlined />}
-                            aria-label="移除关联字典"
+                            aria-label="移除关联"
                             onClick={() =>
                               setRelationDrafts((prev) => prev.filter((_, i) => i !== index))
                             }

@@ -6,6 +6,7 @@ import com.ams.modules.system.entity.FileMetadata;
 import com.ams.modules.system.mapper.FileMetadataMapper;
 import com.ams.platform.security.SecurityUtils;
 import com.ams.platform.storage.ObjectStorageClient;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.DigestInputStream;
@@ -73,6 +74,20 @@ public class FileService {
             throw new AppException(ErrorCode.NOT_FOUND, "文件不存在");
         }
         return meta;
+    }
+
+    /**
+     * 按对象键查元数据（公开对象访问用）。
+     *
+     * <p>对象键含随机 UUID，属不可猜的能力型路径；查不到时返回 null 由调用方转 404，
+     * 不抛业务异常，避免把「键是否存在」暴露成可探测的差异化响应。
+     */
+    public FileMetadata findByObjectKey(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            return null;
+        }
+        return fileMetadataMapper.selectOne(
+                new LambdaQueryWrapper<FileMetadata>().eq(FileMetadata::getObjectKey, objectKey));
     }
 
     public Map<String, Object> toView(FileMetadata meta) {

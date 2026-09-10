@@ -7,6 +7,7 @@ import com.ams.modules.config.service.ConfigVersionService;
 import com.ams.modules.notification.service.NotificationService;
 import com.ams.modules.task.entity.Task;
 import com.ams.modules.task.mapper.TaskMapper;
+import com.ams.platform.security.RbacService;
 import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -25,14 +26,17 @@ public class TaskService {
     private final TaskMapper taskMapper;
     private final NotificationService notificationService;
     private final ConfigVersionService configVersionService;
+    private final RbacService rbacService;
 
     public TaskService(
             TaskMapper taskMapper,
             NotificationService notificationService,
-            ConfigVersionService configVersionService) {
+            ConfigVersionService configVersionService,
+            RbacService rbacService) {
         this.taskMapper = taskMapper;
         this.notificationService = notificationService;
         this.configVersionService = configVersionService;
+        this.rbacService = rbacService;
     }
 
     public PageResult<Task> page(long page, long pageSize, String scope, String status,
@@ -44,6 +48,8 @@ public class TaskService {
                 .eq(taskType != null, Task::getTaskType, taskType)
                 .eq(companyId != null, Task::getCompanyId, companyId)
                 .orderByDesc(Task::getId);
+        // 全局公司切换：任务按所属公司收敛
+        rbacService.applyCompanyScope(wrapper, SecurityUtils.current(), Task::getCompanyId);
         Page<Task> result = taskMapper.selectPage(new Page<>(page, pageSize), wrapper);
         return PageResult.of(result.getRecords(), result.getTotal(), page, pageSize);
     }

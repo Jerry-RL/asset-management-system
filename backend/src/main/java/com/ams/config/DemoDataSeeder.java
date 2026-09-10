@@ -121,6 +121,11 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DemoDataSeeder.class);
 
+    /** 组织架构种子结果：后续业务数据（项目、资产、合同等）需要引用的关键节点。 */
+    private record OrgSeed(Company group, Company sub, Department assetDept, Department financeDept,
+            User admin) {
+    }
+
     private final CompanyMapper companyMapper;
     private final DepartmentMapper departmentMapper;
     private final UserMapper userMapper;
@@ -264,26 +269,18 @@ public class DemoDataSeeder implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         if (companyMapper.selectCount(null) > 0) {
-            log.info("[demo] 演示数据已存在，尝试补齐淮安资产地图坐标");
+            log.info("[demo] 演示数据已存在，补齐组织架构与淮安资产地图坐标");
+            seedOrganizationData();
             enrichHuaiAnMapDataIfNeeded();
             return;
         }
         log.info("[demo] 开始初始化演示数据（淮安市原型）…");
 
-        // 1. 组织与用户
-        Company group = company("淮安市国资集团", null, "group");
-        Company sub = company("淮安城投资产管理有限公司", group.getId(), "subsidiary");
-        Department assetDept = department(sub.getId(), "资产管理部");
-        Department financeDept = department(sub.getId(), "财务部");
-        // 工作端 / PC：员工账号（同名密码 admin123；手机号供工作端微信绑定）
-        User admin = user("admin", "系统管理员", "13900000001", sub.getId(), assetDept.getId(), "super_admin");
-        user("operator", "运营管理员", "13900000002", sub.getId(), assetDept.getId(), "operator");
-        user("assetmgr", "资产管理员", "13900000003", sub.getId(), assetDept.getId(), "asset_mgr");
-        user("finance", "财务人员", "13900000004", sub.getId(), financeDept.getId(), "finance");
-        user("leader", "决策层领导", "13900000005", sub.getId(), assetDept.getId(), "leader");
-        user("maintenance", "维修管理员", "13900000006", sub.getId(), assetDept.getId(), "maintenance");
-        user("approver", "审批人员", "13900000007", sub.getId(), assetDept.getId(), "approver");
-        user("clerk", "办事员", "13900000008", sub.getId(), assetDept.getId(), "clerk");
+        // 1. 组织与用户（公司树 → 部门树 → 员工，详见 seedOrganizationData）
+        OrgSeed org = seedOrganizationData();
+        Company group = org.group();
+        Company sub = org.sub();
+        User admin = org.admin();
 
         // 2. 项目与资产（淮安多区县落点，覆盖主要租控状态）
         Project qingjiangpu = project(sub.getId(), "清江浦智慧产业园",
@@ -431,6 +428,313 @@ public class DemoDataSeeder implements ApplicationRunner {
     }
 
     /**
+     * 组织架构种子：母公司 → 一级/二级子公司 → 部门（含多级子部门）→ 员工。
+     *
+     * <p>幂等：公司按名称、部门按「公司 + 名称」、员工按账号查找，存在则复用（仅补空字段），
+     * 不存在才创建；因此既可用于全新演示库，也可为既有演示库补齐组织架构。
+     *
+     * @return 后续业务数据（项目、资产、合同等）需要引用的关键节点
+     */
+    private OrgSeed seedOrganizationData() {
+        // ---- 公司树：母公司 → 一级子公司 → 二级子公司 ----
+        Company group = ensureCompany("淮安市国资集团", null, "group", "市国资集团",
+                "江苏省淮安市清江浦区翔宇中道88号", "0517-83000000", 1);
+        Company sub = ensureCompany("淮安城投资产管理有限公司", group.getId(), "subsidiary", "城投资管",
+                "江苏省淮安市清江浦区枚乘东路88号", "0517-83100000", 1);
+        Company commercial = ensureCompany("淮安城投商业运营有限公司", sub.getId(), "subsidiary", "城投商运",
+                "江苏省淮安市清江浦区枚乘东路88号10楼", "0517-83110000", 1);
+        Company property = ensureCompany("淮安城投物业服务有限公司", sub.getId(), "subsidiary", "城投物业",
+                "江苏省淮安市清江浦区枚乘东路88号附楼", "0517-83120000", 2);
+        Company traffic = ensureCompany("淮安交通产业集团有限公司", group.getId(), "subsidiary", "交通集团",
+                "江苏省淮安市清江浦区淮海北路88号", "0517-83200000", 2);
+        Company bus = ensureCompany("淮安公交场站运营有限公司", traffic.getId(), "subsidiary", "公交场站",
+                "江苏省淮安市清江浦区北京南路66号", "0517-83210000", 1);
+        Company culture = ensureCompany("淮安文旅发展集团有限公司", group.getId(), "subsidiary", "文旅集团",
+                "江苏省淮安市淮安区镇淮楼东路16号", "0517-83300000", 3);
+        Company ancient = ensureCompany("楚州古城文旅运营有限公司", culture.getId(), "subsidiary", "古城文旅",
+                "江苏省淮安市淮安区河下古镇竹巷18号", "0517-83310000", 1);
+        Company water = ensureCompany("淮安水务集团有限公司", group.getId(), "subsidiary", "水务集团",
+                "江苏省淮安市清江浦区水渡口大道1号", "0517-83400000", 4);
+        ensureCompany("淮安自来水有限公司", water.getId(), "subsidiary", "自来水公司",
+                "江苏省淮安市清江浦区水渡口大道1号", "0517-83410000", 1);
+        Company industry = ensureCompany("淮安产业投资发展有限公司", group.getId(), "subsidiary", "产业投资",
+                "江苏省淮安市经济技术开发区富强路66号", "0517-83500000", 5);
+        ensureCompany("淮安园区运营管理有限公司", industry.getId(), "subsidiary", "园区运营",
+                "江苏省淮安市经济技术开发区富强路66号", "0517-83510000", 1);
+
+        // ---- 部门树：集团本部 ----
+        Department groupOffice = ensureDepartment(group.getId(), null, "集团办公室", null, 1,
+                "负责集团行政、文秘与会务");
+        Department groupStrategy = ensureDepartment(group.getId(), null, "战略投资部", null, 2,
+                "负责集团战略规划与重大投资");
+        ensureDepartment(group.getId(), null, "财务审计部", null, 3, "负责集团财务与内部审计");
+
+        // ---- 部门树：城投资管总部（多级子部门） ----
+        Department assetDept = ensureDepartment(sub.getId(), null, "资产管理部", "asset_department", 1,
+                "统筹土地、房产等资产的全生命周期管理");
+        Department assetGroup1 = ensureDepartment(sub.getId(), assetDept.getId(), "资产一组", null, 1,
+                "负责清江浦片区资产经营");
+        Department assetGroup2 = ensureDepartment(sub.getId(), assetDept.getId(), "资产二组", null, 2,
+                "负责淮安区、淮阴区片区资产经营");
+        ensureDepartment(sub.getId(), assetDept.getId(), "资产档案室", null, 3, "负责权证与合同档案归集");
+
+        Department financeDept = ensureDepartment(sub.getId(), null, "财务部", "asset_department", 2,
+                "负责资金结算、票据与财务报表");
+        ensureDepartment(sub.getId(), financeDept.getId(), "预算管理中心", null, 1, "负责预算编制与执行监控");
+        ensureDepartment(sub.getId(), financeDept.getId(), "资金结算中心", null, 2, "负责收付款与银行对账");
+
+        Department opsDept = ensureDepartment(sub.getId(), null, "运营管理部", null, 3,
+                "负责租赁运营、招商与客户服务");
+        Department investDept = ensureDepartment(sub.getId(), null, "投资发展部", null, 4,
+                "负责项目投资论证与投后管理");
+        Department engDept = ensureDepartment(sub.getId(), null, "工程管理部", null, 5,
+                "负责工程改造与维修管理");
+        Department legalDept = ensureDepartment(sub.getId(), null, "法务风控部", null, 6,
+                "负责合同审查与合规风控");
+        ensureDepartment(sub.getId(), null, "审计监察部", null, 7, "负责内控审计与监督");
+        ensureDepartment(sub.getId(), null, "综合办公室", null, 8, "负责行政后勤与对外联络");
+        Department hrDept = ensureDepartment(sub.getId(), null, "人力资源部", null, 9,
+                "负责招聘、培训与绩效考核");
+        Department itDept = ensureDepartment(sub.getId(), null, "信息技术部", null, 10,
+                "负责系统运维与数据治理");
+
+        // ---- 部门树：二级子公司 ----
+        Department commercialInvest = ensureDepartment(commercial.getId(), null, "招商一部", null, 1,
+                "负责沿街商铺与商业体招商");
+        ensureDepartment(commercial.getId(), null, "招商二部", null, 2, "负责综合体与写字楼招商");
+        ensureDepartment(commercial.getId(), null, "商业运营部", null, 3, "负责已签约商户运营");
+        ensureDepartment(commercial.getId(), null, "综合管理部", null, 4, "负责公司行政与人事");
+
+        Department propertyEng = ensureDepartment(property.getId(), null, "工程维修部", null, 2,
+                "负责房屋与设备设施维修");
+        ensureDepartment(property.getId(), null, "物业客服部", null, 1, "负责租户与业主服务");
+        ensureDepartment(property.getId(), null, "环境管理部", null, 3, "负责保洁与绿化");
+        ensureDepartment(property.getId(), null, "秩序维护部", null, 4, "负责安保与消防");
+
+        Department trafficAsset = ensureDepartment(traffic.getId(), null, "资产管理部", null, 2,
+                "负责交通类资产的登记与经营");
+        ensureDepartment(traffic.getId(), null, "综合办公室", null, 1, "负责公司行政与人事");
+        ensureDepartment(traffic.getId(), null, "运营调度部", null, 3, "负责场站运营调度");
+
+        ensureDepartment(bus.getId(), null, "场站管理部", null, 1, "负责公交场站日常管理");
+        ensureDepartment(bus.getId(), null, "安全管理部", null, 2, "负责安全生产与应急");
+
+        Department cultureMarket = ensureDepartment(culture.getId(), null, "市场推广部", null, 1,
+                "负责文旅品牌与市场推广");
+        ensureDepartment(culture.getId(), null, "景区运营部", null, 2, "负责景区日常运营");
+        ensureDepartment(culture.getId(), null, "综合办公室", null, 3, "负责公司行政与人事");
+
+        ensureDepartment(ancient.getId(), null, "古城运营部", null, 1, "负责古城街区运营");
+        ensureDepartment(ancient.getId(), null, "讲解服务部", null, 2, "负责游客讲解与接待");
+
+        Department waterProduce = ensureDepartment(water.getId(), null, "生产运营部", null, 1,
+                "负责供水生产调度");
+        ensureDepartment(water.getId(), null, "客户服务部", null, 2, "负责用水报装与客服");
+        ensureDepartment(water.getId(), null, "管网维护部", null, 3, "负责管网巡查与维护");
+
+        Department industryInvest = ensureDepartment(industry.getId(), null, "投资管理部", null, 1,
+                "负责产业项目投资管理");
+        ensureDepartment(industry.getId(), null, "园区管理部", null, 2, "负责园区资产运营");
+        ensureDepartment(industry.getId(), null, "综合办公室", null, 3, "负责公司行政与人事");
+
+        // ---- 员工：集团本部 / 城投资管总部 ----
+        // 工作端 / PC：员工账号（同一密码 admin123；手机号供工作端微信绑定）
+        User admin = ensureOrgUser("admin", "系统管理员", "13900000001", sub.getId(), assetDept.getId(), "super_admin");
+        User assetmgr = ensureOrgUser("assetmgr", "资产管理员", "13900000003", sub.getId(), assetDept.getId(), "asset_mgr");
+        User finance = ensureOrgUser("finance", "财务人员", "13900000004", sub.getId(), financeDept.getId(), "finance");
+        ensureOrgUser("operator", "运营管理员", "13900000002", sub.getId(), opsDept.getId(), "operator");
+        ensureOrgUser("leader", "决策层领导", "13900000005", sub.getId(), assetDept.getId(), "leader");
+        ensureOrgUser("maintenance", "维修管理员", "13900000006", sub.getId(), engDept.getId(), "maintenance");
+        ensureOrgUser("approver", "审批人员", "13900000007", sub.getId(), legalDept.getId(), "approver");
+        ensureOrgUser("clerk", "办事员", "13900000008", sub.getId(), assetDept.getId(), "clerk");
+
+        ensureOrgUser("chairman", "集团董事长", "13900000010", group.getId(), groupStrategy.getId(), "leader");
+        ensureOrgUser("groupoffice", "集团办公室主任", "13900000011", group.getId(), groupOffice.getId(), "clerk");
+
+        User asset1 = ensureOrgUser("asset01", "王建国", "13900000101", sub.getId(), assetGroup1.getId(), "asset_mgr");
+        User asset2 = ensureOrgUser("asset02", "李秀兰", "13900000102", sub.getId(), assetGroup2.getId(), "asset_mgr");
+        ensureOrgUser("asset03", "张伟", "13900000103", sub.getId(), assetGroup1.getId(), "clerk");
+        User ops1 = ensureOrgUser("ops01", "刘敏", "13900000104", sub.getId(), opsDept.getId(), "operator");
+        ensureOrgUser("ops02", "陈晓东", "13900000105", sub.getId(), opsDept.getId(), "operator");
+        User invest1 = ensureOrgUser("invest01", "赵鹏", "13900000106", sub.getId(), investDept.getId(), "operator");
+        User eng1 = ensureOrgUser("eng01", "孙浩", "13900000107", sub.getId(), engDept.getId(), "maintenance");
+        ensureOrgUser("eng02", "周强", "13900000108", sub.getId(), engDept.getId(), "maintenance");
+        User legal1 = ensureOrgUser("legal01", "吴静", "13900000109", sub.getId(), legalDept.getId(), "approver");
+        ensureOrgUser("audit01", "郑丽", "13900000110", sub.getId(), legalDept.getId(), "approver");
+        ensureOrgUser("office01", "冯磊", "13900000111", sub.getId(), assetDept.getId(), "clerk");
+        User hr1 = ensureOrgUser("hr01", "何芳", "13900000112", sub.getId(), hrDept.getId(), "clerk");
+        User it1 = ensureOrgUser("it01", "许峰", "13900000113", sub.getId(), itDept.getId(), "operator");
+        ensureOrgUser("budget01", "秦悦", "13900000114", sub.getId(), financeDept.getId(), "finance");
+
+        // ---- 员工：二级子公司 ----
+        User commercial1 = ensureOrgUser("commercial01", "高翔", "13900000115",
+                commercial.getId(), commercialInvest.getId(), "operator");
+        ensureOrgUser("commercial02", "林娟", "13900000116", commercial.getId(), commercialInvest.getId(), "operator");
+        ensureOrgUser("commercial03", "邵磊", "13900000117", commercial.getId(), commercialInvest.getId(), "asset_mgr");
+        User property1 = ensureOrgUser("property01", "曹明", "13900000118",
+                property.getId(), propertyEng.getId(), "maintenance");
+        ensureOrgUser("property02", "邓红", "13900000119", property.getId(), propertyEng.getId(), "clerk");
+        User traffic1 = ensureOrgUser("traffic01", "谢军", "13900000120",
+                traffic.getId(), trafficAsset.getId(), "asset_mgr");
+        ensureOrgUser("bus01", "韩雪", "13900000121", bus.getId(), null, "operator");
+        User culture1 = ensureOrgUser("culture01", "唐勇", "13900000122",
+                culture.getId(), cultureMarket.getId(), "operator");
+        ensureOrgUser("culture02", "罗霞", "13900000123", culture.getId(), cultureMarket.getId(), "operator");
+        User water1 = ensureOrgUser("water01", "彭涛", "13900000124",
+                water.getId(), waterProduce.getId(), "maintenance");
+        ensureOrgUser("water02", "蒋玲", "13900000125", water.getId(), waterProduce.getId(), "clerk");
+        User industry1 = ensureOrgUser("industry01", "于洋", "13900000126",
+                industry.getId(), industryInvest.getId(), "operator");
+        ensureOrgUser("industry02", "崔娜", "13900000127", industry.getId(), industryInvest.getId(), "asset_mgr");
+
+        // ---- 部门负责人（挂关键岗位，便于图谱展示负责人关系） ----
+        setDeptLeader(assetDept.getId(), assetmgr.getId());
+        setDeptLeader(assetGroup1.getId(), asset1.getId());
+        setDeptLeader(assetGroup2.getId(), asset2.getId());
+        setDeptLeader(financeDept.getId(), finance.getId());
+        setDeptLeader(opsDept.getId(), ops1.getId());
+        setDeptLeader(investDept.getId(), invest1.getId());
+        setDeptLeader(engDept.getId(), eng1.getId());
+        setDeptLeader(legalDept.getId(), legal1.getId());
+        setDeptLeader(hrDept.getId(), hr1.getId());
+        setDeptLeader(itDept.getId(), it1.getId());
+        setDeptLeader(commercialInvest.getId(), commercial1.getId());
+        setDeptLeader(propertyEng.getId(), property1.getId());
+        setDeptLeader(trafficAsset.getId(), traffic1.getId());
+        setDeptLeader(cultureMarket.getId(), culture1.getId());
+        setDeptLeader(waterProduce.getId(), water1.getId());
+        setDeptLeader(industryInvest.getId(), industry1.getId());
+
+        log.info("[demo] 组织架构初始化完成：公司 {} 家、部门 {} 个、员工 {} 人（统一密码 admin123）",
+                companyMapper.selectCount(null), departmentMapper.selectCount(null),
+                userMapper.selectCount(null));
+        return new OrgSeed(group, sub, assetDept, financeDept, admin);
+    }
+
+    /** 公司：按名称幂等创建，存在则仅补空字段（简称/地址/电话/类型/排序/上级）。 */
+    private Company ensureCompany(String name, Long parentId, String type, String shortName,
+            String address, String phone, int sort) {
+        Company existing = companyMapper.selectOne(
+                new LambdaQueryWrapper<Company>().eq(Company::getName, name).last("LIMIT 1"));
+        if (existing != null) {
+            boolean dirty = false;
+            if (existing.getParentId() == null && parentId != null) {
+                existing.setParentId(parentId);
+                dirty = true;
+            }
+            if (existing.getCompanyType() == null && type != null) {
+                existing.setCompanyType(type);
+                dirty = true;
+            }
+            if (existing.getShortName() == null && shortName != null) {
+                existing.setShortName(shortName);
+                dirty = true;
+            }
+            if (existing.getAddress() == null && address != null) {
+                existing.setAddress(address);
+                dirty = true;
+            }
+            if (existing.getPhone() == null && phone != null) {
+                existing.setPhone(phone);
+                dirty = true;
+            }
+            if (existing.getSort() == null) {
+                existing.setSort(sort);
+                dirty = true;
+            }
+            if (dirty) {
+                companyMapper.updateById(existing);
+            }
+            return existing;
+        }
+        Company c = new Company();
+        c.setName(name);
+        c.setParentId(parentId);
+        c.setCompanyType(type);
+        c.setShortName(shortName);
+        c.setAddress(address);
+        c.setPhone(phone);
+        c.setSort(sort);
+        c.setStatus(1);
+        companyMapper.insert(c);
+        return c;
+    }
+
+    /** 部门：按「公司 + 名称」幂等创建，存在则仅补空字段（上级/类型/备注）。 */
+    private Department ensureDepartment(Long companyId, Long parentId, String name, String type,
+            int sort, String remark) {
+        Department existing = departmentMapper.selectOne(new LambdaQueryWrapper<Department>()
+                .eq(Department::getCompanyId, companyId)
+                .eq(Department::getName, name)
+                .last("LIMIT 1"));
+        if (existing != null) {
+            boolean dirty = false;
+            if (existing.getParentId() == null && parentId != null) {
+                existing.setParentId(parentId);
+                dirty = true;
+            }
+            if (existing.getType() == null && type != null) {
+                existing.setType(type);
+                dirty = true;
+            }
+            if (existing.getRemark() == null && remark != null) {
+                existing.setRemark(remark);
+                dirty = true;
+            }
+            if (dirty) {
+                departmentMapper.updateById(existing);
+            }
+            return existing;
+        }
+        Department d = new Department();
+        d.setCompanyId(companyId);
+        d.setParentId(parentId);
+        d.setName(name);
+        d.setType(type);
+        d.setSort(sort);
+        d.setRemark(remark);
+        d.setStatus(1);
+        departmentMapper.insert(d);
+        return d;
+    }
+
+    /** 员工：按账号幂等创建，存在则仅补空字段（公司/部门）。 */
+    private User ensureOrgUser(String username, String name, String phone, Long companyId,
+            Long deptId, String roleCode) {
+        User existing = userMapper.selectOne(
+                new LambdaQueryWrapper<User>().eq(User::getUsername, username).last("LIMIT 1"));
+        if (existing != null) {
+            boolean dirty = false;
+            if (existing.getCompanyId() == null && companyId != null) {
+                existing.setCompanyId(companyId);
+                dirty = true;
+            }
+            if (existing.getDepartmentId() == null && deptId != null) {
+                existing.setDepartmentId(deptId);
+                dirty = true;
+            }
+            if (dirty) {
+                userMapper.updateById(existing);
+            }
+            return existing;
+        }
+        return user(username, name, phone, companyId, deptId, roleCode);
+    }
+
+    /** 设置部门负责人（已有负责人时不覆盖）。 */
+    private void setDeptLeader(Long deptId, Long leaderId) {
+        if (deptId == null || leaderId == null) {
+            return;
+        }
+        Department d = departmentMapper.selectById(deptId);
+        if (d == null || d.getLeaderId() != null) {
+            return;
+        }
+        d.setLeaderId(leaderId);
+        departmentMapper.updateById(d);
+    }
+
+    /**
      * 已有演示库但资产无经纬度时，按淮安市原型补齐地图点位（不破坏业务演示数据）。
      */
     private void enrichHuaiAnMapDataIfNeeded() {
@@ -440,10 +744,14 @@ public class DemoDataSeeder implements ApplicationRunner {
             log.info("[demo] 资产地图坐标已存在（{} 条），跳过补齐", withCoords);
             return;
         }
-        Company company = companyMapper.selectOne(
-                new LambdaQueryWrapper<Company>().eq(Company::getCompanyType, "subsidiary").last("LIMIT 1"));
+        // 固定取最早创建的子公司（城投资管），避免因新增子公司导致地图点位挂错公司
+        Company company = companyMapper.selectOne(new LambdaQueryWrapper<Company>()
+                .eq(Company::getCompanyType, "subsidiary")
+                .orderByAsc(Company::getId)
+                .last("LIMIT 1"));
         if (company == null) {
-            company = companyMapper.selectOne(new LambdaQueryWrapper<Company>().last("LIMIT 1"));
+            company = companyMapper.selectOne(
+                    new LambdaQueryWrapper<Company>().orderByAsc(Company::getId).last("LIMIT 1"));
         }
         if (company == null) {
             log.warn("[demo] 未找到公司，无法补齐淮安地图数据");
@@ -568,25 +876,6 @@ public class DemoDataSeeder implements ApplicationRunner {
     }
 
     // ===== 构造辅助方法 =====
-
-    private Company company(String name, Long parentId, String type) {
-        Company c = new Company();
-        c.setName(name);
-        c.setParentId(parentId);
-        c.setCompanyType(type);
-        c.setStatus(1);
-        companyMapper.insert(c);
-        return c;
-    }
-
-    private Department department(Long companyId, String name) {
-        Department d = new Department();
-        d.setCompanyId(companyId);
-        d.setName(name);
-        d.setStatus(1);
-        departmentMapper.insert(d);
-        return d;
-    }
 
     private User user(String username, String name, String phone, Long companyId, Long deptId,
             String roleCode) {

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Space, Table, Tag, message } from 'antd';
+import { Button, Card, Table, Tag, message } from 'antd';
 import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { AGENT_REPORT_STATUS, enumLabel } from '@/lib/labels';
+import { TableActions } from '@/components/TableActions';
 
 interface AgentReport {
   id: number;
@@ -103,18 +104,18 @@ export function AgentReportsPage() {
               key: 'actions',
               width: 140,
               render: (_: unknown, row: AgentReport) => (
-                <Space>
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<DownloadOutlined />}
-                    disabled={!row.verified}
-                    aria-label="下载 HTML"
-                    onClick={() => handleDownload(row.id)}
-                  >
-                    下载 HTML
-                  </Button>
-                </Space>
+                <TableActions
+                  actions={[
+                    {
+                      key: 'download',
+                      label: '下载 HTML',
+                      icon: <DownloadOutlined />,
+                      disabled: !row.verified,
+                      onClick: () => handleDownload(row.id),
+                    },
+                  ]}
+                  max={2}
+                />
               ),
             },
           ]}
