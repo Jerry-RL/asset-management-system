@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Empty, Select, Space, Spin, Tag, Tooltip, message } from 'antd';
+import type { ReactNode } from 'react';
+import { Alert, Button, Empty, Radio, Select, Space, Spin, Tag, Tooltip, Tree, message } from 'antd';
 import {
   ApartmentOutlined,
   ExpandOutlined,
@@ -65,6 +66,23 @@ const DEPTH_OPTIONS = [
   { value: 3, label: '公司 + 部门 + 员工' },
 ];
 
+const VIEW_OPTIONS = [
+  { value: 'graph', label: '图谱' },
+  { value: 'tree', label: '树形' },
+];
+
+const LAYOUT_OPTIONS = [
+  { value: 'TB', label: '纵向' },
+  { value: 'LR', label: '横向' },
+];
+
+/** 树形视图节点 */
+interface OrgTreeNode {
+  key: string;
+  title: ReactNode;
+  children?: OrgTreeNode[];
+}
+
 const formatTime = (value: unknown) => {
   if (!value) return '-';
   const text = String(value);
@@ -81,6 +99,10 @@ export function OrgStructurePage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [rootId, setRootId] = useState<number | undefined>(undefined);
   const [depth, setDepth] = useState<number>(3);
+  /** 视图模式：G6 画布图谱 / 树形嵌套 */
+  const [viewMode, setViewMode] = useState<'graph' | 'tree'>('graph');
+  /** 图谱布局方向：纵向（上→下）/ 横向（左→右） */
+  const [layoutDir, setLayoutDir] = useState<'TB' | 'LR'>('TB');
   const [graphData, setGraphData] = useState<OrgGraph | null>(null);
   const [loading, setLoading] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -130,10 +152,56 @@ export function OrgStructurePage() {
     return map;
   }, [graphData]);
 
+  /** 树形视图数据：由 parentId 组装，带环保护 */
+  const treeData = useMemo<OrgTreeNode[]>(() => {
+    if (!graphData) return [];
+    const ids = new Set(graphData.nodes.map((n) => n.id));
+    const childrenOf = new Map<string, OrgGraphNode[]>();
+    graphData.nodes.forEach((n) => {
+      if (n.parentId && ids.has(n.parentId)) {
+        childrenOf.set(n.parentId, [...(childrenOf.get(n.parentId) ?? []), n]);
+      }
+    });
+
+    const titleOf = (node: OrgGraphNode): ReactNode => (
+      <span className="inline-flex items-center gap-2 min-w-0">
+        <Tag color={NODE_META[node.nodeType]?.color} className="m-0 shrink-0">
+          {NODE_META[node.nodeType]?.label ?? node.nodeType}
+        </Tag>
+        <span className="truncate font-medium text-gray-800">{node.name}</span>
+        {node.subtitle && (
+          <span className="text-xs text-gray-400 truncate">{node.subtitle}</span>
+        )}
+        {node.status === 0 && (
+          <Tag color="default" className="m-0 shrink-0">
+            已停用
+          </Tag>
+        )}
+      </span>
+    );
+
+    const build = (node: OrgGraphNode, visited: Set<string>): OrgTreeNode => {
+      visited.add(node.id);
+      const children = (childrenOf.get(node.id) ?? [])
+        .filter((child) => !visited.has(child.id))
+        .map((child) => build(child, new Set(visited)));
+      return {
+        key: node.id,
+        title: titleOf(node),
+        children: children.length > 0 ? children : undefined,
+      };
+    };
+
+    return graphData.nodes
+      .filter((n) => !n.parentId || !ids.has(n.parentId))
+      .map((n) => build(n, new Set<string>()));
+  }, [graphData]);
+
   // ---- G6 渲染 ----
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !graphData) return;
+    // 树形视图下容器不挂载，跳过渲染
+    if (viewMode !== 'graph' || !container || !graphData) return;
 
     // 销毁上一次实例，避免残留画布
     if (graphRef.current) {
@@ -194,7 +262,7 @@ export function OrgStructurePage() {
         },
         layout: {
           type: 'antv-dagre',
-          rankdir: 'TB',
+          rankdir: layoutDir,
           nodesep: 18,
           ranksep: 70,
         },
@@ -221,7 +289,7 @@ export function OrgStructurePage() {
         graphRef.current = null;
       }
     };
-  }, [graphData, nodeById]);
+  }, [graphData, nodeById, viewMode, layoutDir]);
 
   // ---- 选中节点：拉取邻居 ----
   useEffect(() => {
@@ -263,10 +331,25 @@ export function OrgStructurePage() {
             组织架构图谱
           </h1>
           <p className="text-sm text-gray-500 mt-1 mb-0">
-            母公司 → 子公司 → 部门 → 员工，点击节点查看属性与邻居
+            母公司 → 子公司 → 部门 → 员工，可切换图谱/树形视图与布局方向，点击节点查看属性与邻居
           </p>
         </div>
         <Space wrap size={[8, 8]}>
+          <Radio.Group
+            value={viewMode}
+            optionType="button"
+            buttonStyle="solid"
+            options={VIEW_OPTIONS}
+            onChange={(e) => setViewMode(e.target.value as 'graph' | 'tree')}
+          />
+          <Radio.Group
+            value={layoutDir}
+            optionType="button"
+            buttonStyle="solid"
+            options={LAYOUT_OPTIONS}
+            disabled={viewMode !== 'graph'}
+            onChange={(e) => setLayoutDir(e.target.value as 'TB' | 'LR')}
+          />
           <Select
             allowClear
             style={{ minWidth: 200 }}
@@ -284,7 +367,7 @@ export function OrgStructurePage() {
             onChange={(v: number) => setDepth(v)}
           />
           <Tooltip title="适应画布">
-            <Button icon={<ExpandOutlined />} onClick={handleFit} />
+            <Button icon={<ExpandOutlined />} onClick={handleFit} disabled={viewMode !== 'graph'} />
           </Tooltip>
           <Button icon={<ReloadOutlined />} onClick={() => void loadGraph()} loading={loading}>
             刷新
@@ -337,16 +420,47 @@ export function OrgStructurePage() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-3 min-w-0">
         <div className="bg-white rounded-xl border border-[var(--ams-border)] min-w-0 overflow-hidden">
           <Spin spinning={loading}>
-            <div
-              ref={containerRef}
-              className="w-full"
-              style={{ height: 'calc(100dvh - 300px)', minHeight: 420 }}
-            />
-            {!loading && !renderError && (graphData?.nodes.length ?? 0) === 0 && (
-              <div className="py-16">
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可展示的组织节点" />
+            {viewMode === 'graph' ? (
+              <div
+                ref={containerRef}
+                className="w-full"
+                style={{ height: 'calc(100dvh - 300px)', minHeight: 420 }}
+              />
+            ) : (
+              <div
+                className="p-3 overflow-auto ams-scroll"
+                style={{ height: 'calc(100dvh - 300px)', minHeight: 420 }}
+              >
+                {treeData.length > 0 ? (
+                  <Tree
+                    // 数据变化后重挂载，保证 defaultExpandAll 生效
+                    key={`org-tree-${String(stats.nodeCount ?? 0)}-${String(rootId ?? 'all')}-${depth}`}
+                    showLine
+                    blockNode
+                    defaultExpandAll
+                    treeData={treeData}
+                    selectedKeys={selected ? [selected.id] : []}
+                    onSelect={(keys) => {
+                      const id = keys[0];
+                      setSelected(id ? (nodeById.get(String(id)) ?? null) : null);
+                    }}
+                  />
+                ) : (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="暂无可展示的组织节点"
+                  />
+                )}
               </div>
             )}
+            {viewMode === 'graph' &&
+              !loading &&
+              !renderError &&
+              (graphData?.nodes.length ?? 0) === 0 && (
+                <div className="py-16">
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可展示的组织节点" />
+                </div>
+              )}
           </Spin>
         </div>
 
