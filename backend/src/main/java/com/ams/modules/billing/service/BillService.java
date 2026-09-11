@@ -10,6 +10,8 @@ import com.ams.modules.contract.entity.Contract;
 import com.ams.modules.contract.mapper.ContractMapper;
 import com.ams.modules.pricing.entity.PaymentPlan;
 import com.ams.modules.pricing.mapper.PaymentPlanMapper;
+import com.ams.platform.event.BillIssuedEvent;
+import com.ams.platform.event.DomainEventPublisher;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.time.LocalDate;
@@ -30,11 +32,14 @@ public class BillService {
     private final BillMapper billMapper;
     private final PaymentPlanMapper planMapper;
     private final ContractMapper contractMapper;
+    private final DomainEventPublisher eventPublisher;
 
-    public BillService(BillMapper billMapper, PaymentPlanMapper planMapper, ContractMapper contractMapper) {
+    public BillService(BillMapper billMapper, PaymentPlanMapper planMapper, ContractMapper contractMapper,
+            DomainEventPublisher eventPublisher) {
         this.billMapper = billMapper;
         this.planMapper = planMapper;
         this.contractMapper = contractMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -74,6 +79,10 @@ public class BillService {
             billMapper.insert(bill);
             plan.setStatus("issued");
             planMapper.updateById(plan);
+            // FR-NOTIF / DSD §4.8：出账 → BillIssued（租户缴费提醒、下游投影）
+            eventPublisher.publishAfterCommit(new BillIssuedEvent(
+                    bill.getId(), bill.getBillNo(), bill.getContractId(),
+                    bill.getAmount(), bill.getDueDate()));
             issued++;
         }
         return issued;

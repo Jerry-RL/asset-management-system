@@ -16,6 +16,8 @@ import com.ams.modules.contract.entity.Contract;
 import com.ams.modules.contract.mapper.ContractMapper;
 import com.ams.modules.task.entity.Task;
 import com.ams.modules.task.service.TaskService;
+import com.ams.platform.event.AlertTriggeredEvent;
+import com.ams.platform.event.DomainEventPublisher;
 import com.ams.platform.security.RbacService;
 import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -38,6 +40,7 @@ public class AlertService {
     private final BillMapper billMapper;
     private final CertificateService certificateService;
     private final RbacService rbacService;
+    private final DomainEventPublisher eventPublisher;
 
     public AlertService(
             AlertRuleMapper ruleMapper,
@@ -46,7 +49,8 @@ public class AlertService {
             ContractMapper contractMapper,
             BillMapper billMapper,
             CertificateService certificateService,
-            RbacService rbacService) {
+            RbacService rbacService,
+            DomainEventPublisher eventPublisher) {
         this.ruleMapper = ruleMapper;
         this.recordMapper = recordMapper;
         this.taskService = taskService;
@@ -54,6 +58,7 @@ public class AlertService {
         this.billMapper = billMapper;
         this.certificateService = certificateService;
         this.rbacService = rbacService;
+        this.eventPublisher = eventPublisher;
     }
 
     public List<AlertRule> listRules(String alertType) {
@@ -125,6 +130,11 @@ public class AlertService {
         task.setDeadline(LocalDateTime.now().plusDays(3));
         task.setStatus("pending");
         taskService.create(task);
+        // DSD §4.8：预警生成 → AlertTriggered（处置待办与通知的下游入口）
+        eventPublisher.publishAfterCommit(new AlertTriggeredEvent(
+                record.getId(), record.getAlertType(), record.getSubType(),
+                record.getLevel() == null ? 1 : record.getLevel(),
+                record.getBizType(), record.getBizId(), record.getTitle()));
         return record;
     }
 

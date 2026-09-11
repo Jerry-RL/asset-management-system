@@ -13,6 +13,8 @@ import com.ams.modules.disposal.mapper.DisposalOrderMapper;
 import com.ams.modules.finance.entity.FinanceVoucher;
 import com.ams.modules.finance.service.ReconcileService;
 import com.ams.platform.approval.ApprovalEngine;
+import com.ams.platform.event.DisposalCompletedEvent;
+import com.ams.platform.event.DomainEventPublisher;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +38,7 @@ public class DisposalService {
     private final PaymentService paymentService;
     private final ReconcileService reconcileService;
     private final ObjectMapper objectMapper;
+    private final DomainEventPublisher eventPublisher;
 
     public DisposalService(
             DisposalOrderMapper disposalOrderMapper,
@@ -44,7 +47,8 @@ public class DisposalService {
             CertificateService certificateService,
             PaymentService paymentService,
             ReconcileService reconcileService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            DomainEventPublisher eventPublisher) {
         this.disposalOrderMapper = disposalOrderMapper;
         this.leaseControlService = leaseControlService;
         this.approvalEngine = approvalEngine;
@@ -52,6 +56,7 @@ public class DisposalService {
         this.paymentService = paymentService;
         this.reconcileService = reconcileService;
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     public PageResult<DisposalOrder> page(long page, long pageSize, String status) {
@@ -165,6 +170,10 @@ public class DisposalService {
         disposalOrderMapper.updateById(order);
         leaseControlService.transition(order.getAssetId(), LeaseControlStatus.EXITED,
                 "disposal", id, "处置完成，资产已退出");
+        // DSD §4.8：处置完成 → DisposalCompleted（备案提醒、档案与看板投影）
+        // 注：租控写入仍走旧入口，改造清单触点 7 将改为 AssetOccupancyService
+        eventPublisher.publishAfterCommit(new DisposalCompletedEvent(
+                order.getId(), order.getAssetId(), order.getDisposalType()));
         return order;
     }
 

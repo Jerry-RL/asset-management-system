@@ -13,6 +13,8 @@ import com.ams.modules.billing.service.PrepayService;
 import com.ams.modules.contract.ContractStatus;
 import com.ams.modules.contract.entity.Contract;
 import com.ams.modules.contract.mapper.ContractMapper;
+import com.ams.platform.event.AssetTransferredEvent;
+import com.ams.platform.event.DomainEventPublisher;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -36,6 +38,7 @@ public class TransferService {
     private final BillMapper billMapper;
     private final PrepayService prepayService;
     private final ObjectMapper objectMapper;
+    private final DomainEventPublisher eventPublisher;
 
     public TransferService(
             AssetTransferMapper transferMapper,
@@ -44,7 +47,8 @@ public class TransferService {
             ContractMapper contractMapper,
             BillMapper billMapper,
             PrepayService prepayService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            DomainEventPublisher eventPublisher) {
         this.transferMapper = transferMapper;
         this.assetMapper = assetMapper;
         this.certificateService = certificateService;
@@ -52,6 +56,7 @@ public class TransferService {
         this.billMapper = billMapper;
         this.prepayService = prepayService;
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     public AssetTransfer create(AssetTransfer transfer) {
@@ -118,6 +123,10 @@ public class TransferService {
 
         transfer.setStatus("completed");
         transferMapper.updateById(transfer);
+        // DSD §4.8：调拨完成 → AssetTransferred（双方对账留痕、数据范围迁移、下游投影刷新）
+        eventPublisher.publishAfterCommit(new AssetTransferredEvent(
+                transfer.getId(), asset.getId(),
+                transfer.getFromCompanyId(), transfer.getToCompanyId()));
         return transfer;
     }
 

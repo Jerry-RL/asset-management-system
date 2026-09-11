@@ -15,6 +15,8 @@ import com.ams.modules.plan.service.BusinessPlanService;
 import com.ams.modules.revitalization.service.RevitalizationService;
 import com.ams.modules.selfuse.service.SelfUseService;
 import com.ams.modules.task.service.TaskService;
+import com.ams.platform.event.ContractExpiredEvent;
+import com.ams.platform.event.DomainEventPublisher;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.time.LocalDate;
 import java.util.List;
@@ -44,6 +46,7 @@ public class ScheduledJobs {
     private final SelfUseService selfUseService;
     private final RepairService repairService;
     private final IntangibleAssetService intangibleAssetService;
+    private final DomainEventPublisher eventPublisher;
 
     public ScheduledJobs(
             BillService billService,
@@ -58,7 +61,8 @@ public class ScheduledJobs {
             OccupationService occupationService,
             SelfUseService selfUseService,
             RepairService repairService,
-            IntangibleAssetService intangibleAssetService) {
+            IntangibleAssetService intangibleAssetService,
+            DomainEventPublisher eventPublisher) {
         this.billService = billService;
         this.dunningService = dunningService;
         this.lateFeeService = lateFeeService;
@@ -72,6 +76,7 @@ public class ScheduledJobs {
         this.selfUseService = selfUseService;
         this.repairService = repairService;
         this.intangibleAssetService = intangibleAssetService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Scheduled(cron = "0 0 1 * * *")
@@ -114,6 +119,9 @@ public class ScheduledJobs {
         for (Contract contract : overdue) {
             contract.setStatus(ContractStatus.EXPIRED);
             contractMapper.updateById(contract);
+            // DSD §4.8：置「已到期」→ ContractExpired（需续签/挂账处理、通知）
+            eventPublisher.publishAfterCommit(new ContractExpiredEvent(
+                    contract.getId(), contract.getContractNo(), contract.getEndDate()));
         }
         log.info("contract-expiry scan: {} renewable, {} expired", expiring.size(), overdue.size());
     }

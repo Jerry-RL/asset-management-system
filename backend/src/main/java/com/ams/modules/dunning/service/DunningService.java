@@ -14,6 +14,8 @@ import com.ams.modules.lease.service.TenantService;
 import com.ams.modules.notification.service.NotificationService;
 import com.ams.modules.task.entity.Task;
 import com.ams.modules.task.service.TaskService;
+import com.ams.platform.event.BillOverdueEvent;
+import com.ams.platform.event.DomainEventPublisher;
 import com.ams.platform.integration.sms.SmsAdapter;
 import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -43,6 +45,7 @@ public class DunningService {
     private final TenantService tenantService;
     private final ConfigVersionService configVersionService;
     private final NotificationService notificationService;
+    private final DomainEventPublisher eventPublisher;
 
     public DunningService(
             BillMapper billMapper,
@@ -52,7 +55,8 @@ public class DunningService {
             TaskService taskService,
             TenantService tenantService,
             ConfigVersionService configVersionService,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            DomainEventPublisher eventPublisher) {
         this.billMapper = billMapper;
         this.recordMapper = recordMapper;
         this.tenantMapper = tenantMapper;
@@ -61,6 +65,7 @@ public class DunningService {
         this.tenantService = tenantService;
         this.configVersionService = configVersionService;
         this.notificationService = notificationService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -268,6 +273,14 @@ public class DunningService {
         }
         adjustCreditOnEscalate(bill, fromLevel, toLevel);
         notifyAssignees(bill, toLevel, content);
+
+        // DSD §4.8：仅「真正逾期」发布 BillOverdue。
+        // 到期前 L1 提醒（preDue=true）不是逾期，发布会让下游把「即将到期」统计成「已逾期」。
+        if (!preDue) {
+            eventPublisher.publishAfterCommit(new BillOverdueEvent(
+                    bill.getId(), bill.getBillNo(), bill.getContractId(),
+                    bill.getAmount(), toLevel, overdueDays));
+        }
     }
 
     private void completeLowerLevelTasks(Long billId, int toLevel) {
