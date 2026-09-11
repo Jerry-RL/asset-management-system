@@ -6,6 +6,7 @@ import com.ams.common.exception.ErrorCode;
 import com.ams.modules.asset.LeaseControlStatus;
 import com.ams.modules.asset.entity.Asset;
 import com.ams.modules.asset.mapper.AssetMapper;
+import com.ams.modules.asset.service.AssetUnitService;
 import com.ams.modules.billing.entity.Bill;
 import com.ams.modules.billing.mapper.BillMapper;
 import com.ams.modules.lease.entity.Tenant;
@@ -33,11 +34,15 @@ public class ImportExportService {
     private final AssetMapper assetMapper;
     private final BillMapper billMapper;
     private final TenantService tenantService;
+    /** 导入的资产需补齐计租单元（INV-2）；租控状态不参与导入（派生列）。 */
+    private final AssetUnitService assetUnitService;
 
-    public ImportExportService(AssetMapper assetMapper, BillMapper billMapper, TenantService tenantService) {
+    public ImportExportService(AssetMapper assetMapper, BillMapper billMapper, TenantService tenantService,
+            AssetUnitService assetUnitService) {
         this.assetMapper = assetMapper;
         this.billMapper = billMapper;
         this.tenantService = tenantService;
+        this.assetUnitService = assetUnitService;
     }
 
     public String exportAssetsCsv(Long projectId) {
@@ -88,6 +93,7 @@ public class ImportExportService {
     public Map<String, Object> importAssetsCsv(MultipartFile file) {
         List<String> errors = new ArrayList<>();
         int success = 0;
+        boolean statusColumnIgnored = false;
         try (InputStream in = file.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
             String header = CsvUtf8.stripBom(reader.readLine());
@@ -110,8 +116,12 @@ public class ImportExportService {
                     if (cols.length > 3 && !cols[3].isBlank()) {
                         asset.setArea(new BigDecimal(cols[3]));
                     }
-                    asset.setLeaseControlStatus(cols.length > 4 && !cols[4].isBlank()
-                            ? cols[4] : LeaseControlStatus.VACANT);
+                    // CSV 第 5 列（租控状态）自 2026-09-11 起不再写入：该列是占用集合的物化派生列，
+                    // 只能由 LeaseStatusDeriver 写入（改造清单触点 14）。导入的历史状态无法在此表达，
+                    // 如需保留请作为带区间的历史占用导入（设计 §12.5 规则 1）。
+                    if (cols.length > 4 && !cols[4].isBlank()) {
+                        statusColumnIgnored = true;
+                    }
                     if (cols.length > 5 && !cols[5].isBlank()) {
                         asset.setProjectId(Long.valueOf(cols[5]));
                     }
@@ -137,6 +147,8 @@ public class ImportExportService {
                         continue;
                     }
                     assetMapper.insert(asset);
+                    // INV-2：导入的资产同样必须有计租单元（否则 v_asset_without_unit 非空）
+                    assetUnitService.ensureUnitForAsset(asset.getId());
                     success++;
                 } catch (Exception e) {
                     errors.add("L" + lineNo + ": " + e.getMessage());
@@ -151,6 +163,11 @@ public class ImportExportService {
         result.put("success", success);
         result.put("failed", errors.size());
         result.put("errors", errors);
+        if (statusColumnIgnored) {
+            // 明确告知而非静默忽略：避免用户以为导入的租控状态生效了
+            result.put("note", "CSV 第 5 列（租控状态）已忽略：该状态由占用自动派生，"
+                    + "如需保留历史状态请按带区间的历史占用导入");
+        }
         return result;
     }
 

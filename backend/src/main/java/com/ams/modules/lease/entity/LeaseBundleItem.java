@@ -16,6 +16,8 @@ public class LeaseBundleItem {
 
     private Long bundleId;
     private Long assetId;
+    /** 计租单元（asset_unit.id）；bundle 明细是「分配视图」，单元才是真源（ADR-0019） */
+    private Long assetUnitId;
     private Long tenantId;
     private Long contractId;
     private BigDecimal leaseArea;

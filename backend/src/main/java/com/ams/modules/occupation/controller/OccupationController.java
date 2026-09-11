@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -53,5 +54,18 @@ public class OccupationController {
     @Audited(module = "occupation", action = "release")
     public ApiResponse<OccupationOrder> release(@PathVariable Long occupationId) {
         return ApiResponse.ok(occupationService.release(occupationId), TraceIdUtil.get());
+    }
+
+    /**
+     * 撤销/驳回：收口预留。
+     *
+     * <p>必须可达：否则 {@code submit} 写入的排他预留行会永久锁死单元。
+     * 自动驳回见 {@code OccupationService.onApprovalCompleted}。
+     */
+    @PostMapping("/{id}/withdraw")
+    @Audited(module = "occupation", action = "withdraw")
+    public ApiResponse<OccupationOrder> withdraw(@PathVariable Long id,
+            @RequestParam(required = false) String remark) {
+        return ApiResponse.ok(occupationService.withdraw(id, remark), TraceIdUtil.get());
     }
 }

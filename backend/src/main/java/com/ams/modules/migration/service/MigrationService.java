@@ -3,8 +3,13 @@ package com.ams.modules.migration.service;
 import com.ams.common.exception.AppException;
 import com.ams.common.exception.ErrorCode;
 import com.ams.modules.asset.LeaseControlStatus;
+import com.ams.modules.asset.OccupancyType;
 import com.ams.modules.asset.entity.Asset;
+import com.ams.modules.asset.entity.AssetUnit;
 import com.ams.modules.asset.mapper.AssetMapper;
+import com.ams.modules.asset.service.AssetOccupancyService;
+import com.ams.modules.asset.service.AssetUnitService;
+import com.ams.modules.asset.service.LeaseStatusDeriver;
 import com.ams.modules.billing.BillStatus;
 import com.ams.modules.billing.entity.Bill;
 import com.ams.modules.billing.entity.Payment;
@@ -25,6 +30,7 @@ import com.ams.modules.migration.mapper.MigrationBatchMapper;
 import com.ams.modules.migration.mapper.MigrationImportLogMapper;
 import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -55,6 +61,10 @@ public class MigrationService {
     private final PrepayService prepayService;
     private final DunningService dunningService;
     private final ObjectMapper objectMapper;
+    /** 期初租控建账走占用唯一入口，不再直写 asset.lease_control_status（设计 §12.5）。 */
+    private final AssetOccupancyService occupancyService;
+    private final AssetUnitService assetUnitService;
+    private final LeaseStatusDeriver leaseStatusDeriver;
 
     public MigrationService(
             MigrationBatchMapper batchMapper,
@@ -67,7 +77,10 @@ public class MigrationService {
             DepositTransactionMapper depositTransactionMapper,
             PrepayService prepayService,
             DunningService dunningService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            AssetOccupancyService occupancyService,
+            AssetUnitService assetUnitService,
+            LeaseStatusDeriver leaseStatusDeriver) {
         this.batchMapper = batchMapper;
         this.importLogMapper = importLogMapper;
         this.contractMapper = contractMapper;
@@ -79,6 +92,9 @@ public class MigrationService {
         this.prepayService = prepayService;
         this.dunningService = dunningService;
         this.objectMapper = objectMapper;
+        this.occupancyService = occupancyService;
+        this.assetUnitService = assetUnitService;
+        this.leaseStatusDeriver = leaseStatusDeriver;
     }
 
     public MigrationBatch createBatch(LocalDate cutoverDate, String sourceFile) {
@@ -156,48 +172,111 @@ public class MigrationService {
         return result;
     }
 
+    /**
+     * 期初租控建账（FR-MIG-*）。
+     *
+     * <p><b>禁止直写 {@code asset.lease_control_status}</b>（设计 §12.5 规则 1）：
+     * 该列是占用集合的<b>物化派生列</b>，只能由 {@code LeaseStatusDeriver} 写入。
+     * 原实现直接置 {@code LEASED}/{@code VACANT}，既绕过占用唯一入口，又把「部分出租」
+     * 一律写成 {@code LEASED}（多合同资产被写错），且与派生器形成两处真相。
+     *
+     * <p>新口径：把历史合同登记为<b>带租期的历史占用</b>（{@code date_from/date_to} 取合同租期），
+     * 由派生器从占用集合推出正确的租控状态（在租 / 部分出租 / 空置）。
+     *
+     * <p>幂等：以 {@code (contract, contractId)} 是否已存在<b>任意</b>占用为准判重；
+     * 迁移写入的区间有 {@code date_to}，不能用「未收口」判定，否则重跑会与 {@code EXCLUDE} 冲突。
+     */
     @Transactional
     public Map<String, Object> initLeaseControl(Long batchId) {
         requireBatch(batchId);
-        List<Contract> active = contractMapper.selectList(
-                new LambdaQueryWrapper<Contract>().eq(Contract::getStatus, ContractStatus.ACTIVE));
-        int updated = 0;
-        for (Contract c : active) {
+
+        int occupied = 0;
+        int skipped = 0;
+        int failed = 0;
+
+        List<Contract> contracts = contractMapper.selectList(
+                new LambdaQueryWrapper<Contract>()
+                        .in(Contract::getStatus, ContractStatus.ACTIVE, ContractStatus.EXPIRING,
+                                ContractStatus.RENEWABLE));
+        for (Contract c : contracts) {
             if (c.getAssetId() == null) {
                 continue;
             }
-            Asset asset = assetMapper.selectById(c.getAssetId());
-            if (asset == null) {
+            if (occupancyService.hasAnyBySubject(
+                    AssetOccupancyService.SUBJECT_CONTRACT, c.getId())) {
+                skipped++;
                 continue;
             }
-            if (!LeaseControlStatus.LEASED.equals(asset.getLeaseControlStatus())
-                    && !LeaseControlStatus.PARTIAL_LEASED.equals(asset.getLeaseControlStatus())) {
-                asset.setLeaseControlStatus(LeaseControlStatus.LEASED);
-                assetMapper.updateById(asset);
-                updated++;
+            if (c.getStartDate() == null || c.getEndDate() == null
+                    || !c.getEndDate().isAfter(c.getStartDate())) {
+                logImport(batchId, null, "lease_control", "fail",
+                        "合同租期缺失或非法，无法登记历史占用: contractId=" + c.getId(), null);
+                failed++;
+                continue;
+            }
+            try {
+                AssetUnit unit = resolveUnitForMigration(c);
+                occupancyService.occupy(unit.getId(), OccupancyType.CONTRACT,
+                        AssetOccupancyService.SUBJECT_CONTRACT, c.getId(),
+                        c.getStartDate(), c.getEndDate(), null, "期初迁移：历史合同占用");
+                occupied++;
+            } catch (Exception e) {
+                // 单条失败不得中断整批：留痕供人工核对，由 §14 验收 SQL 兜底发现
+                logImport(batchId, null, "lease_control", "fail",
+                        "登记历史占用失败: contractId=" + c.getId() + ", " + e.getMessage(), null);
+                failed++;
             }
         }
-        // 无合同空置
-        List<Asset> assets = assetMapper.selectList(null);
-        int vacant = 0;
+
+        // 空置归位：不直写状态列，交由派生器从「无占用」推出空置，并补记空置原因
+        //
+        // 用字符串列名过滤 deleted_at：Asset 实体未映射该列（项目级已知缺陷，
+        // 见改造清单 §2.5#27——`logic-delete-field` 配的是 `deleted` 而表范式是 `deleted_at`），
+        // 因此无法用 LambdaQueryWrapper 表达。此处用列名过滤是必要的：否则软删资产会被
+        // ensureUnitForAsset 补建单元，把垃圾数据写进 asset_unit。
+        int vacantInited = 0;
+        List<Asset> assets = assetMapper.selectList(
+                new QueryWrapper<Asset>().isNull("deleted_at"));
         for (Asset a : assets) {
-            long cnt = contractMapper.selectCount(
-                    new LambdaQueryWrapper<Contract>()
-                            .eq(Contract::getAssetId, a.getId())
-                            .in(Contract::getStatus, ContractStatus.ACTIVE, ContractStatus.EXPIRING,
-                                    ContractStatus.RENEWABLE));
-            if (cnt == 0 && a.getLeaseControlStatus() == null) {
-                a.setLeaseControlStatus(LeaseControlStatus.VACANT);
-                a.setVacantReason("migration_init");
-                assetMapper.updateById(a);
-                vacant++;
+            assetUnitService.ensureUnitForAsset(a.getId());
+            leaseStatusDeriver.refresh(a.getId());
+            Asset refreshed = assetMapper.selectById(a.getId());
+            if (refreshed != null
+                    && LeaseControlStatus.VACANT.equals(refreshed.getLeaseControlStatus())
+                    && refreshed.getVacantReason() == null) {
+                refreshed.setVacantReason("migration_init");
+                assetMapper.updateById(refreshed);
+                vacantInited++;
             }
         }
+
         Map<String, Object> map = new HashMap<>();
-        map.put("leasedUpdated", updated);
-        map.put("vacantInited", vacant);
-        logImport(batchId, null, "lease_control", "ok", "leased=" + updated + ",vacant=" + vacant, null);
+        map.put("occupiedRegistered", occupied);
+        map.put("skippedExisting", skipped);
+        map.put("failed", failed);
+        map.put("vacantInited", vacantInited);
+        logImport(batchId, null, "lease_control", failed == 0 ? "ok" : "partial",
+                "occupied=" + occupied + ",skipped=" + skipped
+                        + ",failed=" + failed + ",vacant=" + vacantInited, null);
         return map;
+    }
+
+    /**
+     * 迁移用单元解析：优先用合同已挂单元，其次取可租单元，最后补齐单元后重取。
+     *
+     * <p>与 {@code AssetUnitService.resolveForLease} 的差别是「补齐后重试」：迁移面对的是历史数据，
+     * 可能存在合同未挂单元且单元状态被旧数据写死的情况，直接抛错会让整条合同无法建账。
+     */
+    private AssetUnit resolveUnitForMigration(Contract c) {
+        if (c.getAssetUnitId() != null) {
+            return assetUnitService.resolveForLease(c.getAssetId(), c.getAssetUnitId());
+        }
+        try {
+            return assetUnitService.resolveForLease(c.getAssetId(), null);
+        } catch (AppException ex) {
+            assetUnitService.ensureUnitForAsset(c.getAssetId());
+            return assetUnitService.resolveForLease(c.getAssetId(), null);
+        }
     }
 
     @Transactional

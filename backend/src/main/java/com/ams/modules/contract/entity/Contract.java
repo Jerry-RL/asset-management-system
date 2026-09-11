@@ -21,6 +21,8 @@ public class Contract extends BaseEntity {
 
     private String contractNo;
     private Long assetId;
+    /** 计租单元（asset_unit.id）；非终态合同必须非空（ADR-0019） */
+    private Long assetUnitId;
     private Long tenantId;
     @Version
     private Integer version;

@@ -69,6 +69,8 @@ public class AssetService {
     private final RbacService rbacService;
     private final BillMapper billMapper;
     private final BillPaymentMapper billPaymentMapper;
+    /** 新增资产后补齐计租单元（INV-2）；租控状态由占用派生，本类不直接写状态列。 */
+    private final AssetUnitService assetUnitService;
 
     public AssetService(
             ProjectMapper projectMapper,
@@ -81,7 +83,8 @@ public class AssetService {
             UserMapper userMapper,
             RbacService rbacService,
             BillMapper billMapper,
-            BillPaymentMapper billPaymentMapper) {
+            BillPaymentMapper billPaymentMapper,
+            AssetUnitService assetUnitService) {
         this.projectMapper = projectMapper;
         this.projectZoneMapper = projectZoneMapper;
         this.assetMapper = assetMapper;
@@ -93,6 +96,7 @@ public class AssetService {
         this.rbacService = rbacService;
         this.billMapper = billMapper;
         this.billPaymentMapper = billPaymentMapper;
+        this.assetUnitService = assetUnitService;
     }
 
     // ---- 项目 ----
@@ -927,14 +931,15 @@ public class AssetService {
     public Asset createAsset(Asset asset) {
         validateReferences(asset);
         syncOperatingCompany(asset);
-        if (asset.getLeaseControlStatus() == null) {
-            asset.setLeaseControlStatus("vacant");
-        }
+        // 租控状态不在此赋值：它是占用集合的物化派生列，由 LeaseStatusDeriver 写入
+        // （新建资产无占用 → 派生为空置）。此前直接置 "vacant" 属绕过唯一入口（改造清单触点 17）。
         if (asset.getStructureStatus() == null) {
             asset.setStructureStatus("active");
         }
         asset.setVersion(0);
         assetMapper.insert(asset);
+        // INV-2：每个资产至少一个计租单元；补齐动作会顺带触发租控状态派生
+        assetUnitService.ensureUnitForAsset(asset.getId());
         return assetQrService.ensureQrCode(asset);
     }
 
@@ -943,7 +948,9 @@ public class AssetService {
         validateReferences(asset);
         syncOperatingCompany(asset);
         asset.setId(id);
-        // 基础信息可改，租控状态不可通过此接口直改（须走业务单据）
+        // 基础信息可改，租控状态不可通过此接口直改（须走业务单据）。
+        // 这里把入参覆盖为**既有值**而非写入新值——属「保值守卫」，不是状态写入；
+        // 门禁校验据此豁免该行（见设计 §14 标准 3 的 gate 说明）。
         asset.setLeaseControlStatus(existing.getLeaseControlStatus());
         // 可编辑字段需支持「清空」，而 null 在默认更新策略下会被忽略：
         // 先从实体上摘除（避免与 wrapper 的 SET 拼出重复赋值），再用显式 set 写回。

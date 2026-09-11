@@ -75,6 +75,10 @@ public class Asset extends BaseEntity {
     private String structureStatus;
     private Long rootAssetId;
     private String oldAssetNo;
+    /** in_book / exited；处置完成置 exited（ADR-0019：生命周期而非占用状态） */
+    private String lifecycleStatus;
+    /** 占用率（%）＝ 生效占用面积 / 单元面积合计；由 LeaseStatusDeriver 派生 */
+    private BigDecimal occupancyRatio;
 
     /** 所属分区名称（非表字段，列表/详情回显用） */
     @TableField(exist = false)

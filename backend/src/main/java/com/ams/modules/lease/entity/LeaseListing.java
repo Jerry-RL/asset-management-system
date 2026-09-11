@@ -15,6 +15,8 @@ public class LeaseListing {
     private Long id;
 
     private Long assetId;
+    /** 招租标的单元（asset_unit.id）；是「意向」而非占用，不参与区间互斥（ADR-0019） */
+    private Long assetUnitId;
     private BigDecimal rentAmount;
     private Boolean rentNegotiable;
     private String status; // active / closed
