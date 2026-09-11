@@ -22,6 +22,8 @@
 | [ADR-0016](./0016-java-spring-boot-backend.md) | Java Spring Boot 后端主栈 | Accepted |
 | [ADR-0017](./0017-mybatis-plus-flyway.md) | MyBatis-Plus + Flyway | Accepted |
 | [ADR-0018](./0018-jobrunr-async-jobs.md) | JobRunr 异步任务 | Accepted |
+| [ADR-0019](./0019-asset-unit-and-occupancy-model.md) | 资产计租单元与占用事件模型 | Proposed |
+| [ADR-0020](./0020-bounded-contexts-and-aggregate-boundaries.md) | 限界上下文划分与聚合边界 | Proposed |
 
 **状态说明**：Proposed / Accepted / Deprecated / Superseded
 
