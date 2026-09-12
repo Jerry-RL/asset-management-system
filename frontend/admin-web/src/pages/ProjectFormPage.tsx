@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  Alert,
   Button,
   Card,
   Cascader,
@@ -23,6 +24,7 @@ import {
   DeleteOutlined,
   EnvironmentOutlined,
   PlusOutlined,
+  ProfileOutlined,
   SaveOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -30,9 +32,16 @@ import { api } from '@/lib/api';
 import { geocodeAddress } from '@/lib/amap';
 import { useDictOptions } from '@/lib/dict';
 import { PROJECT_STATUS, PROJECT_TYPE, PROJECT_TYPE_DICT_CODE } from '@/lib/labels';
-import { useBackNavigate } from '@/lib/navigation';
+import { useBackNavigate, currentPath } from '@/lib/navigation';
 import { buildCompanyTree, loadCompanies, normalizeList } from '@/lib/org';
 import { ImageUploadField, type ImageValue } from '@/components/ImageUploadField';
+import { RecordSheetSections } from '@/components/RecordSheetSections';
+import {
+  loadRecordSheet,
+  recordSheetPath,
+  saveRecordSheet,
+  type RecordSheetPayload,
+} from '@/lib/recordSheet';
 import {
   loadRegions,
   regionCityHintOf,
@@ -77,6 +86,7 @@ const STATUS_OPTIONS = Object.entries(PROJECT_STATUS).map(([value, label]) => ({
 
 export function ProjectFormPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const isEdit = Boolean(id);
   const goBack = useBackNavigate('/projects');
@@ -95,6 +105,11 @@ export function ProjectFormPage() {
   const [loading, setLoading] = useState(isEdit);
   const [notFound, setNotFound] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [recordSheet, setRecordSheet] = useState<RecordSheetPayload | null>(null);
+  const [sheetLoading, setSheetLoading] = useState(false);
+
+  /** 所属公司：透传给后续记录的相对人搜索，收窄员工范围 */
+  const projectCompanyId = Form.useWatch('companyId', form);
 
   /** 组织结构下拉：母公司 → 子公司层级 */
   const companyTree = useMemo(() => buildCompanyTree(companies), [companies]);
@@ -266,12 +281,66 @@ export function ProjectFormPage() {
     void runGeocode(path, detail, true);
   };
 
+  // 后续记录只在编辑态加载：新增态还没有 projectId，记录无处可挂（设计 §6.2）
+  useEffect(() => {
+    if (!isEdit || !id) {
+      setRecordSheet(null);
+      return;
+    }
+    let cancelled = false;
+    setSheetLoading(true);
+    loadRecordSheet(recordSheetPath('project', Number(id)))
+      .then((sheet) => {
+        if (cancelled) return;
+        setRecordSheet({
+          receives: sheet.receives,
+          sourceInfo: sheet.sourceInfo,
+          disposalRecords: sheet.disposalRecords,
+        });
+      })
+      .catch((e) => {
+        if (!cancelled) message.error(e instanceof Error ? e.message : '加载后续记录失败');
+      })
+      .finally(() => {
+        if (!cancelled) setSheetLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, id]);
+
+  /**
+   * 校验失败时跳回第一个出错的步骤。
+   *
+   * <p>本页用 hidden 保持字段挂载，所以**所有**步骤的必填项都参与校验，错误可能落在
+   * 当前看不到的步骤上 —— 不跳回去，用户会看到「点了没反应」。用 data-step 反查而不是
+   * 维护静态「字段 → 步骤」表：分区配置那一步的字段是运行时增删的，静态表覆盖不全。
+   */
+  const jumpToErrorStep = (errorFields: { name: (string | number)[] }[]) => {
+    const first = errorFields[0]?.name?.[0];
+    if (typeof first !== 'string') return;
+    const raw = document.getElementById(first)?.closest('[data-step]')?.getAttribute('data-step');
+    const target = raw == null ? null : Number(raw);
+    if (target == null || Number.isNaN(target)) {
+      message.warning('有必填项未完成，请检查前面的步骤');
+      return;
+    }
+    if (target !== current) {
+      setCurrent(target);
+      message.warning('有必填项未完成，已切换到对应步骤');
+    }
+  };
+
   const handleNext = async () => {
     try {
       await form.validateFields();
-      setCurrent(1);
-    } catch {
-      // 校验失败由表单自行提示
+      setCurrent((prev) => Math.min(prev + 1, 2));
+    } catch (e) {
+      if (e && typeof e === 'object' && 'errorFields' in e) {
+        jumpToErrorStep((e as { errorFields?: { name: (string | number)[] }[] }).errorFields ?? []);
+        return;
+      }
+      // 其余异常由表单自行提示
     }
   };
 
@@ -312,15 +381,32 @@ export function ProjectFormPage() {
       };
       setSubmitting(true);
       if (isEdit) {
+        // 顺序不能反：后续记录依赖主体已存在（设计 §5.4）。
+        // 主体保存里含 zones；Task 6 之后「移除有资产或有记录的分区」会返回 400 ——
+        // 这类错误必须原样透出，不要改写文案，否则用户看不到是哪个分区、什么原因。
         await api.put(`/projects/${id}`, payload);
-        message.success('保存成功');
+        try {
+          if (recordSheet) {
+            await saveRecordSheet(recordSheetPath('project', Number(id)), recordSheet);
+          }
+          message.success('保存成功');
+        } catch (e) {
+          // 「主体已保存、记录失败」的半成品状态必须让使用者知道，否则会以为整单回滚
+          message.warning(
+            `项目已保存，但后续记录保存失败：${e instanceof Error ? e.message : '未知错误'}，请重试`,
+          );
+          return;
+        }
       } else {
         await api.post('/projects', payload);
         message.success('创建成功');
       }
       navigate('/projects');
     } catch (e) {
-      if (e && typeof e === 'object' && 'errorFields' in e) return;
+      if (e && typeof e === 'object' && 'errorFields' in e) {
+        jumpToErrorStep((e as { errorFields?: { name: (string | number)[] }[] }).errorFields ?? []);
+        return;
+      }
       message.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setSubmitting(false);
@@ -396,10 +482,21 @@ export function ProjectFormPage() {
     {
       title: '操作',
       key: '_actions',
-      width: 100,
-      render: (_: unknown, _row: ProjectZone, index: number) => (
+      width: 140,
+      render: (_: unknown, row: ProjectZone, index: number) => (
         <TableActions
           actions={[
+            {
+              key: 'detail',
+              label: '详情',
+              icon: <ProfileOutlined />,
+              // 新增态的分区还没有 id（要等主体保存后才落库），无处可跳
+              disabled: !isEdit || row.id == null,
+              onClick: () =>
+                navigate(`/projects/${id}/zones/${row.id}`, {
+                  state: { from: currentPath(location) },
+                }),
+            },
             {
               key: 'remove',
               label: '删除',
@@ -445,12 +542,13 @@ export function ProjectFormPage() {
             items={[
               { title: '基本信息', description: '名称 / 归属 / 地址定位 / 图片' },
               { title: '项目分区配置', description: '为项目配置分区' },
+              { title: '后续记录', description: '处置 / 接收 / 来源' },
             ]}
           />
         </Card>
 
         {/* 第一步：基本信息（隐藏时保持挂载以保留表单值） */}
-        <div hidden={current !== 0}>
+        <div data-step={0} hidden={current !== 0}>
           <Card title="基本信息" className="border border-[var(--ams-border)] mb-4">
             <Row gutter={16}>
               <Col xs={24} md={12}>
@@ -583,7 +681,7 @@ export function ProjectFormPage() {
         </div>
 
         {/* 第二步：项目分区配置 */}
-        <div hidden={current !== 1}>
+        <div data-step={1} hidden={current !== 1}>
           <Card
             title="项目分区配置"
             className="border border-[var(--ams-border)] mb-4"
@@ -607,12 +705,38 @@ export function ProjectFormPage() {
             />
           </Card>
         </div>
+
+        {/* 第三步：后续记录。与资产表单同结构；项目侧处置走可编辑台账（ownerType != asset） */}
+        <div data-step={2} hidden={current !== 2}>
+          <Card
+            title="后续记录"
+            className="border border-[var(--ams-border)] mb-4"
+            loading={sheetLoading}
+          >
+            {isEdit ? (
+              <RecordSheetSections
+                ownerType="project"
+                ownerId={Number(id)}
+                companyId={projectCompanyId}
+                value={recordSheet}
+                onChange={setRecordSheet}
+              />
+            ) : (
+              <Alert
+                type="info"
+                showIcon
+                message="保存项目后可录入后续记录"
+                description="处置、接收与来源信息都需要先有一个已保存的项目作为归属对象。请先提交本表单建好项目，再回到本步录入。"
+              />
+            )}
+          </Card>
+        </div>
       </Form>
 
       <div className="flex justify-end gap-2">
-        {current === 1 && <Button onClick={() => setCurrent(0)}>上一步</Button>}
+        {current > 0 && <Button onClick={() => setCurrent(current - 1)}>上一步</Button>}
         <Button onClick={goBack}>取消</Button>
-        {current === 0 ? (
+        {current < 2 ? (
           <Button type="primary" onClick={() => void handleNext()}>
             下一步
           </Button>
