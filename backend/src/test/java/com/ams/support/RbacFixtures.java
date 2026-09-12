@@ -206,7 +206,7 @@ public final class RbacFixtures {
         f.role(10, ROLE_DISABLED, "已停用角色", "all", 0);
 
         // ---- 写权限授予 ----
-        // 动作全部取自后端 @RequiresPerm 里真实存在的 57 个码（本文件由
+        // 动作全部取自后端 @RequiresPerm 里真实存在的 60 个码（本文件由
         // scripts/check-perm-invariants.mjs 的「夹具 ⊆ 后端」检查守住，
         // 编造一个不存在的码会让用例在构建期失败，而不是静默成为永不命中的授权）。
         // 注意：本期没有任何 :export / :import 被强制，所以取不到「导出」这类动作，
@@ -221,7 +221,8 @@ public final class RbacFixtures {
         f.grant(ROLE_ASSET_MGR,
                 "asset.project:view", "asset.project:create", "asset.project:update", "asset.project:delete",
                 "asset.ledger:view", "asset.ledger:create", "asset.ledger:update", "asset.ledger:delete",
-                "asset.structureLog:view", "org.structure:view", "org.company:view");
+                "asset.structureLog:view", "org.structure:view", "org.company:view",
+                "operation.disposal:create", "operation.disposal:update", "operation.disposal:approve");
         f.grant(ROLE_FINANCE,
                 "billing.bill:view", "billing.bill:create",
                 "finance.payment:view", "finance.payment:create", "finance.payment:update",
@@ -344,7 +345,7 @@ public final class RbacFixtures {
         return this;
     }
 
-    /** 首批接入的 18 个菜单码。 */
+    /** 首批接入的 19 个菜单码。 */
     private RbacFixtures defineMenus() {
         menu("asset.ledger", "资产台账", "menu");
         menu("asset.project", "项目管理", "menu");
@@ -364,6 +365,7 @@ public final class RbacFixtures {
         menu("system.dict", "数据字典", "menu");
         menu("system.menu", "菜单管理", "menu");
         menu("system.role", "角色权限", "menu");
+        menu("operation.disposal", "资产处置", "menu");
         return this;
     }
 

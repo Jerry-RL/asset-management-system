@@ -33,7 +33,7 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 class PermissionRegistryTest {
 
-    /** 实测首批接入 57 个码；用下限而不是等值，避免后续接入新模块时无谓地改测试。 */
+    /** 实测首批接入 60 个码；用下限而不是等值，避免后续接入新模块时无谓地改测试。 */
     private static final int EXPECTED_MIN = 40;
 
     @Autowired

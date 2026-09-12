@@ -498,7 +498,7 @@ modules/record/
 | 无外键的一致性风险 | `owner_type/owner_id` 多态归属无法用数据库约束 | 服务层统一 `OwnerResolver` 校验 + 复合索引；所有写入必须过 `RecordSheetService`，禁止直接写 Mapper |
 | 相对人快照与 `sys_user` 脱节 | 存姓名快照后，员工改名历史记录不跟着变 | 这是**有意为之**（历史凭证应保留当时姓名）；查询时若有 `xxx_id` 可同时回显当前名称并标注差异 |
 | 物理删除缺陷被放大 | 全局 `logic-delete-field` 与表范式不一致，新表若不显式处理会重蹈覆辙 | 新实体统一显式 `isNull("deleted_at")`，并在实体 Javadoc 写明；`V46` 后单独提一个修复全局口径的条目 |
-| 权限回填遗漏 | 新增注解 + 未回填动作 → 存量角色全 403 | 按权限设计 §7 与注解同批回填，并纳入上线清单 |
+| 权限回填遗漏 | 新增注解 + 未回填动作 → 存量角色全 403 | 走 V45 §5.3 记录的**上线前置人工步骤**：由 `super_admin` 在「角色权限」矩阵上给 `asset_mgr` 勾选 `operation.disposal:create/update/approve`（迁移**故意不回填**写动作，见该文件 5.3 的裁定） |
 | **既有的**文件越权读取缺口（不在本期范围） | `FileController` 的 `GET /files/{id}` 与 `GET /files/{id}/download` **既无权限注解、也无归属校验**，而 `file_metadata.id` 是 `BIGSERIAL`、可枚举；`file_metadata` 也没有公司列，无法按公司过滤。任意登录用户可凭 id 直接读取/下载他人的文件 | 本期只堵新增的**关联**路径（§4.3 附件归属口径：新 `fileId` 必须存在且上传者是本人或 `created_by` 为空）。读端点的修复**不在本期范围**，需另立专项（可枚举 id + 无公司列的复合问题，涉及 `file_metadata` 加列与读端点鉴权）。 |
 | **既有的**权限注解覆盖率不足（不在本期范围） | 绝大多数控制器**整类没有任何** `@RequiresPerm`（如 `LeaseController` / `TenderController` / `AdjustmentController` / `ReportController` / `FileController` 等），`GET /api/v1/disposals` 全局列表也在其中 —— 即只做认证不做鉴权。`scripts/check-perm-invariants.mjs` 只校验**已声明**的注解其菜单码存在，`WriteEndpointPermissionTest` 只覆盖**写**端点，因此这类读端点不会被任何守卫拦住 | 本期只按设计 §5.2 端点表给 `DisposalController` 的 5 个写端点与 `RecordSheetController` 补齐注解，**不改变平台现状**；全量读端点鉴权属平台级专项，需按 `WriteEndpointPermissionTest` 的模式逐步铺开 |
 
