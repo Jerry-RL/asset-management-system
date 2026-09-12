@@ -2026,17 +2026,32 @@ Expected:
     - 缺 `asset.ledger:create/update/delete` → 相应按钮消失。
 16. **回归**：`/projects` 列表展开行的分区维护、`/assets` 的新增/编辑入口行为与改动前一致。
 
-- [ ] **Step 9: 提交**
+- [ ] **Step 9: 提交（只提交 4 个文件）**
+
+⚠️ **本次只提交 4 个文件。** `lib/routeRegistry.ts` 与 `lib/pathToCode.ts` 正被**另一条未提交的进行中重构**
+占用：`PATH_TO_CODE` 正从 `routeRegistry.ts` 抽到新建的 `pathToCode.ts`，而 `pathToCode.ts` 在 HEAD 里
+**还不存在**。把这两个文件一起提交，会把整条不相关的重构（约 150 行删除 + 新文件）混进本次提交，
+既污染本次变更的范围，也等于替那条重构做了提交决定。所以：
+
+- **提交**（4 个）：`pages/ProjectZonesPage.tsx`（新建）、`App.tsx`、`pages/modules.tsx`、`lib/menuIcons.tsx`
+- **改但不提交**（2 个）：`lib/routeRegistry.ts`、`lib/pathToCode.ts` —— 两处新增留在工作区，
+  由那条重构自己的提交一并带走
 
 ```bash
 git add frontend/admin-web/src/pages/ProjectZonesPage.tsx \
-        frontend/admin-web/src/App.tsx \
-        frontend/admin-web/src/lib/routeRegistry.ts \
-        frontend/admin-web/src/lib/pathToCode.ts \
-        frontend/admin-web/src/pages/modules.tsx \
-        frontend/admin-web/src/lib/menuIcons.tsx
+    frontend/admin-web/src/App.tsx \
+    frontend/admin-web/src/pages/modules.tsx \
+    frontend/admin-web/src/lib/menuIcons.tsx
 git commit -m "feat(admin): 项目分区管理页（左项目 / 右上分区 Tab / 右下资产）+ 路由菜单注册"
 ```
+
+**提交前后各查一次 `git status --short`**：`lib/routeRegistry.ts` 必须仍是 ` M`（未暂存）、
+`lib/pathToCode.ts` 必须仍是 `??`（未跟踪）。这两个文件**绝不能**出现在 `git add` 的参数里，
+也不要用 `git add -A` / `git commit -a`。
+
+> `node scripts/check-perm-invariants.mjs` 读的是**工作区**而非 HEAD，所以它仍应显示
+> `STANDALONE_ROUTES 17` / `PATH_TO_CODE 65` 且结论为「检查通过」—— 这恰好证明那两处「改而提交」的新增
+> 在工作区里是生效的。（代价：直到那条重构提交之前，HEAD 上的 `/project-zones` 少这两处注册。）
 
 ---
 
