@@ -181,7 +181,19 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
   /** 翻页只写 URL：上面的 effect 会以新页码拉取，避免「显式 load + effect」双发 */
   const handlePageChange = (p: number) => setPage(p);
 
-  const reloadAssets = () => setAssetsReloadToken((token) => token + 1);
+  /**
+   * 重拉资产：**先回到第 1 页**，再自增重拉信号。
+   *
+   * <p>改造前这一步由「项目 / 分区变化」的 effect 无条件 `setPage(1)` 完成，因此每次
+   * 只自增 `assetsReloadToken` 的 `reloadAssets()` 都会顺带把资产表归到第 1 页。列表状态
+   * 进 URL 后该 effect 不再归页，重置必须回到本函数里，否则删除末页最后一条会停在空页。
+   * 同一处理函数里 `setPage(1)` 与信号自增会被 React 18 批处理成**一次** effect 运行
+   * （`page` 与 `assetsReloadToken` 同批更新，effect 只跑一次），不会发两次请求。
+   */
+  const reloadAssets = () => {
+    setPage(1);
+    setAssetsReloadToken((token) => token + 1);
+  };
 
   /**
    * spec §5.2 第 7 条：「刷新」必须**同时**重拉 Tab 栏与资产区（资产归第 1 页）。
@@ -191,7 +203,6 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
    */
   const handleRefresh = () => {
     void reloadZones();
-    setPage(1);
     reloadAssets();
   };
 
