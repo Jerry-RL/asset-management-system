@@ -26,8 +26,51 @@
   - 前端构建：`cd frontend && pnpm --filter admin-web build`
   - 前端 lint：`cd frontend && pnpm lint`
   - 权限/路由守卫：`node scripts/check-perm-invariants.mjs`（仓库根目录）
-  - 后端单测：`cd backend && mvn test -Dtest=V47MigrationContractTest`
-  - 后端全量：`cd backend && mvn test`
+  - 后端单测：**Run（CI）** `cd backend && mvn -B test -Dtest=V47MigrationContractTest`
+  - 后端全量：**Run（CI）** `cd backend && mvn -B verify`
+- **本机无 JDK / Maven**（`java` 不可用、无 `mvn`、无 `mvnw`）：所有后端命令**只能由 CI 执行**。
+  本机对后端产物只做**文件级检查** —— 文件存在、断言与迁移字面量逐字一致、菜单码/路径核对。
+  与 `docs/superpowers/plans/2026-09-12-record-forms.md` 的既有约定一致（那里也写作 `Run（CI）`）。
+
+---
+
+## 执行前置条件（Pre-Flight，用户 2026-09-12 裁定）
+
+**1. 必须等 `docs/superpowers/plans/2026-09-12-record-forms.md` 的 Task 7-18 全部完成后再开始本计划。**
+
+理由：那份计划正在 `main` 上飞（Task 1-6 已完成，7-18 未完成），且与本计划改**同一批文件**：
+
+| 文件 | 本计划 | record-forms（未完成部分） |
+|------|--------|---------------------------|
+| `AssetFormPage.tsx` | Task 3 加 query 预填 / 锁定 | Task 15 改写为 3 步表单 |
+| `ProjectFormPage.tsx` | Task 2 删本地 `ProjectZone` 副本 | Task 16 加第 3 步 + 分区「详情」入口 |
+| `ProjectZonesPanel.tsx` | Task 2 整体重写 | Task 16 加「详情」入口 |
+| `App.tsx` / `routeRegistry.ts` / `pathToCode.ts` / `menuIcons.tsx` / `modules.tsx` | Task 6 加 6 处注册 | Task 17 加 `projects/:projectId/zones/:zoneId` |
+
+开始前先 `cat .superpowers/sdd/progress.md` 确认 record-forms 的 18 个任务已全部 `[x]`。
+**若尚未完成，不要派发任何实现子代理。**
+
+**2. 分支：直接提交 `main`**（用户 2026-09-12 明确授权，与 record-forms 同一约定）。
+
+**3. 仓库有并行提交活动**：另一会话也在往 `main` 提交。因此 ——
+
+- 一律用精确路径 `git add <path>`，**绝不用** `git add -A` / `git commit -a`；
+- 每次派发实现子代理前记录 BASE，提交后用 `git log --oneline -3` 复核 HEAD 未被他人移动；
+- 审查范围一律用「记录下来的 BASE..本任务 HEAD」，**不要**用 `HEAD~1`。
+
+**4. 工作区已有未提交改动**（另一条菜单/权限工作流的产物），本计划**不改动也不提交**它们：
+
+```
+ M frontend/admin-web/src/lib/menu.tsx
+ M frontend/admin-web/src/lib/perm.tsx
+ M frontend/admin-web/src/lib/routeRegistry.ts
+?? frontend/admin-web/src/lib/pathToCode.ts
+ M scripts/check-perm-invariants.mjs
+```
+
+其中 `routeRegistry.ts` 与 `pathToCode.ts` 是 Task 6 的**修改目标** —— 在它们之上追加条目，
+但不要把这两文件此前已有的未提交改动一起提交（`git add` 时按文件加，commit 前用 `git diff --cached` 核对）。
+
 - **`ProjectZone` 类型只有一处定义**：`frontend/admin-web/src/lib/projectZones.ts`。`ProjectZonesPanel.tsx` 与 `ProjectFormPage.tsx` 里的本地副本必须删除。
 
 ---
@@ -188,13 +231,22 @@ class V47MigrationContractTest {
 }
 ```
 
-- [ ] **Step 2: 运行测试，确认以「迁移文件不存在」失败**
+- [ ] **Step 2: 确认测试此刻为红（Run（CI），本机无法执行）**
+
+**Run（CI）**：
 
 ```bash
-cd backend && mvn test -Dtest=V47MigrationContractTest
+cd backend && mvn -B test -Dtest=V47MigrationContractTest
 ```
 
-Expected: **FAIL**，`V47MigrationContractTest.seedsProjectZoneMenu` 报 `V47 迁移文件必须存在（放在 src/main/resources/db/migration 下）`，并且 3 个用例都因 `SQL` 初始化失败而报错。
+Expected: **FAIL** —— `V47MigrationContractTest.seedsProjectZoneMenu` 报「V47 迁移文件必须存在（放在 src/main/resources/db/migration 下）」，且 3 个用例都因 `SQL` 初始化失败而报错。
+
+> **本机无 JDK / Maven，这一步本机跑不了。** 本机可做且必须做的替代检查：
+> 1. 用 Read 确认测试文件已落盘、`MIGRATION_PATH` 指向 `/db/migration/V47__project_zone_menu.sql`；
+> 2. 确认该迁移文件**此刻不存在**（红是必然的，不需要跑也知道）；
+> 3. 逐字核对测试里的字面量与 Step 3 将写入迁移文件的字面量一致 —— 这是红→绿能否成立的唯一依据。
+>
+> 真正的红→绿由 CI 的首次运行确认。
 
 - [ ] **Step 3: 创建迁移文件**
 
@@ -245,13 +297,21 @@ WHERE r.code <> 'super_admin'
 ON CONFLICT DO NOTHING;
 ```
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [ ] **Step 4: 确认测试转绿（Run（CI））**
+
+**Run（CI）**：
 
 ```bash
-cd backend && mvn test -Dtest=V47MigrationContractTest
+cd backend && mvn -B test -Dtest=V47MigrationContractTest
 ```
 
 Expected: **PASS**，3 个测试全部通过。
+
+> 本机替代检查：逐字比对测试断言与迁移文本 ——
+> `'asset.projectZone'` / `'项目分区管理'` / `'/project-zones'` / `, 15, d.id` /
+> `WHERE d.code = 'asset'` / `m.code, 'view'` / `r.code <> 'super_admin'` /
+> 两条 `ON CONFLICT` / `INSERT INTO` 恰好出现 2 次。
+> 任何一处不等价，CI 上就是红的。
 
 - [ ] **Step 5: 提交**
 
@@ -731,9 +791,12 @@ Expected:
 3. 只填名称提交 → 成功，列表出现新分区，排序自动追加到末尾。
 4. 点行内「编辑」→ 排序 extra 文案变为「保持原排序」；清空排序后保存 → 排序不变。
 5. 删除一个**有资产**的分区 → 提示「分区「X」下有 N 项资产，无法删除」，分区仍存在。
-6. 删除一个无资产无记录的分区 → 成功，列表移除。
-7. 切到**卡片模式** → 不出现展开入口（`expandable` 只在列表模式生效）。
-8. 进入 `/projects/:id/edit`（第二步「项目分区配置」）→ 分区表格正常加载与编辑，行为与本任务前一致。
+6. 删除一个**无资产但有后续记录**的分区 → 提示「分区「X」已有后续记录，请先处理后再删除」，分区仍存在。
+   （两条拒绝理由分开报是 `AssetService.assertZoneRemovable` 的既有口径，报错优先级固定为「资产 → 记录」。）
+7. 删除一个**无资产且无记录**的分区 → 成功，列表移除。注意这是**软删**（`deleted_at = now()`），
+   不是物理删除：分区从列表消失是因为 `listProjectZones` 过滤了 `deleted_at IS NULL`。
+8. 切到**卡片模式** → 不出现展开入口（`expandable` 只在列表模式生效）。
+9. 进入 `/projects/:id/edit`（第二步「项目分区配置」）→ 分区表格正常加载与编辑，行为与本任务前一致。
 
 - [ ] **Step 7: 提交**
 
@@ -1803,7 +1866,7 @@ Expected:
 6. **全部分区**：选中它时资产列多出「分区」列；「编辑」「删除」为禁用态；`GET /assets` 的 query 里**没有** `zoneId`。
 7. **切分区**：选择具体分区 → 资产归第 1 页并重拉，请求带 `zoneId`；表头显示「分区名 共 N 宗 合计 X ㎡」；「分区」列消失。
 8. **新增分区**：Tab 栏右侧「新增分区」→ 弹窗提交 → Tab 栏立即出现新分区。
-9. **编辑/删除分区**：编辑当前 Tab 的分区并保存 → Tab 文案更新；删除无资产无记录的分区 → 成功且选中 Tab **回到「全部分区」**；删除有资产的分区 → 提示含资产数量，分区仍在。
+9. **编辑/删除分区**：编辑当前 Tab 的分区并保存 → Tab 文案更新；删除**无资产且无记录**的分区 → 成功（软删）且选中 Tab **回到「全部分区」**；删除**有资产**的分区 → 提示「分区「X」下有 N 项资产，无法删除」；删除**无资产但有后续记录**的分区 → 提示「分区「X」已有后续记录，请先处理后再删除」；两种情况分区都仍在。
 10. **删除资产与 Tab 计数联动**：选中某分区，删掉一个空置资产 → 资产表少一行，**且该 Tab 上的资产数与表头「共 N 宗」同步变小**（这是最容易漏的一条）。
 11. **新增资产往返**：点「新增资产」→ URL 为 `/assets/create?projectId=<id>&zoneId=<id>&lockScope=1`，项目与分区已预填且**灰化不可改**；保存 → 回到 `/project-zones?projectId=<id>&zoneId=<id>`，原分区仍选中，资产列表出现新资产。
 12. **编辑资产往返**：点行内「编辑」→ `/assets/{id}/edit?lockScope=1`，归属两项灰化；保存后回到本页且选中分区不变。
@@ -1837,10 +1900,12 @@ git commit -m "feat(admin): 项目分区管理页（左项目 / 右上分区 Tab
 - Consumes: Task 1-6 的全部产物
 - Produces: 可交付状态与验证记录
 
-- [ ] **Step 1: 后端全量测试**
+- [ ] **Step 1: 后端全量（Run（CI））**
+
+**Run（CI）**：
 
 ```bash
-cd backend && mvn test
+cd backend && mvn -B verify
 ```
 
 Expected: 全部通过。重点关注：
@@ -1869,11 +1934,16 @@ STANDALONE_ROUTES  : 17 条
 
 - [ ] **Step 3: 确认后端零业务改动**
 
+用 Pre-Flight 里为 Task 1 记录下来的 BASE（**不要**用 `HEAD~6` —— 仓库有并行提交，任何相对计数都可能滑出范围）：
+
 ```bash
-git diff --stat HEAD~6 -- backend/src/main/java backend/src/main/resources/db/migration
+git diff --stat <TASK1_BASE>..HEAD -- backend/src/main/java backend/src/main/resources/db/migration
+git diff --stat <TASK1_BASE>..HEAD -- backend/src/test
 ```
 
-Expected: 只出现 `backend/src/main/resources/db/migration/V47__project_zone_menu.sql`（1 file changed）。`backend/src/main/java` 下**必须无任何改动**；若出现 `AssetController.java` / `AssetService.java` 等，即为违规，需回退。
+Expected:
+- 第一条只出现 `backend/src/main/resources/db/migration/V47__project_zone_menu.sql`（**1 file changed**）。`backend/src/main/java` 下**必须无任何改动**；若出现 `AssetController.java` / `AssetService.java` 等，即为违规，需回退。
+- 第二条只出现 `backend/src/test/java/com/ams/modules/asset/V47MigrationContractTest.java`（1 file changed）。
 
 - [ ] **Step 4: 记录验证结果**
 
