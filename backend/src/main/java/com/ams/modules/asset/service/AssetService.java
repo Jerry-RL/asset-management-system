@@ -402,6 +402,104 @@ public class AssetService {
                 .in("zone_id", removed));
     }
 
+    // ---- 项目分区（项目列表展开行内的就地维护） ----
+
+    /**
+     * 新增分区：排序缺省取当前最大排序 + 1，即追加到末尾。
+     *
+     * <p>归属由路径参数决定，**忽略请求体里的 {@code id} / {@code projectId}** ——
+     * 与「两步走」的整体保存不同，这里没有父请求体可以信任，只认 URL。
+     */
+    @Transactional
+    public ProjectZone createProjectZone(Long projectId, ProjectZone zone) {
+        getProject(projectId);
+        ProjectZone target = new ProjectZone();
+        target.setProjectId(projectId);
+        target.setName(requireZoneName(zone));
+        target.setCode(zone == null ? null : zone.getCode());
+        target.setSort(zone == null || zone.getSort() == null
+                ? nextZoneSort(projectId)
+                : zone.getSort());
+        target.setRemark(zone == null ? null : zone.getRemark());
+        projectZoneMapper.insert(target);
+        // 与列表接口字段形态一致：新分区必然没有资产，直接给 0，省掉一次聚合查询
+        target.setAssetArea(BigDecimal.ZERO);
+        target.setAssetCount(0L);
+        return target;
+    }
+
+    /**
+     * 编辑分区：只更新允许修改的字段，编号与归属取路径参数。
+     *
+     * <p>返回前回填只读统计，使返回值与 {@link #listProjectZones(Long)} 的元素形态一致。
+     */
+    @Transactional
+    public ProjectZone updateProjectZone(Long projectId, Long zoneId, ProjectZone zone) {
+        getProject(projectId);
+        ProjectZone existing = requireProjectZone(projectId, zoneId);
+        existing.setName(requireZoneName(zone));
+        existing.setCode(zone == null ? null : zone.getCode());
+        if (zone != null && zone.getSort() != null) {
+            existing.setSort(zone.getSort());
+        }
+        existing.setRemark(zone == null ? null : zone.getRemark());
+        projectZoneMapper.updateById(existing);
+        List<ProjectZone> single = new ArrayList<>();
+        single.add(existing);
+        fillZoneAssetStats(single);
+        return existing;
+    }
+
+    /**
+     * 删除分区：分区下有资产时**拒绝**，提示资产数量。
+     *
+     * <p>与 {@link #replaceZones(Long, List)} 刻意不同：后者会把被删分区的资产
+     * {@code zone_id} 静默置空，那会让资产归属在无感知的情况下丢失。就地删除改为显式拒绝，
+     * 由使用者先把资产调整出去。
+     */
+    @Transactional
+    public void deleteProjectZone(Long projectId, Long zoneId) {
+        getProject(projectId);
+        requireProjectZone(projectId, zoneId);
+        Long assetCount = assetMapper.selectCount(
+                new LambdaQueryWrapper<Asset>().eq(Asset::getZoneId, zoneId));
+        if (assetCount != null && assetCount > 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "该分区下有 " + assetCount + " 项资产，无法删除");
+        }
+        projectZoneMapper.deleteById(zoneId);
+    }
+
+    /** 下一个排序号：当前最大排序 + 1；无分区（或排序全为空）时从 0 开始。 */
+    private int nextZoneSort(Long projectId) {
+        List<ProjectZone> zones = projectZoneMapper.selectList(
+                new LambdaQueryWrapper<ProjectZone>().eq(ProjectZone::getProjectId, projectId));
+        return zones.stream()
+                .map(ProjectZone::getSort)
+                .filter(Objects::nonNull)
+                .max(Integer::compareTo)
+                .map(sort -> sort + 1)
+                .orElse(0);
+    }
+
+    /** 分区必须存在且属于该项目；否则按参数错误拒绝（不依赖前端传参正确性）。 */
+    private ProjectZone requireProjectZone(Long projectId, Long zoneId) {
+        ProjectZone zone = projectZoneMapper.selectById(zoneId);
+        if (zone == null || !projectId.equals(zone.getProjectId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "分区不存在");
+        }
+        return zone;
+    }
+
+    /** 分区名称必填并去除首尾空白。 */
+    private String requireZoneName(ProjectZone zone) {
+        String name = zone == null || zone.getName() == null ? null : zone.getName().trim();
+        if (name == null || name.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "请填写分区名称");
+        }
+        return name;
+    }
+
     // ---- 资产 ----
     /**
      * 项目详情页聚合视图：项目主体 + 资产基本信息 / 资产创收 / 租赁概况 + 分区汇总。
