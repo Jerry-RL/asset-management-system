@@ -33,8 +33,8 @@ export interface UseProjectZonesResult {
   saving: boolean;
   /** 重新拉取；失败置 loadFailed，不抛异常 */
   reload: () => Promise<void>;
-  /** 无 id → POST，有 id → PUT。成功返回 true 且已 reload；失败抛异常由调用方提示 */
-  save: (zone: ProjectZone) => Promise<boolean>;
+  /** 无 id → POST，有 id → PUT。成功后已 reload；失败抛异常由调用方提示 */
+  save: (zone: ProjectZone) => Promise<void>;
   /** 删除。失败抛异常（后端拒绝原因必须原样透出） */
   remove: (zone: ProjectZone) => Promise<void>;
 }
@@ -80,7 +80,11 @@ export function useProjectZones(projectId: number | null | undefined): UseProjec
 
   const save = useCallback(
     async (zone: ProjectZone) => {
-      if (projectId == null) return false;
+      // 无项目可挂时**抛错**而不是静默 return：调用方是「await 之后无条件报保存成功」，
+      // 静默返回会让一次没发生的写入被报成成功（与上面「失败抛异常」的契约也自相矛盾）
+      if (projectId == null) {
+        throw new Error('未选择项目，无法保存分区');
+      }
       setSaving(true);
       try {
         if (zone.id != null) {
@@ -89,7 +93,6 @@ export function useProjectZones(projectId: number | null | undefined): UseProjec
           await api.post(`/projects/${projectId}/zones`, zone);
         }
         await reload();
-        return true;
       } finally {
         setSaving(false);
       }
@@ -99,7 +102,10 @@ export function useProjectZones(projectId: number | null | undefined): UseProjec
 
   const remove = useCallback(
     async (zone: ProjectZone) => {
-      if (projectId == null || zone.id == null) return;
+      // 同上：静默 return 会让调用方把一次没发生的删除报成「已删除」
+      if (projectId == null || zone.id == null) {
+        throw new Error('该分区不存在或未选择项目，无法删除');
+      }
       await api.del(`/projects/${projectId}/zones/${zone.id}`);
       await reload();
     },

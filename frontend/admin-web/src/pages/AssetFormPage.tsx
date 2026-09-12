@@ -204,6 +204,23 @@ export function AssetFormPage() {
   useCascadeReset(form, 'projectId', ['zoneId', 'sourceType']);
   useCascadeReset(form, 'responsibleDepartmentId', ['responsibleUserId']);
 
+  /**
+   * 锁定态下是否灰化「资产公司」。**四场景真值表，勿简化**：
+   *
+   * <pre>
+   *   未锁定                  → false（保持改造前行为）
+   *   锁定 + 新增 + 反查成功  → true
+   *   锁定 + 新增 + 反查失败  → false（反查失败时不能灰化：它是必填项，
+   *                                   空白 + 灰化 = 用户无路可走）
+   *   锁定 + 编辑             → true（编辑态刻意不反查，lockedCompanyId 恒为 undefined，
+   *                                  必须由 isEdit 单独覆盖，否则编辑态漏锁）
+   * </pre>
+   *
+   * 后两个中间形态都曾实现并上线过、又各自被证伪（计划 Task 3 Step 4b），
+   * 所以这里保留完整的判据而不是压缩成 `lockScope && lockedCompanyId != null`。
+   */
+  const lockCompanyField = lockScope && (isEdit || lockedCompanyId != null);
+
   // 字典下拉。「资产来源」按所选项目的项目属性级联（土地类 / 房产类可见项不同），
   // 规则在「系统管理 → 系统字典 → 项目属性 → 关联字典值」中维护。
   const assetTypeOptions = useDictOptions('asset_type');
@@ -466,7 +483,7 @@ export function AssetFormPage() {
                     placeholder="请选择资产公司（可输入名称搜索）"
                     treeData={companyTree}
                     listHeight={320}
-                    disabled={(lockScope && (isEdit || lockedCompanyId != null)) || undefined}
+                    disabled={lockCompanyField || undefined}
                   />
                 </Form.Item>
               </Col>

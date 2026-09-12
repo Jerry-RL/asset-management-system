@@ -49,6 +49,20 @@ const formatArea = (value: unknown) =>
   });
 
 /**
+ * 资产区空态文案（spec §5.3）：
+ * 选中具体分区 → 「该分区暂无资产」；「全部分区」下项目本身就没有分区 → 「该项目暂无分区」
+ * （Tab 栏里就摆着「新增分区」入口）；其余（有分区但当下无资产）→ 「该项目暂无资产」。
+ *
+ * <p>`zonesKnown` 为 false 时不宣称「暂无分区」—— 「不知道」不等于「为空」，
+ * 分区加载失败或无权查看项目时都会走到这里。
+ */
+const emptyAssetText = (zoneId: number | null, zonesKnown: boolean, zoneCount: number): string => {
+  if (zoneId != null) return '该分区暂无资产';
+  if (zonesKnown && zoneCount === 0) return '该项目暂无分区';
+  return '该项目暂无资产';
+};
+
+/**
  * 「项目分区管理」右侧：分区 Tab 栏 + 该分区资产表（设计 §5.1 / §6.5）。
  */
 export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPaneProps) {
@@ -130,12 +144,29 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, zoneId, canViewLedger, assetsReloadToken]);
 
-  /** URL 里的 zoneId 不属于当前项目（删分区后回退、手改链接）→ 回到「全部分区」 */
+  /**
+   * URL 里的 zoneId 不属于当前项目（删分区后回退、手改链接）→ 回到「全部分区」。
+   *
+   * <p>**失败态也必须回退**（spec §5.3「分区列表加载失败时，资产区可继续用『全部分区』」）：
+   * `useProjectZones` 失败时会清空 `zones`（`lib/projectZones.ts:70`），此时 `currentZone`
+   * 变成 null、`scopeLabel` 回落成「全部分区」，但请求仍按 `zoneId` 过滤 ⇒
+   * **表头写「全部分区」而表内只有那一个分区的行**；同时错误态会替掉整个 Tab 栏，
+   * 用户连点回「全部分区」的机会都没有。所以这里**不**把 `zonesFailed` 列为提前返回：
+   * 失败时 `zones` 已为空，`some(...)` 必假，`zoneId` 自愈为 null，表头与请求重新一致。
+   */
   useEffect(() => {
-    if (zoneId == null || zonesLoading || zonesFailed) return;
+    if (zoneId == null || zonesLoading) return;
     if (zones.some((zone) => zone.id === zoneId)) return;
     onZoneChange(null);
-  }, [zoneId, zones, zonesLoading, zonesFailed, onZoneChange]);
+  }, [zoneId, zones, zonesLoading, onZoneChange]);
+
+  /**
+   * 切换项目时关掉分区弹窗：`editingZone` 是上一个项目的行数据，留着它再提交会
+   * PUT `/projects/{新项目}/zones/{旧分区}`（后端会拒，但报错与用户眼前所见对不上）。
+   */
+  useEffect(() => {
+    setEditingZone(null);
+  }, [projectId]);
 
   const handlePageChange = (p: number) => {
     setPage(p);
@@ -426,7 +457,7 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
         </div>
       ) : assets.length === 0 ? (
         <Empty
-          description={zoneId == null ? '该项目暂无资产' : '该分区暂无资产'}
+          description={emptyAssetText(zoneId, canViewProject && !zonesFailed, zones.length)}
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           className="py-10"
         />

@@ -5,11 +5,13 @@ import { usePerm } from '@/lib/perm';
 import { ProjectListPane } from '@/components/ProjectListPane';
 import { ZoneAssetPane } from '@/components/ZoneAssetPane';
 
-/** URL 数字参数解析：缺失 / 非法 / 非正数一律视为「未选中」 */
+/** URL 数字参数解析：缺失 / 非纯数字 / 非正数一律视为「未选中」 */
 const toPositiveInt = (raw: string | null): number | null => {
-  if (!raw) return null;
+  // 用正则而不是 `Number.isFinite`：后者会把 '1.5' / '1e3' / '0x10' 都当成合法数字，
+  // 拼出 `zoneId=1.5` 这类请求（后端 400，页面进错误态）
+  if (!raw || !/^\d+$/.test(raw)) return null;
   const value = Number(raw);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return value > 0 ? value : null;
 };
 
 /**
@@ -27,7 +29,12 @@ export function ProjectZonesPage() {
   const canViewProject = can('asset.project', 'view');
 
   const projectId = toPositiveInt(searchParams.get('projectId'));
-  const zoneId = toPositiveInt(searchParams.get('zoneId'));
+  /**
+   * `zoneId` **必须挂在 `projectId` 之下**：`/project-zones?zoneId=5` 这种孤儿参数会让 URL
+   * 与右栏（显示「请先在左侧选择项目」）长期不一致，且右栏无法清掉它 —— `selectZone`
+   * 在无项目时提前 return，只有用户真的选了项目才会被 `selectProject` 覆盖。
+   */
+  const zoneId = projectId == null ? null : toPositiveInt(searchParams.get('zoneId'));
 
   /**
    * 切换项目：**不保留 `zoneId`**，即回到「全部分区」（spec §5.2 第 1 条）。

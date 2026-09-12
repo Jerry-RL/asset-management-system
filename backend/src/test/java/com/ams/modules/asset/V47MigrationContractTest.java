@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,25 +51,42 @@ class V47MigrationContractTest {
         }
     }
 
+    /**
+     * 去掉 `--` 行注释后的 SQL。
+     *
+     * <p>正反两向断言都必须只看**会真正执行的语句**：否则一句解释性注释就能让
+     * 负向断言误红（维护者于是不敢写注释），或让正向断言空转通过
+     * （注释里出现同名字符串就满足 `contains`）。
+     */
+    private static String sqlWithoutComments(String sql) {
+        return sql.lines()
+                .map(line -> {
+                    int idx = line.indexOf("--");
+                    return idx >= 0 ? line.substring(0, idx) : line;
+                })
+                .collect(Collectors.joining("\n"));
+    }
+
     @Test
     @DisplayName("菜单行按设计 §3.1 落种子：code / name / type / path / 排序 / 父目录")
     void seedsProjectZoneMenu() {
+        String sql = sqlWithoutComments(SQL);
         // 类型断言必须带引号（`'menu'`）：裸 `"menu"` 会被 `INSERT INTO menu`、`menu_type`、
         // `menu_code` 一并满足，于是把第 3 个 SELECT 字面量改成 'dir' 测试依然全绿 ——
         // 而 `@DisplayName` 声称它守住了「type」。这是本任务唯一一处真正会漏事的断言。
-        assertThat(SQL)
+        assertThat(sql)
                 .as("必须插入 asset.projectZone 菜单行，且路径与名称与设计一致")
                 .contains("'" + MENU_CODE + "'", "'项目分区管理'", "'menu'", "'" + MENU_PATH + "'");
         // 父目录由 code 解析，不能硬编码 parent_id（V45 的 id 在其它环境不保证一致）
-        assertThat(SQL)
+        assertThat(sql)
                 .as("父目录必须按 code 解析（d.code = 'asset'），不得硬编码 parent_id")
                 .contains("WHERE d.code = 'asset'")
                 .doesNotContain("parent_id) VALUES");
         // 排序 15：落在「项目管理」(10) 与「资产台账」(20) 之间
-        assertThat(SQL)
+        assertThat(sql)
                 .as("排序必须是 15，插在项目管理(10) 与资产台账(20) 之间")
                 .contains(", 15, d.id");
-        assertThat(SQL)
+        assertThat(sql)
                 .as("菜单种子必须幂等，重复执行不报错")
                 .contains("ON CONFLICT (code) DO NOTHING");
     }
@@ -76,22 +94,25 @@ class V47MigrationContractTest {
     @Test
     @DisplayName("view 回填：只回填 view、排除 super_admin、范围只限本菜单")
     void backfillsViewForNonSuperAdmin() {
-        assertThat(SQL)
+        String sql = sqlWithoutComments(SQL);
+        assertThat(sql)
                 .as("回填语句必须写 role_permission(role_id, menu_id, menu_code, action)")
                 .contains("INSERT INTO role_permission (role_id, menu_id, menu_code, action)");
-        assertThat(SQL)
+        assertThat(sql)
                 .as("必须只回填 view")
                 .contains("m.code, 'view'");
-        assertThat(SQL)
+        assertThat(sql)
                 .as("必须排除 super_admin（它走 isSuperAdmin 旁路，不需要数据行）")
                 .contains("r.code <> 'super_admin'");
-        assertThat(SQL)
+        assertThat(sql)
                 .as("回填范围必须限定在本菜单，不得扫全表")
                 .contains("m.code = '" + MENU_CODE + "'");
-        assertThat(SQL)
-                .as("写动作一律不回填（V45 §5.3）：出现带引号的 create/update/delete 即为越权回填")
-                .doesNotContain("'create'", "'update'", "'delete'");
-        assertThat(SQL)
+        assertThat(sql)
+                .as("动作级回填只允许 view：出现任何其它动作词即为静默越权（V45 §5.3），"
+                        + "词表对齐 perm.tsx 的 PermAction")
+                .doesNotContain("'create'", "'update'", "'delete'", "'export'", "'import'", "'approve'",
+                        "'audit'", "'assign'");
+        assertThat(sql)
                 .as("回填必须幂等，重跑不产生重复授权")
                 .contains("ON CONFLICT DO NOTHING");
     }
@@ -99,15 +120,16 @@ class V47MigrationContractTest {
     @Test
     @DisplayName("不触碰业务表与既有菜单：无 DDL，且只允许两条 INSERT")
     void touchesNoBusinessTables() {
-        assertThat(SQL)
+        String sql = sqlWithoutComments(SQL);
+        assertThat(sql)
                 .as("本迁移只种菜单，不做任何 DDL")
                 .doesNotContain("ALTER TABLE", "CREATE TABLE", "DROP TABLE", "CREATE INDEX", "DROP INDEX");
-        assertThat(SQL)
+        assertThat(sql)
                 .as("不得改动分区 / 项目 / 资产数据")
                 .doesNotContain("project_zone", "INSERT INTO project", "UPDATE project", "DELETE FROM project")
                 .doesNotContain("INTO asset", "UPDATE asset", "DELETE FROM asset")
                 .doesNotContain("menu_type = 'menu'");
-        assertThat(SQL.split("INSERT INTO", -1))
+        assertThat(sql.split("INSERT INTO", -1))
                 .as("只允许两条 INSERT：菜单行 + view 回填")
                 .hasSize(3);
     }
