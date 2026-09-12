@@ -95,7 +95,12 @@ export function AssetFormPage() {
    */
   const presetProjectId = toPositiveNumber(searchParams.get('projectId'));
   const presetZoneId = toPositiveNumber(searchParams.get('zoneId'));
-  /** 归属锁定：本入口不允许把资产挪到别的项目 / 分区（越权仍由后端 validateZone 拦截） */
+  /**
+   * 归属锁定：本入口不允许把资产挪到别的项目 / 分区。
+   *
+   * <p>注意后端只兜底「分区属于所选项目」（`validateZone`），**不校验「资产公司 ↔ 项目」是否同一公司** ——
+   * 所以这里的锁定是入口侧的唯一防线，见设计 §8 已知缺口。
+   */
   const lockScope = searchParams.get('lockScope') === '1';
 
   /** 新增时预填归属；编辑态只保留 assetType，归属交给接口返回值 */
@@ -104,6 +109,40 @@ export function AssetFormPage() {
     : { assetType: 'property', projectId: presetProjectId, zoneId: presetZoneId };
 
   const [form] = Form.useForm();
+
+  /**
+   * 锁定态下由项目反查资产公司。
+   *
+   * <p>项目下拉的选项依赖资产公司（`/projects?companyId=`），且资产公司本身是必填项 ——
+   * 不预填就等于让用户手选，而手选会触发级联清空刚锁住的项目/分区（详见设计 §6.7）。
+   */
+  const [lockedCompanyId, setLockedCompanyId] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    // 只在「新增 + 锁定 + 有项目」时反查；编辑态归属一律以 /assets/{id} 为准
+    if (!lockScope || isEdit || presetProjectId == null) return;
+    let cancelled = false;
+    api
+      .get<Record<string, unknown>>(`/projects/${presetProjectId}`)
+      .then((project) => {
+        if (cancelled) return;
+        const companyId = Number(project.companyId);
+        if (Number.isFinite(companyId) && companyId > 0) setLockedCompanyId(companyId);
+      })
+      .catch(() => {
+        // 反查失败不阻断表单：用户仍可手选公司，只是失去锁定体验
+        if (!cancelled) setLockedCompanyId(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lockScope, isEdit, presetProjectId]);
+
+  /** 公司反查到位后写入。首次写入不算「变更」，因此不会触发级联清空（见上） */
+  useEffect(() => {
+    if (lockedCompanyId == null) return;
+    form.setFieldsValue({ assetCompanyId: lockedCompanyId });
+  }, [lockedCompanyId, form]);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [loading, setLoading] = useState(isEdit);
   const [notFound, setNotFound] = useState(false);
@@ -414,7 +453,9 @@ export function AssetFormPage() {
                   name="assetCompanyId"
                   label="资产公司"
                   rules={[{ required: true, message: '请选择资产公司' }]}
-                  extra="项目、责任部门均按资产公司级联"
+                  extra={
+                    lockScope ? '由项目分区管理进入，归属已锁定' : '项目、责任部门均按资产公司级联'
+                  }
                 >
                   <TreeSelect
                     allowClear
@@ -424,6 +465,7 @@ export function AssetFormPage() {
                     placeholder="请选择资产公司（可输入名称搜索）"
                     treeData={companyTree}
                     listHeight={320}
+                    disabled={lockScope || undefined}
                   />
                 </Form.Item>
               </Col>
