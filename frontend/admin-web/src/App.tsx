@@ -18,6 +18,7 @@ import { DunningAutoPage } from '@/pages/DunningAutoPage';
 import { HelpPage } from '@/pages/HelpPage';
 import { SystemDictionaryPage } from '@/pages/SystemDictionaryPage';
 import { SystemMenuPage } from '@/pages/SystemMenuPage';
+import { SystemRolePage } from '@/pages/SystemRolePage';
 import { OrgStructurePage } from '@/pages/OrgStructurePage';
 import { ProjectFormPage } from '@/pages/ProjectFormPage';
 import ProjectDetailPage from '@/pages/ProjectDetailPage';
@@ -67,6 +68,7 @@ export default function App() {
               <Route path="system/dict" element={<SystemDictionaryPage />} />
               {/* 菜单管理：专用页面（树 + 抽屉 + 校验），不再走 ResourcePage */}
               <Route path="system/menus" element={<SystemMenuPage />} />
+              <Route path="system/roles" element={<SystemRolePage />} />
               <Route path="org/structure" element={<OrgStructurePage />} />
               {/* 项目新增/编辑：两步走（基本信息 + 分区配置） */}
               <Route path="projects/create" element={<ProjectFormPage />} />

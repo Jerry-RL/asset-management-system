@@ -1397,38 +1397,6 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       },
     ],
   },
-  'system/roles': {
-    title: '角色权限',
-    listPath: '/system/roles',
-    create: true,
-    columns: [
-      { key: 'id', label: 'ID' },
-      { key: 'code', label: '角色编码' },
-      { key: 'name', label: '角色名称' },
-      {
-        key: 'dataScope',
-        label: '数据范围',
-        map: { all: '全部', company: '公司', dept: '部门', project: '项目', self: '本人' },
-      },
-      { key: 'status', label: '状态', map: { '1': '启用', '0': '停用' } },
-    ],
-    fields: [
-      { name: 'code', label: '角色编码', required: true },
-      { name: 'name', label: '角色名称', required: true },
-      {
-        name: 'dataScope',
-        label: '数据范围',
-        type: 'select',
-        options: [
-          { value: 'all', label: '全部' },
-          { value: 'company', label: '公司' },
-          { value: 'dept', label: '部门' },
-          { value: 'project', label: '项目' },
-          { value: 'self', label: '本人' },
-        ],
-      },
-    ],
-  },
   'config/versions': {
     title: '参数版本留痕',
     listPath: '/config/versions',

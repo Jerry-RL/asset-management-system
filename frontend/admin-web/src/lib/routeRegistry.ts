@@ -35,6 +35,7 @@ export const STANDALONE_ROUTES: string[] = [
   '/contract-templates',
   '/system/dict',
   '/system/menus',
+  '/system/roles',
   '/org/structure',
 ];
 
