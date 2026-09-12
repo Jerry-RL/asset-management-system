@@ -130,7 +130,22 @@ export function useUrlParam<T>(key: string, defaultValue: T, codec?: UrlParamCod
     [codec],
   );
 
-  const value = raw == null ? defaultValue : codec ? codec.parse(raw) : (raw as unknown as T);
+  /**
+   * 值按 `raw` 缓存（**不是**每次渲染重新解析）。带 `codec` 的解析每次都返回新对象
+   * （`dayjs`、`split(',')` 的数组），若不缓存，`value` 的引用就一直在变：
+   * 把它放进 `useCallback`/`useMemo` 依赖的调用方（如 `OpsCalendarPage` 的 `loadSummary`
+   * 依赖 `panelDate`）就会每次渲染都换新函数，再被 `useEffect([loadSummary])` 捕获，
+   * 于是「拉取 → setState → 重渲染 → 再拉取」变成**无限请求循环**。
+   *
+   * <p>因此有两条约定（设计 §5.1）：
+   * 1. `defaultValue` 必须是**稳定引用**（模块常量或 `useMemo`），否则这份缓存会随它一起失效
+   *    —— `useUrlParam('types', TYPE_OPTIONS.map(...))` 这种写法会把缓存彻底废掉；
+   * 2. 调用方不要依赖 `value` 的「每次都是新对象」来做副作用，`raw` 不变它就不变。
+   */
+  const value = useMemo(
+    () => (raw == null ? defaultValue : codec ? codec.parse(raw) : (raw as unknown as T)),
+    [raw, codec, defaultValue],
+  );
   const defaultSerialized = serialize(defaultValue);
 
   const setValue = useCallback(

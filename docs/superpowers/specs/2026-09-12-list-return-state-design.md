@@ -117,13 +117,25 @@ export function useBackNavigate(fallback) {
 useUrlParam<T>(key, defaultValue, codec?):
   searchParams = useSearchParams()
   raw = searchParams.get(key)
-  value = raw == null ? defaultValue : codec ? codec.parse(raw) : (raw as T)
+  // ⚠️ 必须 memo：[raw, codec, defaultValue] 不变就不重新解析
+  value = useMemo(
+    () => raw == null ? defaultValue : codec ? codec.parse(raw) : (raw as T),
+    [raw, codec, defaultValue])
   setValue(next):
     setSearchParams(prev =>
       next 等于 defaultValue（或空）→ delete(key)，否则 set(key, codec ? codec.serialize(next) : String(next))
     , { replace: true })
   return [value, setValue]
 ```
+
+> **⚠️ `value` 必须 memo，且 `defaultValue` 必须是稳定引用。**
+> 带 codec 的解析每次都返回**新对象**（`dayjs(...)`、`split(',')` 的数组）。若不 memo，
+> 调用方把它放进 `useCallback`/`useMemo` 依赖时，每次渲染都会换新函数，再被
+> `useEffect([loadSummary])` 这类 effect 捕获，就会变成
+> 「拉取 → setState → 重渲染 → 再拉取」的**无限请求循环**（`OpsCalendarPage` 的
+> `panelDate`/`selectedDate` 正是这种用法，是本设计最容易踩的一处）。
+> 由此要求 `defaultValue` 为模块常量或 `useMemo` 值 —— 写成
+> `useUrlParam('types', TYPE_OPTIONS.map(...))` 会让 memo 每次都失效。
 
 - `codec` 用于非字符串量：`OpsCalendarPage` 的 `types: string[]`（逗号分隔）、`date`/`month`（dayjs 转换）。
 - 非法值由 `codec.parse` 自行回落到默认值，避免页面渲染崩溃。
