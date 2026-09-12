@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "check:perm": "node ../scripts/check-perm-invariants.mjs",
+    "test:list-query": "node ../scripts/test-list-query-params.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "api:lint": "redocly lint ../docs/api/openapi.yaml",
