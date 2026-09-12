@@ -1,6 +1,7 @@
 package com.ams.modules.record.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -139,13 +140,13 @@ class RecordSheetEndpointPermissionTest {
         // assertAccessible(ZONE, zoneId)，第一行会因 0 次调用而失败 ——
         // 否则这次修正被无声回滚，全套用例依然全绿。
         verify(ownerResolver).assertAccessibleInProject(PROJECT_ID, ZONE_ID);
-        verify(ownerResolver, never()).assertAccessible(RecordOwnerType.ZONE, any());
+        verify(ownerResolver, never()).assertAccessible(eq(RecordOwnerType.ZONE), any());
 
         login(Set.of("asset.project:update"));
         mvc().perform(put(ZONE_PATH, PROJECT_ID, ZONE_ID)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isOk());
-        verify(service).save(RecordOwnerType.ZONE, ZONE_ID, any(RecordSheetRequest.class));
+        verify(service).save(eq(RecordOwnerType.ZONE), eq(ZONE_ID), any(RecordSheetRequest.class));
     }
 
     /** 以非 super_admin 身份登录：roles 不含 super_admin，否则拦截器直接放行、用例空转。 */
