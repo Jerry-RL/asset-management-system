@@ -49,8 +49,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
  *   <li>删除挂资产的分区必须被拒；有后续记录的分区同样被拒（两条理由分开报）。</li>
  * </ol>
  *
- * <p>删除语义（设计 §7.3）：`deleteProjectZone` 与 `replaceZones` 共用同一个可删性守卫，
- * 且都得是**软删**（写 {@code deleted_at}）—— 硬删会让分区的后续记录变成悬空数据。
+ * <p>删除语义（设计 §7.3）：`deleteProjectZone`、`replaceZones`、`deleteProject` 共用同一个可删性守卫
+ * （`assertZoneRemovable`）。分区自身的两条删除路径是**软删**（写 {@code deleted_at}）；
+ * `deleteProject` 在守卫确认整棵子树为空壳后保留硬删 —— 硬删若**不过守卫**才会让分区的后续记录变成悬空数据。
  */
 @ExtendWith(MockitoExtension.class)
 class AssetServiceZoneTest {

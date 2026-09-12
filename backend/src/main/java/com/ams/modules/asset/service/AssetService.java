@@ -424,7 +424,7 @@ public class AssetService {
             index++;
         }
         // 移除分区前先过可删性守卫：有资产或有后续记录都整单拒绝（异常 → 整个事务回滚）。
-        // 与 deleteProjectZone 共用同一个 assertZoneRemovable，两条删除路径口径一致。
+        // 与 deleteProjectZone / deleteProject 共用同一个 assertZoneRemovable，三条删除路径口径一致。
         List<Long> removedIds = existing.stream()
                 .map(ProjectZone::getId)
                 .filter(id -> !keptIds.contains(id))
@@ -515,7 +515,7 @@ public class AssetService {
     }
 
     /**
-     * 分区可删性的唯一判定点：两条删除路径（就地删除 / 项目整体保存）都调它，保证口径一致。
+     * 分区可删性的唯一判定点：三条删除路径（就地删除 / 项目整体保存 / 项目删除）都调它，保证口径一致。
      *
      * <p>两个条件都算完再抛，报错优先级固定为「资产 → 记录」：先让使用者知道有资产要调整归属，
      * 修好之后再暴露记录问题。这样报什么理由只由数据决定，不受查询顺序影响。

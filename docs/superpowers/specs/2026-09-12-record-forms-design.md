@@ -25,7 +25,7 @@
 |------|------|------|
 | 资产表单 | `AssetFormPage.tsx` 为**单页卡片**（归属/基本/属性/管理/计量 5 张卡），底部一个提交按钮 | 没有「下一步」概念，需先改造成分步表单 |
 | 项目表单 | `ProjectFormPage.tsx` 为**两步** `Steps`，第二步是分区**内联表格** | 塞不下三模块；分区没有独立入口 |
-| 项目分区 | 后端**已有分区 CRUD**（`GET/POST /projects/{id}/zones`、`PUT/DELETE /projects/{id}/zones/{zoneId}`，权限 `asset.project:view/update`，写接口均 `@Audited`）；另有项目 PUT 的 `zones` 数组做全量保存 | 缺**分区详情页**，三模块无处录入；两条写入路径的删除语义不一致且**都是物理删除**（见 §7.3） |
+| 项目分区 | 后端**已有分区 CRUD**（`GET/POST /projects/{id}/zones`、`PUT/DELETE /projects/{id}/zones/{zoneId}`，权限 `asset.project:view/update`，写接口均 `@Audited`）；另有项目 PUT 的 `zones` 数组做全量保存 | 缺**分区详情页**，三模块无处录入；三条删除路径语义不一致：两条各自为政且**都是物理删除**，第三条（删项目）绕过守卫并硬删全部分区（见 §7.3） |
 | 处置 | `disposal_order` + `DisposalController`（submit/approve/execute/complete），`asset.lifecycle_status` 处置完成置 `exited`；`disposal_order.asset_id` **NOT NULL** | 资产专属、带审批与生命周期语义，套不到项目/分区 |
 | 接收信息 | SRS §4.6 定义为「资产接收、移交建档记录」（FR-CERT-001）；代码侧只有 `asset_transfer.handover_json`（交接清单 JSON） | **无表、无接口、无页面**；与调拨单职责重叠 |
 | 来源信息 | 资产已有 `source_type` 字段 + `asset_source` 字典（含 移交资产/划入/托管…）；项目/分区无此字段 | 命名与概念撞车（同一表单会出现两个「来源」） |
@@ -451,8 +451,8 @@ modules/record/
    1. `modules/record` 实体 / Mapper；
    2. `RecordOwner` / `OwnerResolver`（多态归属解析 + 权限码映射）；
    3. `RecordSheetService`（聚合读写 + 全量 diff）与 `RecordSheetController`（6 个端点）；
-   4. `RecordPresenceChecker`；`OwnershipResolver.ofZone`；抽出共享的「分区可删性」校验，两条删除路径接入；
-   5. `replaceZones` 去静默置空 + 子记录校验；两条删除路径转软删；
+   4. `RecordPresenceChecker`；`OwnershipResolver.ofZone`；抽出共享的「分区可删性」校验，**三条**删除路径接入（就地删除 / 项目整体保存 / 项目删除）；
+   5. `replaceZones` 去静默置空 + 子记录校验；分区自身的两条删除路径转软删（`deleteProject` 保留硬删，理由见 §7.3 第 3 条的例外说明）；
    6. `GET /assets/{id}/disposals`；`DisposalController` 补 `@RequiresPerm` 与 `@Audited`；`POST /disposals` 接收 `attachments`。
 3. **权限**：新接口使用既有菜单码 + 既有动作词表；把 `asset.ledger:update`、`asset.project:update`、`operation.disposal:create/update/approve` 授予相关角色与测试夹具（**必须与注解上线同批**，否则存量角色全部 403）。`PermissionRegistry` 启动即校验菜单码存在性，`operation.disposal` / `asset.ledger` / `asset.project` 均已在 V45 种子中，无需新增菜单。
 4. **前端**：`AttachmentField` / `ActorField` → `RecordSheetSections` → `AssetFormPage` 分步 → `ProjectFormPage` 第 3 步 → `ZoneDetailPage` + 路由 + 分区「详情」入口。
