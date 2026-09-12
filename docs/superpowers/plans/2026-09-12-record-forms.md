@@ -3278,11 +3278,14 @@ git commit -m "feat(record): 聚合读写服务（三模块全量 diff + 附件 
 - Test: `backend/src/test/java/com/ams/modules/record/controller/RecordSheetEndpointPermissionTest.java`
 
 **Interfaces:**
-- Consumes: `RecordSheetService.read/save`（Task 7）、`OwnerResolver.assertAccessible`（Task 5）、`RecordOwnerType`（Task 3）、`ApiResponse` / `TraceIdUtil`。
+- Consumes: `RecordSheetService.read/save`（Task 7）、`OwnerResolver.assertAccessible / assertAccessibleInProject`（Task 5 / Task 8）、`RecordOwnerType`（Task 3）、`ApiResponse` / `TraceIdUtil`。
 - Produces（前端 `lib/recordSheet.ts` 逐字依赖的 6 条路径）：
   - `GET|PUT /api/v1/assets/{assetId}/record-sheet`
   - `GET|PUT /api/v1/projects/{projectId}/record-sheet`
   - `GET|PUT /api/v1/projects/{projectId}/zones/{zoneId}/record-sheet`
+
+> **派发前修正（裁定，实现以本条为准）**：分区路由 `/projects/{projectId}/zones/{zoneId}/record-sheet` 的 `projectId` **必须真的参与归属校验**，否则 `/projects/1/zones/9/...` 与 `/projects/2/zones/9/...` 行为一致，任意 `projectId` 被静默接受。设计 §6 要求「归属可由路径直接解析，且与已上线的分区 CRUD 保持一致」，已上线的分区 CRUD 走 `AssetService.requireProjectZone` → `ProjectZoneMapper.selectActiveInProject(projectId, zoneId)`，确实校验了分区属于该项目。因此 `OwnerResolver` 抽出 `accessibleZone(zoneId, expectedProjectId)` 私有辅助（`assertAccessible` 行为不变，`expectedProjectId` 传 null 时跳过项目校验），并新增公开入口 `assertAccessibleInProject(projectId, zoneId)`；分区不属于该项目时与「分区不存在」返回**逐字相同**的 `NOT_FOUND` 文案。控制器分区两个方法改用 `assertAccessibleInProject`。
+
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -3543,15 +3546,14 @@ public class RecordSheetController {
     }
 
     // ---- 分区 ----
-    // 路径嵌套在既有分区资源下：归属可由路径直接解析，与已上线的分区 CRUD 保持一致。
-    // projectId 参与路径是为了让「分区不属于该项目」由路由形态本身就排斥掉，
-    // 而不是靠请求体里再传一次 projectId。
+    // 路径嵌套在既有分区资源下，与已上线的分区 CRUD 一致：projectId 参与归属判定，
+    // 分区不属于该项目时与「分区不存在」返回完全相同的 404（assertAccessibleInProject）。
 
     @GetMapping("/projects/{projectId}/zones/{zoneId}/record-sheet")
     @RequiresPerm("asset.project:view")
     public ApiResponse<RecordSheetView> zoneSheet(
             @PathVariable Long projectId, @PathVariable Long zoneId) {
-        ownerResolver.assertAccessible(RecordOwnerType.ZONE, zoneId);
+        ownerResolver.assertAccessibleInProject(projectId, zoneId);
         return ApiResponse.ok(recordSheetService.read(RecordOwnerType.ZONE, zoneId), TraceIdUtil.get());
     }
 
@@ -3561,7 +3563,7 @@ public class RecordSheetController {
     public ApiResponse<RecordSheetView> saveZoneSheet(
             @PathVariable Long projectId, @PathVariable Long zoneId,
             @RequestBody RecordSheetRequest request) {
-        ownerResolver.assertAccessible(RecordOwnerType.ZONE, zoneId);
+        ownerResolver.assertAccessibleInProject(projectId, zoneId);
         return ApiResponse.ok(
                 recordSheetService.save(RecordOwnerType.ZONE, zoneId, request), TraceIdUtil.get());
     }

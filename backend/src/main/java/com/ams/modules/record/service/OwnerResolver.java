@@ -91,18 +91,51 @@ public class OwnerResolver {
                 require(project != null, type, ownerId);
                 yield ownershipResolver.ofProject(ownerId);
             }
-            case ZONE -> {
-                ProjectZone zone = projectZoneMapper.selectActiveById(ownerId);
-                require(zone != null, type, ownerId);
-                yield ownershipResolver.ofProject(zone.getProjectId());
-            }
+            case ZONE -> accessibleZone(ownerId, null);
         };
-        // 越权刻意收敛成与「不存在」完全一致的 404（设计 §5.3 第 5 条 / 验收 8）：
-        // 用 403 区分「存在但无权」会把宿主 id 变成存在性探针。不要「顺手修回」403。
+        requireAccessibleCompany(companyId, type, ownerId);
+        return companyId;
+    }
+
+    /**
+     * 分区 record-sheet 路由的归属判定：在 {@link #assertAccessible} 之上再要求
+     * 「该分区属于路径里的项目」，与已上线的分区 CRUD 口径一致。
+     *
+     * @throws AppException zoneId 缺失 → {@code BAD_REQUEST}；
+     *     分区不存在 / 不属于该项目 / 对象级越权 → {@code NOT_FOUND}（同一状态码、同一文案）
+     */
+    public Long assertAccessibleInProject(Long projectId, Long zoneId) {
+        if (zoneId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "缺少记录归属对象编号");
+        }
+        Long companyId = accessibleZone(zoneId, projectId);
+        requireAccessibleCompany(companyId, RecordOwnerType.ZONE, zoneId);
+        return companyId;
+    }
+
+    /**
+     * 分区归属解析的唯一实现：{@code expectedProjectId} 非空时要求分区确实属于该项目。
+     *
+     * <p>「路径里的 projectId 配不配」同样不能变成分区 id 的存在性探针：与「分区不存在」
+     * 共用同一条 NOT_FOUND 文案（{@link #notFoundMessage}）。
+     */
+    private Long accessibleZone(Long zoneId, Long expectedProjectId) {
+        ProjectZone zone = projectZoneMapper.selectActiveById(zoneId);
+        require(zone != null, RecordOwnerType.ZONE, zoneId);
+        if (expectedProjectId != null && !expectedProjectId.equals(zone.getProjectId())) {
+            throw new AppException(ErrorCode.NOT_FOUND, notFoundMessage(RecordOwnerType.ZONE, zoneId));
+        }
+        return ownershipResolver.ofProject(zone.getProjectId());
+    }
+
+    /**
+     * 越权刻意收敛成与「不存在」完全一致的 404（设计 §5.3 第 5 条 / 验收 8）：
+     * 用 403 区分「存在但无权」会把宿主 id 变成存在性探针。不要「顺手修回」403。
+     */
+    private void requireAccessibleCompany(Long companyId, RecordOwnerType type, Long ownerId) {
         if (!rbacService.canAccessCompany(SecurityUtils.current(), companyId)) {
             throw new AppException(ErrorCode.NOT_FOUND, notFoundMessage(type, ownerId));
         }
-        return companyId;
     }
 
     private void require(boolean exists, RecordOwnerType type, Long ownerId) {

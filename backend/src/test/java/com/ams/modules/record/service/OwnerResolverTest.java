@@ -230,6 +230,75 @@ class OwnerResolverTest {
         assertThat(outOfScope.getMessage()).isEqualTo(missing.getMessage());
     }
 
+    @Test
+    @DisplayName("带项目期望：分区确实属于该项目 → 正常返回归属公司")
+    void zoneInProjectResolvesCompanyThroughProject() {
+        ProjectZone zone = new ProjectZone();
+        zone.setId(ZONE_ID);
+        zone.setProjectId(PROJECT_ID);
+        when(projectZoneMapper.selectActiveById(ZONE_ID)).thenReturn(zone);
+        when(ownershipResolver.ofProject(PROJECT_ID)).thenReturn(COMPANY_ID);
+        when(rbacService.canAccessCompany(any(LoginUser.class), eq(COMPANY_ID))).thenReturn(true);
+        login();
+
+        assertThat(resolver.assertAccessibleInProject(PROJECT_ID, ZONE_ID)).isEqualTo(COMPANY_ID);
+
+        verify(rbacService).canAccessCompany(any(LoginUser.class), eq(COMPANY_ID));
+    }
+
+    @Test
+    @DisplayName("带项目期望：分区不属于路径里的项目 → 404，文案与「分区不存在」逐字相同")
+    void zoneOutsideProjectIsNotFoundWithSameMessageAsMissing() {
+        login();
+
+        // 1) 分区不存在
+        when(projectZoneMapper.selectActiveById(ZONE_ID)).thenReturn(null);
+        AppException missing = catchThrowableOfType(
+                () -> resolver.assertAccessibleInProject(PROJECT_ID, ZONE_ID), AppException.class);
+
+        // 2) 分区存在，但属于另一个项目：projectId 配不配同样是「不存在」，不做存在性探针
+        ProjectZone otherProjectZone = new ProjectZone();
+        otherProjectZone.setId(ZONE_ID);
+        otherProjectZone.setProjectId(PROJECT_ID + 1);
+        when(projectZoneMapper.selectActiveById(ZONE_ID)).thenReturn(otherProjectZone);
+        AppException wrongProject = catchThrowableOfType(
+                () -> resolver.assertAccessibleInProject(PROJECT_ID, ZONE_ID), AppException.class);
+
+        assertThat(missing).isNotNull();
+        assertThat(wrongProject).isNotNull();
+        assertThat(missing.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+        assertThat(wrongProject.getErrorCode()).isEqualTo(missing.getErrorCode());
+        assertThat(wrongProject.getMessage()).isEqualTo(missing.getMessage());
+        // 项目不匹配在解析归属之前就拒绝：不能顺手多查一次公司，否则又成了探针
+        verifyNoInteractions(ownershipResolver, rbacService);
+    }
+
+    @Test
+    @DisplayName("带项目期望：分区属于该项目但归属公司越权 → 仍然 404，文案与不存在相同")
+    void zoneInProjectOutOfScopeIsNotFoundWithSameMessage() {
+        login();
+
+        ProjectZone zone = new ProjectZone();
+        zone.setId(ZONE_ID);
+        zone.setProjectId(PROJECT_ID);
+        when(projectZoneMapper.selectActiveById(ZONE_ID)).thenReturn(zone);
+        when(ownershipResolver.ofProject(PROJECT_ID)).thenReturn(COMPANY_ID);
+        when(rbacService.canAccessCompany(any(LoginUser.class), eq(COMPANY_ID))).thenReturn(false);
+        AppException outOfScope = catchThrowableOfType(
+                () -> resolver.assertAccessibleInProject(PROJECT_ID, ZONE_ID), AppException.class);
+
+        // 与「分区不存在」同一文案：证明新增的项目校验分支没有把 403 引回来
+        when(projectZoneMapper.selectActiveById(ZONE_ID)).thenReturn(null);
+        AppException missing = catchThrowableOfType(
+                () -> resolver.assertAccessibleInProject(PROJECT_ID, ZONE_ID), AppException.class);
+
+        assertThat(outOfScope).isNotNull();
+        assertThat(missing).isNotNull();
+        assertThat(outOfScope.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+        assertThat(missing.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+        assertThat(outOfScope.getMessage()).isEqualTo(missing.getMessage());
+    }
+
     /** 用真实 SecurityContext 而不是桩 SecurityUtils（它是静态入口，桩不住）。 */
     private void login() {
         LoginUser user = LoginUser.builder()
