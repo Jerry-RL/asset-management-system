@@ -970,7 +970,7 @@ const toPositiveNumber = (raw: string | null): number | undefined => {
                     placeholder="请选择资产公司（可输入名称搜索）"
                     treeData={companyTree}
                     listHeight={320}
-                    disabled={(lockScope && lockedCompanyId != null) || undefined}
+                    disabled={(lockScope && (isEdit || lockedCompanyId != null)) || undefined}
                   />
                 </Form.Item>
 ```
@@ -979,10 +979,21 @@ const toPositiveNumber = (raw: string | null): number | undefined => {
 其余 props 原样保留。`extra` 的非锁定分支刻意保留原文案「项目、责任部门均按资产公司级联」—— 它本来就在这个
 元素上，与 Step 5/6 那两个 `Form.Item` 的情况不同。）
 
-**`disabled` 的判据必须是 `lockScope && lockedCompanyId != null`，不能只写 `lockScope`**：
-只写 `lockScope` 的话，反查失败时「资产公司」会既**空白**又**灰化**，而它是必填项 ——
-用户既不能填也不能提交，等于把上面那个死锁换了个触发条件。带上
-`&& lockedCompanyId != null` 后：反查成功才灰化（真正锁定），反查失败则保持可编辑、由用户手选。
+**`disabled` 的完整判据是 `lockScope && (isEdit || lockedCompanyId != null)`，两个条件都不能少**：
+
+| 场景 | 期望 | 由哪一项保证 |
+|------|------|--------------|
+| 非锁定（`/assets` 老入口） | 可编辑 | `!lockScope` → `undefined` |
+| 锁定 + 编辑 | **灰化**（归属以 `/assets/{id}` 为准，无需反查） | `isEdit` |
+| 锁定 + 新增 + 反查成功 | **灰化**（真正的锁定） | `lockedCompanyId != null` |
+| 锁定 + 新增 + 反查失败 | **可编辑**（降级，用户手选） | 两项皆假 → `undefined` |
+
+- 只写 `lockScope`：反查失败时「资产公司」既**空白**又**灰化**，而它是必填项 —— 用户既不能填也不能提交，
+  等于把死锁换了个触发条件。
+- 只写 `lockScope && lockedCompanyId != null`：**编辑态会漏锁** —— 编辑态按设计不发起反查，
+  `lockedCompanyId` 恒为 `null`，于是本应锁死的「资产公司」反而可改。
+- 编辑态可以安全灰化的前提：「资产公司」的值由编辑态的 `form.setFieldsValue(assetFields)`
+  （本文件既有逻辑）填入，不会为空。
 
 - [ ] **Step 5: 「项目」下拉加锁定**
 
@@ -1071,7 +1082,7 @@ Expected: 均通过，无类型错误、无 unused 变量（`navigate` 仍被使
    「资产公司」**保持可编辑**（因为 `lockedCompanyId` 仍为 `null`），由用户手选，表单仍可正常使用。
    这一条专门守上面那个 `disabled` 判据里的 `&& lockedCompanyId != null`。
 6. **返回来源**：在资产台账里点「新增」前先进 `/assets`，然后手动访问 `/assets/create?projectId=1&zoneId=2&lockScope=1`（无 `state.from`）→ 保存后走 `useBackNavigate` 的兜底路径（浏览器上一页 / `/assets`），不报错。
-7. **编辑态不预填**：访问 `/assets/{id}/edit?projectId=999&lockScope=1` → 「项目」显示的是该资产真实归属（**不是 999**），且下拉灰化；「资产公司」**不发起反查**（反查条件是「新增 + 锁定」，编辑态跳过），显示该资产真实公司且灰化。
+7. **编辑态不预填**：访问 `/assets/{id}/edit?projectId=999&lockScope=1` → 「项目」显示的是该资产真实归属（**不是 999**），且下拉灰化；「资产公司」**不发起反查**（反查条件是「新增 + 锁定」，编辑态跳过），显示该资产真实公司且**灰化**（由判据里的 `isEdit` 那一项保证）。
 8. **`GET /projects/{projectId}` 的调用次数**：锁定态新增页会出现 **2 次**该请求 ——
    1 次是本步新增的「反查资产公司」，1 次是**既有的**「取项目属性（`projectType`）用于资产来源级联」的 effect
    （`watchProjectId` 变化时触发，早就存在）。这是可接受的重复，**不要**为此去掉任何一方：
