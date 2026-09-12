@@ -54,6 +54,7 @@ class RecordSheetEndpointPermissionTest {
 
     private RbacService rbacService;
     private RecordSheetService service;
+    private OwnerResolver ownerResolver;
     private RecordSheetController controller;
 
     @BeforeEach
@@ -62,8 +63,9 @@ class RecordSheetEndpointPermissionTest {
         service = mock(RecordSheetService.class);
         when(service.read(any(), any())).thenReturn(new RecordSheetView());
         when(service.save(any(), any(), any())).thenReturn(new RecordSheetView());
-        // OwnerResolver 用桩：数据范围断言由 OwnerResolverTest 单独覆盖，这里只验权限码
-        controller = new RecordSheetController(service, mock(OwnerResolver.class));
+        // OwnerResolver 用桩：数据范围断言由 OwnerResolverTest 单独覆盖，这里只验权限码与接线
+        ownerResolver = mock(OwnerResolver.class);
+        controller = new RecordSheetController(service, ownerResolver);
     }
 
     @AfterEach
@@ -75,9 +77,12 @@ class RecordSheetEndpointPermissionTest {
     @DisplayName("资产 record-sheet：读需 asset.ledger:view，写需 asset.ledger:update")
     void assetSheetPermissions() throws Exception {
         login(Set.of());
-        mvc().perform(get(ASSET_PATH, ASSET_ID)).andExpect(status().isForbidden());
+        mvc().perform(get(ASSET_PATH, ASSET_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40300));
         mvc().perform(put(ASSET_PATH, ASSET_ID).contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40300));
         verify(service, never()).read(any(), any());
         verify(service, never()).save(any(), any(), any());
 
@@ -85,6 +90,8 @@ class RecordSheetEndpointPermissionTest {
         mvc().perform(get(ASSET_PATH, ASSET_ID)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
         verify(service).read(RecordOwnerType.ASSET, ASSET_ID);
+        // 授权是两层的：功能权限过了还必须真的做对象级归属判定（注解做不到）
+        verify(ownerResolver).assertAccessible(RecordOwnerType.ASSET, ASSET_ID);
 
         login(Set.of("asset.ledger:update"));
         mvc().perform(put(ASSET_PATH, ASSET_ID).contentType(MediaType.APPLICATION_JSON).content("{}"))
@@ -96,13 +103,17 @@ class RecordSheetEndpointPermissionTest {
     @DisplayName("项目 record-sheet：读需 asset.project:view，写需 asset.project:update")
     void projectSheetPermissions() throws Exception {
         login(Set.of());
-        mvc().perform(get(PROJECT_PATH, PROJECT_ID)).andExpect(status().isForbidden());
+        mvc().perform(get(PROJECT_PATH, PROJECT_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40300));
         mvc().perform(put(PROJECT_PATH, PROJECT_ID).contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40300));
 
         login(Set.of("asset.project:view"));
         mvc().perform(get(PROJECT_PATH, PROJECT_ID)).andExpect(status().isOk());
         verify(service).read(RecordOwnerType.PROJECT, PROJECT_ID);
+        verify(ownerResolver).assertAccessible(RecordOwnerType.PROJECT, PROJECT_ID);
 
         login(Set.of("asset.project:update"));
         mvc().perform(put(PROJECT_PATH, PROJECT_ID).contentType(MediaType.APPLICATION_JSON).content("{}"))
@@ -113,14 +124,22 @@ class RecordSheetEndpointPermissionTest {
     @DisplayName("分区 record-sheet：复用 asset.project 权限码，不引入新菜单")
     void zoneSheetPermissions() throws Exception {
         login(Set.of());
-        mvc().perform(get(ZONE_PATH, PROJECT_ID, ZONE_ID)).andExpect(status().isForbidden());
+        mvc().perform(get(ZONE_PATH, PROJECT_ID, ZONE_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40300));
         mvc().perform(put(ZONE_PATH, PROJECT_ID, ZONE_ID)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40300));
 
         login(Set.of("asset.project:view"));
         mvc().perform(get(ZONE_PATH, PROJECT_ID, ZONE_ID)).andExpect(status().isOk());
         verify(service).read(RecordOwnerType.ZONE, ZONE_ID);
+        // 钉住分区端点走的是「带 projectId 的归属判定」：若被回退成
+        // assertAccessible(ZONE, zoneId)，第一行会因 0 次调用而失败 ——
+        // 否则这次修正被无声回滚，全套用例依然全绿。
+        verify(ownerResolver).assertAccessibleInProject(PROJECT_ID, ZONE_ID);
+        verify(ownerResolver, never()).assertAccessible(RecordOwnerType.ZONE, any());
 
         login(Set.of("asset.project:update"));
         mvc().perform(put(ZONE_PATH, PROJECT_ID, ZONE_ID)
