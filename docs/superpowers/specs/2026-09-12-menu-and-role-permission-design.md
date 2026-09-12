@@ -423,7 +423,9 @@ scope(user):
 | **`STANDALONE_ROUTES` 与 `App.tsx` 是双写** | 新增独立页面时只改了 `App.tsx`、漏改注册表 → 该路由不在 `ROUTE_REGISTRY` 里，**DB 菜单行会被当脏数据忽略，侧栏永远不显示该入口** | 需要双写是「菜单只渲染已注册路由」这条规则的必然代价（一个在编译期、一个在运行期，无法互相推导）。缓解：`MenuProvider` 会把被忽略的 DB 菜单 `console.warn` 出来（`[menu] ... 未在前端路由注册表中`），漏改能从首屏日志直接看到。后续可考虑改为从 `App.tsx` 的 `children` 反推注册表 |
 | **上线前置人工步骤：矩阵补写动作（D18 的落点）** | 未执行时非超管账号在**首批已接入模块**的写接口全部 403（导航与只读不受影响） | V45 §5.3 已写明步骤：super_admin 登录 → 角色权限页 → 逐角色勾选 create/update/delete 并保存。这是 6.3「DoD 以全部变更类接口注解完毕为前提」在本轮的实际前置条件，**必须进上线清单**；漏执行的表现是明确可观测的 403，不是静默越权 |
 | **`TableActions` 的 `perm` 逐页补声明：10 个调用点中 4 个已声明、6 个刻意不声明** | 未声明的 6 处仍**只按后端 403 拦截，前端不做显隐** | **声明口径：只对「后端确实强制校验了该接口」的动作声明**。V45 之后 `role_permission` 只有 `view` 行，因此任何写动作声明都会让按钮对**除超管外的所有人**消失；若该接口并未接入拦截，就等于**把还能用的按钮藏起来**（比后端行为更严，属功能损失）。据此逐处判定：<br>**已声明（接口受强制校验）**：`SystemDictionaryPage`（`system.dict:create/update/delete`，路由码与接口码一致）、`ProjectFormPage` 提交（`asset.project:create`/`update`，按 `isEdit` 取码）、`PaymentConfirmPage` 确认到账（`finance.payment:update`）、`AssetDossierPage` 查看合同（`contract.ledger:view`）。<br>**刻意不声明（接口未接入，声明反而误伤）**：`ApprovalPage` 通过/驳回（工作流接口无注解）、`DashboardPage` 下钻/查看资产（纯导航）、`DunningAutoPage` 去处理（`to: '/tasks'` 链接）、`AgentReportsPage` 下载（`intelligence.*` 无注解）、`ContractTemplatesPage` 预览/编辑（`contract.template` 无注解）。<br>**顺带登记命名差异**：`PaymentConfirmPage` 的路由码是 `finance.paymentConfirm`，而它调用的 `POST /payments/{id}/confirm` 受 `finance.payment:update` 校验 —— 判定必须用**接口码**，用路由码会得到「配了也不生效」。同一张表里混着不同模块的动作时同理（如「生成合同」属于 `contract.ledger:create`），这正是 `TableActions` 不做自动推导、只接受显式全码的原因 |
-| **跨仓不变量无自动化守卫** | 前端声明的 `perm` 若写错（拼写/取错码/后端改了注解），表现是「按钮静默消失」或「点了 403」 | 本轮以一次性脚本核对：前端所有 `perm` 声明（`perm: '...'` / `perm="..."` / 三元两分支）必须 ⊆ 后端 `@RequiresPerm` 集合（当前 9 个声明 / 57 个强制码，全部命中）。**尚未落成 CI 检查**，后续应固化 —— 它同时能拦住「声明了未接入的码」这类功能性误伤 |
+| **跨仓不变量已落成脚本 + CI 门禁**（原缺口已关闭） | 见 `scripts/check-perm-invariants.mjs` | 四道检查：① `perm` 声明格式；② **跨仓不变量**（前端声明 ⊆ 后端 57 个 `@RequiresPerm`）；③ **镜像完整性**（`RESOURCES` 49 条 / `STANDALONE_ROUTES` 16 条 ⊆ `PATH_TO_CODE`）；④ **双写一致性**（`STANDALONE_ROUTES` ⊆ `App.tsx`）。②③④ 失败即 `exit 1`，已接入 `ci.yml` 的 `frontend-docs` 任务与 `pnpm check:perm`。<br>**校验过守卫本身**：5 项变异测试全部如预期失败（声明未强制的码、码格式写坏、镜像缺一条、加一条 `App.tsx` 没有的路由、改缩进使正则失配）。<br>关键设计：脚本内每个解析都带**数量下限自检** —— 正则失配会得到空集合，而空集合会让所有断言恒真。该自检在编写时就抓到了两个真实 bug：`RESOURCES` 的解析只出 19/49 条（**含斜杠的键是加引号的**，只匹配标识符会漏 30 条）；以及用「花括号深度」界定区间会被配置里的箭头函数体截断。 |
+| **`App.tsx` 的静态路由未全部纳入检查** | 钻取/详情页（`/projects/:id`、`/assets/create`）本就**不应**进注册表，脚本无法自动区分「漏登记」与「本就不登记」 | 脚本用前缀规则排除「已登记列表路由下的静态子页」，其余候选只告警不失败（当前仅 `/login`、`/*` 已被显式排除）。这道检查仍是**告警级**，漏登记独立页面时依赖告警被人工看到 |
+| **前端 `tsc` 未进 CI** | `ci.yml` 只跑 `lint` / `format:check` / `api:lint`，**类型检查不在 CI 里** | 本轮所有 `tsc` 都是我本地手跑的。类型错误（如 `PermAction` 联合类型挡住了动作名写错）在 CI 上不会被拦住。属既有 CI 覆盖缺口，非本轮引入，登记跟踪 |
 
 ### 11.3 本轮的启动期强校验（新增，非正文要求）
 
@@ -435,4 +437,26 @@ scope(user):
 任一不满足 → **启动失败**。理由是这三类错误上线后的表现都是「该接口对所有非超管角色永久 403」，
 排障成本远高于启动失败；而 4.5 特别提示的 `system.menu` / `system.menus` 拼写不一致正是第 3 条要拦的情况。
 降级条件（测试环境关闭 Flyway、迁移未执行）都不是「编码写错」，不应因此让应用起不来。
+
+### 11.4 本轮的构建期守卫（新增，非正文要求）
+
+`scripts/check-perm-invariants.mjs`（`pnpm check:perm`，已接入 `ci.yml`）覆盖 11.3 拦不住的那一类错误：
+**「不报错但功能悄悄变了」**。11.3 是运行期、只管后端；本脚本是构建期、专管前后端之间与前端内部的一致性。
+
+四道检查与各自的失效模式：
+
+| 检查 | 违反后的表现 | 级别 |
+|------|--------------|------|
+| `perm` 声明格式为 `menuCode:action` | 判定恒为 false，按钮静默消失 | 失败 |
+| 前端声明 ⊆ 后端 `@RequiresPerm` | 声明了未接入的码 → 按钮对所有人消失（功能损失）；码写错 → 点了 403 | 失败 |
+| `RESOURCES` / `STANDALONE_ROUTES` ⊆ `PATH_TO_CODE` | `canByPath` 判定恒真，**该页按钮门槛静默失效**（不报错、不越权，最难发现） | 失败 |
+| `STANDALONE_ROUTES` ⊆ `App.tsx` 的 `<Route>` | 侧栏出现点进去落回首页的入口 | 失败 |
+
+**为什么每个解析都带数量下限自检**：正则失配会得到空集合，而空集合会让上表所有断言恒真 ——
+一个永远通过的守卫比没有守卫更糟。该自检在编写时就抓到两个真实 bug：`RESOURCES` 只解析出 19/49 条
+（**含斜杠的键是加引号的**：`'lease-listings': {`、`'/billing/bills': {`，只匹配标识符会漏 30 条）；
+以及用「花括号深度」界定区间会被配置里的箭头函数体截断。
+
+**守卫本身也做了变异测试**（5 项：声明未强制的码 / 码格式写坏 / 镜像缺一条 / 加一条 `App.tsx` 没有的路由 /
+改缩进使正则失配），全部如预期失败。
 
