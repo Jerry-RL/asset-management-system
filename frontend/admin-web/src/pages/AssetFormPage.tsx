@@ -96,10 +96,11 @@ export function AssetFormPage() {
   const presetProjectId = toPositiveNumber(searchParams.get('projectId'));
   const presetZoneId = toPositiveNumber(searchParams.get('zoneId'));
   /**
-   * 归属锁定：本入口不允许把资产挪到别的项目 / 分区。
+   * 归属锁定：本入口不允许把资产挪到别的项目 / 分区，减少误操作。
    *
-   * <p>注意后端只兜底「分区属于所选项目」（`validateZone`），**不校验「资产公司 ↔ 项目」是否同一公司** ——
-   * 所以这里的锁定是入口侧的唯一防线，见设计 §8 已知缺口。
+   * <p>这只是**入口侧的体验约束**，不是安全边界：服务端 `validateReferences`
+   * （`AssetService:1064-1076`，创建/更新都会调用）会独立校验「项目、责任部门属于所选资产公司」
+   * 与「分区属于所选项目」，不一致一律 400（如「所选项目不属于该资产公司」）。
    */
   const lockScope = searchParams.get('lockScope') === '1';
 
@@ -465,7 +466,7 @@ export function AssetFormPage() {
                     placeholder="请选择资产公司（可输入名称搜索）"
                     treeData={companyTree}
                     listHeight={320}
-                    disabled={lockScope || undefined}
+                    disabled={(lockScope && lockedCompanyId != null) || undefined}
                   />
                 </Form.Item>
               </Col>
