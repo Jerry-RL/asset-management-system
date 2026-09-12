@@ -857,6 +857,8 @@ git commit -m "feat(admin): ResourcePage 支持列表模式可展开行"
   - `export function ProjectZonesPanel({ projectId }: { projectId: number })`
   - 后端契约：`GET /projects/{projectId}/zones` 返回扁平数组。
 
+**关于类型放在组件文件内（而非抽到共享模块）**：`ProjectFormPage.tsx:53` 已有一个同名的页面局部 `interface ProjectZone`，本任务会引入第二份。这是**刻意跟随本仓既有约定**，不是疏漏 —— 本仓对页面级后端响应类型一律用页面局部 interface：`ProjectDetailPage.tsx` 的 `Overview` / `ZoneSummary` / `AssetRow`、`ProjectFormPage.tsx` 的 `CompanyOption`，都没有抽到 `lib/`。`lib/api.ts` 里确实有共享 DTO（`Asset` / `LoginUser`），但那是**跨页复用的那少数几个**。为一个仅两个页面用到、且字段略有差异（面板需要 `projectId`）的类型新建共享模块，属于为一致性付出的额外抽象。若审查者认为值得合并，应作为独立议题提出，本任务不擅自扩大范围。
+
 - [ ] **Step 1: 创建组件**
 
 新建 `frontend/admin-web/src/components/ProjectZonesPanel.tsx`：
