@@ -58,7 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 未登录时不请求：/system/me 会 401，而 401 拦截器会顺带把页面踹回登录页
     if (!localStorage.getItem('ams.accessToken')) return;
     const data = await api.get<LoginUser>('/system/me');
-    localStorage.setItem('ams.user', JSON.stringify(data));
+    // 快照没变就不写入 state（设计 6.2）。这不只是省一次渲染：侧边栏菜单以
+    // `user.permissions` 为依赖，无条件 setUser 会让每次窗口聚焦都重拉一遍菜单树。
+    const next = JSON.stringify(data);
+    if (next === localStorage.getItem('ams.user')) return;
+    localStorage.setItem('ams.user', next);
     setUser(data);
   }, []);
 

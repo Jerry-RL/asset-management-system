@@ -24,6 +24,7 @@ import {
   type MenuState,
 } from '@/lib/menu';
 import type { MenuGroup } from '@/pages/modules';
+import { PermissionSnapshotRefresher, RequirePerm } from '@/lib/perm';
 import { PageTabs } from './PageTabs';
 import { CompanySwitcher } from './CompanySwitcher';
 
@@ -122,6 +123,8 @@ export function AdminLayout() {
 
   return (
     <div className="flex h-full max-h-[100dvh] overflow-hidden bg-[var(--ams-bg)]">
+      {/* 权限快照刷新契约（设计 6.2）：路由跳转 / 窗口聚焦时节流重拉 /system/me */}
+      <PermissionSnapshotRefresher />
       <aside
         className={cn(
           'bg-[var(--ams-sidebar-bg)] border-r border-[var(--ams-border)] flex flex-col shrink-0 transition-all min-h-0',
@@ -223,7 +226,10 @@ export function AdminLayout() {
         {/* 公司切换后重挂载当前路由（key 变化），使各页面按新数据范围重新拉取 */}
         <main className="flex-1 min-h-0 overflow-auto ams-scroll p-3 sm:p-4">
           <div className="min-w-0 max-w-full" key={scopeVersion}>
-            <Outlet />
+            {/* 页面级权限守卫（设计 6.2）：无 code:view 时在内容区渲染 403，保留侧栏与页签 */}
+            <RequirePerm>
+              <Outlet />
+            </RequirePerm>
           </div>
         </main>
       </div>

@@ -167,8 +167,8 @@ export function SystemRolePage() {
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm<Partial<Role>>();
 
-  const canAssign = can('system.role:assign');
-  const canDelete = can('system.role:delete');
+  const canAssign = can('system.role', 'assign');
+  const canDelete = can('system.role', 'delete');
 
   const hasDirty = dirty.permissions || dirty.dataScope;
 

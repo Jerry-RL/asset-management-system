@@ -28,7 +28,7 @@ import { confirmDelete, confirmProceed } from '@/lib/confirm';
 import { ICON_NAMES, getIconByName } from '@/lib/menuIcons';
 import { isRegisteredRoute } from '@/lib/routeRegistry';
 import { useMenu, type ApiMenuNode } from '@/lib/menu';
-import { usePerm } from '@/lib/perm';
+import { PermissionGuard } from '@/lib/perm';
 import { TableActions } from '@/components/TableActions';
 
 // ============================================================================
@@ -86,7 +86,6 @@ const flatten = (tree: ApiMenuNode[]): ApiMenuNode[] =>
   tree.flatMap((node) => [node, ...flatten(node.children ?? [])]);
 
 export function SystemMenuPage() {
-  const can = usePerm();
   const { reload: reloadSidebar } = useMenu();
 
   const [tree, setTree] = useState<ApiMenuNode[]>([]);
@@ -99,10 +98,6 @@ export function SystemMenuPage() {
     presetType: DIR,
   });
   const [form] = Form.useForm<MenuFormValues>();
-
-  const canCreate = can('system.menu:create');
-  const canUpdate = can('system.menu:update');
-  const canDelete = can('system.menu:delete');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -370,7 +365,7 @@ export function SystemMenuPage() {
               key: 'edit',
               label: '编辑',
               icon: <EditOutlined />,
-              hidden: !canUpdate,
+              perm: 'system.menu:update',
               onClick: () => openEdit(row),
             },
             {
@@ -378,17 +373,18 @@ export function SystemMenuPage() {
               label: '删除',
               icon: <DeleteOutlined />,
               danger: true,
-              hidden: !canDelete,
+              perm: 'system.menu:delete',
               onClick: () => handleDelete(row),
             },
           ]}
           more={
-            row.menuType === DIR && canCreate
+            row.menuType === DIR
               ? [
                   {
                     key: 'add-child',
                     label: '新增子菜单',
                     icon: <PlusOutlined />,
+                    perm: 'system.menu:create',
                     onClick: () => openCreate(MENU, row.id),
                   },
                 ]
@@ -418,21 +414,15 @@ export function SystemMenuPage() {
           <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
             刷新
           </Button>
-          <Button
-            icon={<PlusOutlined />}
-            disabled={!canCreate}
-            onClick={() => openCreate(DIR)}
-          >
-            新增目录
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            disabled={!canCreate}
-            onClick={() => openCreate(MENU)}
-          >
-            新增菜单
-          </Button>
+          {/* 与 ResourcePage 统一为「无权即不渲染」（设计 6.2 的显隐口径） */}
+          <PermissionGuard perm="system.menu:create">
+            <Button icon={<PlusOutlined />} onClick={() => openCreate(DIR)}>
+              新增目录
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(MENU)}>
+              新增菜单
+            </Button>
+          </PermissionGuard>
         </div>
       </div>
 

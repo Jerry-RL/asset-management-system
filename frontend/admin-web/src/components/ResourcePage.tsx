@@ -34,6 +34,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api, type PageResult } from '@/lib/api';
 import { confirmDelete } from '@/lib/confirm';
 import { useDictLabelMaps, useDictOptions } from '@/lib/dict';
+import { usePermByPath, type PermAction } from '@/lib/perm';
 import { AssetQrLabel } from '@/components/AssetQrLabel';
 import { CoverImage } from '@/components/CoverImage';
 import { TableActions, type TableActionItem } from '@/components/TableActions';
@@ -50,6 +51,40 @@ import {
 } from '@/lib/labels';
 import { getPathIcon } from '@/lib/menuIcons';
 import { currentPath } from '@/lib/navigation';
+
+/**
+ * 行操作的可见性规则（纯函数）。
+ *
+ * <p>抽出来的直接原因：表格**单元格**在服务端渲染下根本不产生 HTML（没有数据行就没有单元格），
+ * 用渲染断言去验它只会**假通过** —— 把规则变成纯函数才能真正断言。
+ *
+ * <p>`hasColumn` 决定「操作」列是否出现：全部行操作都无权且没有详情入口时整列消失，
+ * 而不是留一个每行都空白的操作列。
+ */
+export function resolveRowActions(
+  config: Pick<
+    ResourceConfig,
+    'update' | 'deletable' | 'rowActions' | 'detailPath' | 'detailLink' | 'qrcodePath'
+  >,
+  canDo: (action: PermAction) => boolean,
+): {
+  showEdit: boolean;
+  showDelete: boolean;
+  rowActions: RowActionConfig[];
+  hasColumn: boolean;
+} {
+  const showEdit = Boolean(config.update) && canDo('update');
+  const showDelete = Boolean(config.deletable) && canDo('delete');
+  const rowActions = (config.rowActions ?? []).filter((a) => !a.perm || canDo(a.perm));
+  const hasDetail = Boolean(config.detailPath || config.detailLink);
+  return {
+    showEdit,
+    showDelete,
+    rowActions,
+    hasColumn:
+      showEdit || showDelete || rowActions.length > 0 || hasDetail || Boolean(config.qrcodePath),
+  };
+}
 
 /** 列未配置 map 时的全局枚举兜底，避免表格直接露出英文值 */
 const GLOBAL_VALUE_MAPS: Record<string, Record<string, string>> = {
@@ -178,6 +213,14 @@ export interface RowActionConfig {
   key: string;
   label: string;
   title?: string;
+  /**
+   * 该动作要求的操作级权限（设计 6.2）。
+   *
+   * <p>取值为固定动作词表；判定码由**当前路由 path** 经镜像解析出的 `menuCode` 拼成，
+   * 不需要在这里写完整 `code:action` —— 同一份 `RESOURCES` 配置可能被不同 path 复用，
+   * 写死 code 会在复用时判定错误。未声明时不判定（保持既有行为）。
+   */
+  perm?: PermAction;
   fields: FieldConfig[];
   /** 提交路径，支持 :id 占位 */
   submitPath: string | ((id: number, row: Record<string, unknown>) => string);
@@ -622,6 +665,18 @@ function ResourceCardGrid({
 export function ResourcePage({ config }: { config: ResourceConfig }) {
   const location = useLocation();
   const navigate = useNavigate();
+  /**
+   * 操作级权限（设计 6.2）：判定码由当前路由 path 经 `PATH_TO_CODE` 镜像解析，
+   * 因此**全站 `ResourcePage` 无需逐页配置**即可与后端 `@RequiresPerm` 对齐。
+   *
+   * <p>镜像里没有该 path 时 `canByPath` 放行（钻取路由等非菜单路径），
+   * 与「未注册路由不打权限标记」的口径一致。
+   */
+  const canDo = usePermByPath();
+  const canCreate = canDo('create');
+  const canUpdate = canDo('update');
+  const canExport = canDo('export');
+  const canImport = canDo('import');
   const [data, setData] = useState<PageResult<Row>>({ list: [], total: 0, page: 1, pageSize: 10 });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -938,21 +993,15 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         return String(raw ?? '-');
       },
     }));
-    if (
-      config.deletable ||
-      config.detailPath ||
-      config.detailLink ||
-      config.qrcodePath ||
-      config.update ||
-      (config.rowActions && config.rowActions.length > 0)
-    ) {
-      const hasMore =
-        !!config.qrcodePath || config.deletable || (config.rowActions?.length ?? 0) > 0;
+    // 操作列的存在性也要按权限算：无权时整列消失，而不是留一个只有「详情」的空操作列
+    const { showEdit, showDelete, rowActions, hasColumn } = resolveRowActions(config, canDo);
+    if (hasColumn) {
+      const hasMore = !!config.qrcodePath || showDelete || rowActions.length > 0;
       cols.push({
         title: '操作',
         key: '_actions',
         fixed: 'right',
-        width: hasMore ? 180 : config.update ? 150 : 110,
+        width: hasMore ? 180 : showEdit ? 150 : 110,
         render: (_: unknown, row: Row) => {
           const actions: TableActionItem[] = [];
           if (config.detailPath || config.detailLink) {
@@ -963,7 +1012,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               onClick: () => void openDetail(row),
             });
           }
-          if (config.update) {
+          if (showEdit) {
             actions.push({
               key: 'edit',
               label: '编辑',
@@ -989,7 +1038,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               onClick: () => void handleShowQrcode(row),
             });
           }
-          (config.rowActions ?? []).forEach((action) => {
+          (rowActions ?? []).forEach((action) => {
             if (action.visible && !action.visible(row)) return;
             more.push({
               key: action.key,
@@ -997,7 +1046,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               onClick: () => void handleOpenRowAction(action, row),
             });
           });
-          if (config.deletable) {
+          if (showDelete) {
             more.push({
               key: 'delete',
               label: '删除',
@@ -1013,6 +1062,8 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     }
     return cols;
   }, [
+    canDo,
+    canUpdate,
     config.columns,
     config.deletable,
     config.detailPath,
@@ -1087,10 +1138,13 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
                 aria-label="切换展示模式"
               />
             )}
-            <Button
-              icon={<UploadOutlined />}
-              disabled={!config.importPath}
-              title={config.importPath ? '导入 CSV' : '后续开放'}
+            {/* 导入/导出按权限显隐（设计 6.2）：未配置时保留原有的「后续开放」禁用态，
+                已配置但无权时才整块隐藏 —— 后者若也保留禁用态，用户会以为是功能没做好 */}
+            {(!config.importPath || canImport) && (
+              <Button
+                icon={<UploadOutlined />}
+                disabled={!config.importPath}
+                title={config.importPath ? '导入 CSV' : '后续开放'}
               onClick={() => {
                 if (!config.importPath) return;
                 const input = document.createElement('input');
@@ -1120,11 +1174,13 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               }}
             >
               导入
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              disabled={!config.exportPath}
-              title={config.exportPath ? '导出 CSV' : '后续开放'}
+              </Button>
+            )}
+            {(!config.exportPath || canExport) && (
+              <Button
+                icon={<DownloadOutlined />}
+                disabled={!config.exportPath}
+                title={config.exportPath ? '导出 CSV' : '后续开放'}
               onClick={() => {
                 if (!config.exportPath) return;
                 const token = localStorage.getItem('ams.accessToken');
@@ -1144,8 +1200,9 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               }}
             >
               导出
-            </Button>
-            {config.create && (
+              </Button>
+            )}
+            {config.create && canCreate && (
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
@@ -1196,7 +1253,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               idField={idField}
               onOpen={openDetail}
               onEdit={
-                config.update
+                config.update && canUpdate
                   ? (row) => {
                       if (config.editLink) {
                         navigate(config.editLink(Number(row[idField])), {

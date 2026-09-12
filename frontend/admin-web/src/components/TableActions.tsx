@@ -4,6 +4,8 @@ import { Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { MoreOutlined } from '@ant-design/icons';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth';
+import { hasPerm } from '@/lib/perm';
 
 /** 操作列中的单个操作 */
 export interface TableActionItem {
@@ -11,6 +13,15 @@ export interface TableActionItem {
   label: string;
   /** 链接左侧图标，建议使用 @ant-design/icons 的 12-14px 图标 */
   icon?: ReactNode;
+  /**
+   * 该操作要求的权限，`menuCode:action` 完整判定码（设计 6.2）。
+   *
+   * <p>这里的调用方是独立页面，没有 `ResourcePage` 那种「由当前路由派生 menuCode」的上下文，
+   * 因此必须写全码。声明后由 `TableActions` 统一剔除无权项，不必每个调用点自己算 `hidden`。
+   * **未声明 = 不判定**（保持既有行为）：自动推导动作类型做不到 —— 同一张表里的
+   * 操作可能是 view/export/approve 中的任意一种，猜错会把可用按钮藏掉。
+   */
+  perm?: string;
   /** 危险操作（删除/驳回等）使用红色 */
   danger?: boolean;
   disabled?: boolean;
@@ -63,9 +74,15 @@ const linkClassOf = (action: TableActionItem) =>
  * 点击默认阻止冒泡，避免触发行点击（如打开详情抽屉）。
  */
 export const TableActions = ({ actions = [], more = [], max = 2, className }: TableActionsProps) => {
-  const visible = actions.filter((a) => !a.hidden);
+  const { user } = useAuth();
+  // 声明了 perm 的项在此处统一剔除（设计 6.2）：调用点只需声明，不必各自算 hidden
+  const permitted = (a: TableActionItem) => !a.perm || hasPerm(user, a.perm);
+  const visible = actions.filter((a) => !a.hidden && permitted(a));
   const inline = visible.slice(0, max);
-  const moreItems = menuItemsOf([...visible.slice(max), ...more.filter((a) => !a.hidden)]);
+  const moreItems = menuItemsOf([
+    ...visible.slice(max),
+    ...more.filter((a) => !a.hidden && permitted(a)),
+  ]);
 
   if (inline.length === 0 && (moreItems?.length ?? 0) === 0) return null;
 
