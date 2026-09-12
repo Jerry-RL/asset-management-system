@@ -26,22 +26,13 @@ import org.springframework.stereotype.Service;
 /**
  * RBAC：加载用户角色/权限/数据范围，提供权限与数据范围断言（NFR-SEC-002）。
  *
- * <h2>数据范围的两种「特殊值」—— 混同即越权</h2>
- * <ul>
- *   <li><strong>空集合 = 不受公司限制（UNRESTRICTED）</strong>：调用方按「不加 company 条件」处理。
- *       本类只允许 <em>未切换公司的 super_admin / dataScope=all 且无排除</em> 这一个分支返回空集合。</li>
- *   <li><strong>哨兵 {@code {-1}} = 无任何可见公司</strong>：任何减法（排除清单）算空之后的结果。</li>
- * </ul>
- * 减法（{@code baseline − excluded}）<strong>绝不能</strong>把空结果直接返回成空集合 ——
- * 那会把「排除干净」放大成「放开全量」。见设计 5.2。
+ * <p>数据范围的「不受限」与「无可见公司」用 {@link CompanyScope} 在类型上分开，
+ * 不再依赖「空集合」的约定 —— 那样一次减法算空就会被误读成全量放开。见设计 5.2。
  */
 @Service
 public class RbacService {
 
     private static final long PERM_CACHE_TTL_SECONDS = 30 * 60;
-
-    /** 哨兵：匹配不到任何公司（取自库中的公司 id 恒为正数）。 */
-    private static final Set<Long> NO_COMPANY = Set.of(-1L);
 
     private final UserRoleMapper userRoleMapper;
     private final RoleMapper roleMapper;
@@ -78,7 +69,7 @@ public class RbacService {
      * <p>目标公司来自客户端请求头，属客户端可控值，必须先经可切换范围校验：
      * 不在范围内时静默回落为用户所属公司（不抛错，避免该接口沦为越权探测点）。
      *
-     * <p><strong>停用角色即撤销</strong>：角色、权限、数据范围排除三者都只取
+     * <p><strong>停用角色即撤销</strong>：角色码、权限、数据范围排除三者都只取
      * {@code status = 1} 的角色，停用一个角色会同时撤销它的权限与其排除清单的影响。
      */
     public LoginUser buildLoginUser(User user, String clientType, Long requestedCompanyId) {
@@ -94,7 +85,7 @@ public class RbacService {
         if (!userRoles.isEmpty()) {
             List<Long> boundRoleIds = userRoles.stream().map(UserRole::getRoleId).distinct().toList();
             List<Role> roles = boundRoleIds.isEmpty() ? List.of() : roleMapper.selectBatchIds(boundRoleIds);
-            // 只保留已启用角色：停用角色不得再贡献角色码、数据范围或权限
+            // 只保留已启用角色：停用角色不得再贡献角色码、数据范围（进而影响 unrestricted 判定）
             List<Long> enabledRoleIds = roles.stream()
                     .filter(r -> r.getStatus() != null && r.getStatus() == 1)
                     .map(Role::getId)
@@ -161,31 +152,35 @@ public class RbacService {
         if (targetCompanyId == null || !companyTreeService.isActiveCompany(targetCompanyId)) {
             return false;
         }
-        return switchableIds(homeCompanyId, unrestricted, excluded).contains(targetCompanyId);
+        return switchableScope(homeCompanyId, unrestricted, excluded).allows(targetCompanyId);
     }
 
     /**
-     * 用户可切换公司的 ID 集合（已扣除排除子树）。
+     * 用户可切换公司的范围（已扣除排除子树）。
      *
-     * <p>与 {@link #companyScope(LoginUser)} 的差别只有一个：不受限账号这里是<strong>显式枚举</strong>
-     * 全部公司（切换列表需要具体 id），而不是用空集合表示全量。两者都不会返回空集合 ——
-     * 无可见公司时返回哨兵 {@code {-1}}。
+     * <p>与 {@link #companyScope(LoginUser)} 的差别只有一个：不受限账号这里是<strong>不受限语义</strong>
+     * （{@code allows} 对全部启用公司为真），因为切换列表需要「全部公司」这个集合本身；
+     * 调用方负责再按启用状态过滤。
      */
-    public Set<Long> switchableCompanyIds(LoginUser user) {
+    public CompanyScope switchableCompanyScope(LoginUser user) {
         if (user == null) {
-            return NO_COMPANY;
+            return CompanyScope.of(Set.of());
         }
         boolean unrestricted = !user.isCompanyScoped()
                 && (user.isSuperAdmin() || "all".equals(user.getDataScope()));
-        return switchableIds(user.getHomeCompanyId(), unrestricted, excludedCompanyIds(user));
+        return switchableScope(user.getHomeCompanyId(), unrestricted, excludedCompanyIds(user));
     }
 
-    private Set<Long> switchableIds(
+    /**
+     * 可切换范围的计算。不受限且无排除时直接用不受限语义，避免每次都枚举全表公司。
+     */
+    private CompanyScope switchableScope(
             Long homeCompanyId, boolean unrestricted, Set<Long> excluded) {
-        Set<Long> base = unrestricted
-                ? allCompanyIds()
-                : (homeCompanyId == null ? Set.of() : companyTreeService.descendantIds(homeCompanyId));
-        return subtract(base, excluded);
+        if (unrestricted && excluded.isEmpty()) {
+            return CompanyScope.unrestricted();
+        }
+        Set<Long> base = unrestricted ? allCompanyIds() : subtree(homeCompanyId);
+        return CompanyScope.of(base).minus(excluded);
     }
 
     /**
@@ -200,8 +195,7 @@ public class RbacService {
     /**
      * 断言数据范围：company 级访问控制（40301）。
      *
-     * <p>可访问范围 = 当前生效公司 + 其全部下级公司（公司子树），再扣除角色排除子树；
-     * 未切换公司时，super_admin / 数据范围 all 不做限制（保持原口径）。
+     * <p>可访问范围 = 当前生效公司 + 其全部下级公司（公司子树），再扣除角色排除子树。
      *
      * <p><strong>公司归属为空的记录对受限用户一律拒绝</strong>：归属不明的数据不能被默认放行，
      * 否则「排除」可以通过把记录的公司字段留空来绕过。
@@ -210,68 +204,62 @@ public class RbacService {
         if (user == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
-        Set<Long> scope = companyScope(user);
-        if (scope.isEmpty()) {
+        CompanyScope scope = companyScope(user);
+        if (!scope.hasFilter()) {
             return; // 不受限
         }
-        if (companyId == null || !scope.contains(companyId)) {
+        if (!scope.allows(companyId)) {
             throw new AppException(ErrorCode.DATA_SCOPE_FORBIDDEN);
         }
     }
 
     /**
-     * 返回用户可访问的 company 集合（用于 SQL company_id IN）。
+     * 返回用户可访问的 company 范围（用于 SQL company_id IN）。
      *
-     * <p>空集合表示「不限公司」：<strong>仅当未切换公司、且是 super_admin 或 dataScope=all、
-     * 且没有任何排除</strong> 时才返回，使既有调用方的 {@code isEmpty()} 语义保持有效。
-     * 其余情况收敛为具体 id 集合；减法算空时返回哨兵 {@code {-1}}，绝不返回空集合。
+     * <p>只有「未切换公司 + super_admin / dataScope=all + 无任何排除」才是不受限；
+     * 其余情况一律收敛为具体 id 集合，减法算空时降级为拒绝哨兵，<strong>绝不</strong>
+     * 退回不受限 —— 这是排除清单能被绕过的唯一入口。
      *
      * <p>已切换公司时无论角色如何都收敛为「生效公司 + 下级子树」，使全局公司切换对
      * 高权限账号同样生效（否则切了也没反应）。
-     *
-     * <p>未归属公司且未切换的账号返回哨兵集合 {@code {-1}}，
-     * 避免空集合被误判为全量而放大权限。
      */
-    public Set<Long> companyScope(LoginUser user) {
+    public CompanyScope companyScope(LoginUser user) {
         if (user == null) {
-            return NO_COMPANY;
+            return CompanyScope.of(Set.of());
         }
         Set<Long> excluded = excludedCompanyIds(user);
 
         if (user.isCompanyScoped()) {
             // 切换后一律以生效公司为根收窄，不再有「全量」
-            return subtract(subtree(user.getCompanyId()), excluded);
+            return CompanyScope.of(subtree(user.getCompanyId())).minus(excluded);
         }
 
         boolean unrestricted = user.isSuperAdmin() || "all".equals(user.getDataScope());
-        if (unrestricted) {
-            if (excluded.isEmpty()) {
-                return Set.of(); // UNRESTRICTED：唯一允许返回空集合的分支
-            }
-            // 有排除才需要显式枚举，否则会把「无排除」也变成 IN 条件而改变原行为
-            return subtract(allCompanyIds(), excluded);
+        if (unrestricted && excluded.isEmpty()) {
+            return CompanyScope.unrestricted();
         }
-        return subtract(subtree(user.getHomeCompanyId()), excluded);
+        // 有排除就必须显式枚举基线，否则「无排除」也会被变成 IN 条件而改变原行为
+        Set<Long> base = unrestricted ? allCompanyIds() : subtree(user.getHomeCompanyId());
+        return CompanyScope.of(base).minus(excluded);
     }
 
     /**
      * 把公司数据范围应用到查询条件（供各列表复用，避免逐处重复写子树判断）。
      *
-     * <p>可访问集合为空表示「不限公司」，此时不加条件；否则收敛为可访问公司集合。
-     * 全局公司切换后，所有接入本方法的列表都会随之收敛。
+     * <p>全局公司切换后，所有接入本方法的列表都会随之收敛。
      *
-     * <p><strong>只覆盖列表查询</strong>：按主键取详情的接口必须另行做对象级断言，
-     * 否则持有一个 id 就能读到范围外（含被排除）公司的数据。
+     * <p><strong>只覆盖列表查询</strong>：按主键取详情的接口必须另行做对象级断言
+     * （{@link #assertCompanyAccess}），否则持有一个 id 就能读到范围外（含被排除）公司的数据。
      *
      * @param companyColumn 实体上承载公司归属的列，如 {@code Asset::getOperatingCompanyId}
      */
     public <T> void applyCompanyScope(
             LambdaQueryWrapper<T> wrapper, LoginUser user, SFunction<T, Long> companyColumn) {
-        Set<Long> scope = companyScope(user);
-        if (scope.isEmpty()) {
+        CompanyScope scope = companyScope(user);
+        if (!scope.hasFilter()) {
             return;
         }
-        wrapper.in(companyColumn, scope);
+        wrapper.in(companyColumn, scope.ids());
     }
 
     /** 用户（已启用角色）的排除清单展开集合：每个被排除公司连同其整棵下级子树。 */
@@ -308,13 +296,6 @@ public class RbacService {
         return companyTreeService.listCompanies().stream()
                 .map(Company::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    /** {@code base − excluded}；结果为空时返回哨兵，绝不返回空集合。 */
-    private Set<Long> subtract(Set<Long> base, Set<Long> excluded) {
-        Set<Long> allowed = new LinkedHashSet<>(base);
-        allowed.removeAll(excluded);
-        return allowed.isEmpty() ? NO_COMPANY : allowed;
     }
 
     private String widen(String current, String candidate) {

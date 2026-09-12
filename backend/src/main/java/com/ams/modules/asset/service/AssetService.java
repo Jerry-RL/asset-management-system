@@ -24,6 +24,7 @@ import com.ams.modules.org.mapper.CompanyMapper;
 import com.ams.modules.org.mapper.DepartmentMapper;
 import com.ams.modules.org.mapper.UserMapper;
 import com.ams.modules.org.service.CompanyTreeService;
+import com.ams.platform.security.CompanyScope;
 import com.ams.platform.security.LoginUser;
 import com.ams.platform.security.RbacService;
 import com.ams.platform.security.SecurityUtils;
@@ -723,7 +724,7 @@ public class AssetService {
             String sourceType, String ownershipType, String leaseControlStatus, Long companyId,
             String projectType, Long projectId, Long zoneId) {
         LoginUser user = SecurityUtils.current();
-        Set<Long> scope = rbacService.companyScope(user);
+        CompanyScope scope = rbacService.companyScope(user);
         Page<Asset> result = assetMapper.selectPage(
                 new Page<>(page, pageSize),
                 new LambdaQueryWrapper<Asset>()
@@ -739,7 +740,7 @@ public class AssetService {
                                 "select 1 from project p where p.id = asset.project_id"
                                         + " and p.deleted_at is null and p.type = {0}",
                                 projectType)
-                        .in(!scope.isEmpty(), Asset::getOperatingCompanyId, scope)
+                        .in(scope.hasFilter(), Asset::getOperatingCompanyId, scope.ids())
                         .and(keyword != null && !keyword.isBlank(),
                                 w -> w.like(Asset::getName, keyword).or().like(Asset::getAssetNo, keyword))
                         .orderByAsc(Asset::getZoneId)

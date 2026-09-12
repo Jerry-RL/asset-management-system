@@ -8,6 +8,7 @@ import com.ams.modules.org.entity.User;
 import com.ams.modules.org.mapper.CompanyMapper;
 import com.ams.modules.org.mapper.DepartmentMapper;
 import com.ams.modules.org.mapper.UserMapper;
+import com.ams.platform.security.CompanyScope;
 import com.ams.platform.security.RbacService;
 import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -61,11 +62,11 @@ public class OrgService {
                 c.setParentName(nameById.get(c.getParentId()));
             }
         });
-        Set<Long> scope = rbacService.companyScope(SecurityUtils.current());
-        if (scope.isEmpty()) {
-            return companies; // 空集合 = 不限公司
+        CompanyScope scope = rbacService.companyScope(SecurityUtils.current());
+        if (!scope.hasFilter()) {
+            return companies; // 不受限
         }
-        return companies.stream().filter(c -> scope.contains(c.getId())).toList();
+        return companies.stream().filter(c -> scope.allows(c.getId())).toList();
     }
 
     public Company getCompany(Long id) {

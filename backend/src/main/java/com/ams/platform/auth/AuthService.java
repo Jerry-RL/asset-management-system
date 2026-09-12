@@ -15,6 +15,7 @@ import com.ams.platform.auth.dto.LoginRequest;
 import com.ams.platform.auth.dto.LoginResponse;
 import com.ams.platform.auth.dto.WechatBindRequest;
 import com.ams.platform.integration.wechat.WechatMiniProgramClient;
+import com.ams.platform.security.CompanyScope;
 import com.ams.platform.security.LoginUser;
 import com.ams.platform.security.RbacService;
 import com.ams.platform.security.SecurityUtils;
@@ -355,15 +356,15 @@ public class AuthService {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
         boolean unrestricted = user.isSuperAdmin() || "all".equals(user.getDataScope());
-        Set<Long> allowed = rbacService.switchableCompanyIds(user);
+        CompanyScope allowed = rbacService.switchableCompanyScope(user);
         // 按公司树顺序返回，前端缩进展示时层级才连贯（父在上、子在下）
         List<CompanyScopeOptions.Item> companies =
                 companyTreeService.listCompaniesTreeOrdered().stream()
                         .filter(c -> c.getStatus() != null && c.getStatus() == 1)
-                        // 不再用 unrestricted 短路：switchableCompanyIds 现在对不受限账号也显式枚举
-                        // 全部可切换公司，并已扣除角色排除子树。否则被排除的公司会重新出现在切换器里，
+                        // 统一走 allows()：不受限账号此处为真，受限账号按已扣除排除子树的集合判定。
+                        // 不再用 unrestricted 短路，否则被排除的公司会重新出现在切换器里，
                         // 出现「能切进去、但切进去什么都看不到」的不一致。
-                        .filter(c -> allowed.contains(c.getId()))
+                        .filter(c -> allowed.allows(c.getId()))
                         .map(c -> CompanyScopeOptions.Item.builder()
                                 .id(c.getId())
                                 .name(c.getName())
