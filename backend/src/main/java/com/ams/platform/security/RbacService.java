@@ -217,6 +217,31 @@ public class RbacService {
     }
 
     /**
+     * 对象级数据范围的**判定版**（不抛 403），供「越权与不存在必须不可区分」的调用点使用。
+     *
+     * <p>判定与 {@link #assertCompanyAccess} 完全一致（同一个 {@link #companyScope()}/
+     * {@link CompanyScope#hasFilter()}/{@link CompanyScope#allows(Long)}），只是把结果返回而不是抛
+     * {@link ErrorCode#DATA_SCOPE_FORBIDDEN}：调用方需要在「越权」时改抛 404，而捕获
+     * {@code assertCompanyAccess} 的异常会连它的 {@link ErrorCode#UNAUTHORIZED} 一起吞掉。
+     *
+     * <p>{@code user == null} 仍抛 {@link ErrorCode#UNAUTHORIZED} —— 未登录不能被降级成「无权限」。
+     *
+     * <p>不要用本方法替换 {@code assertCompanyAccess} 的既有调用点：那些端点依赖 403 语义。
+     *
+     * @return {@code true} 表示可访问（不受限账号恒为 true）
+     */
+    public boolean canAccessCompany(LoginUser user, Long companyId) {
+        if (user == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        CompanyScope scope = companyScope(user);
+        if (!scope.hasFilter()) {
+            return true; // 不受限
+        }
+        return scope.allows(companyId);
+    }
+
+    /**
      * 返回用户可访问的 company 范围（用于 SQL company_id IN）。
      *
      * <p>只有「未切换公司 + super_admin / dataScope=all + 无任何排除」才是不受限；
