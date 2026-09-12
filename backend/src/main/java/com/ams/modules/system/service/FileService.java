@@ -141,7 +141,12 @@ public class FileService {
      * 按 fileId 批量取视图（附件回显：{@code url} / {@code fileName}）。
      *
      * <p>不抛异常：附件可能指向一条已被清理的 file_metadata（孤儿文件问题本期不做清理），
-     * 回显时跳过即可，不能因为一条坏引用让整个 record-sheet 读不出来。
+     * 回显时**跳过该条**（返回的 map 里没有它），但不能因为一条坏引用让整个 record-sheet 读不出来。
+     *
+     * <p><b>调用方不得因此丢弃这一行</b>：查不到的引用必须原样保留在返回结果里
+     * （{@code fileName} / {@code url} 为 null，前端按 null 兜底展示）。读的时候丢行，
+     * 保存时该 {@code fileId} 就不在请求体里，聚合写会把它**软删** ——
+     * 一个纯展示层的取舍会变成静默数据丢失（设计 §4.3）。
      */
     public Map<Long, Map<String, Object>> viewsByIds(Collection<Long> fileIds) {
         if (fileIds == null || fileIds.isEmpty()) {

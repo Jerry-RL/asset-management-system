@@ -546,6 +546,13 @@ class RecordSheetServiceTest {
 
         // 拒绝必须整单：不能先落一行附件再抛
         verify(bizAttachmentMapper, never()).insert(any(BizAttachment.class));
+
+        // 并且必须真的把「新增的那个 fileId」送进校验。少了这条，把实参换成空集合
+        // （例如把 existing.containsKey 的过滤写反）仍然会绿，校验就形同虚设。
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<Long>> validated = ArgumentCaptor.forClass(Collection.class);
+        verify(fileService).assertAttachable(validated.capture());
+        assertThat(validated.getValue()).containsExactly(999L);
     }
 
     @Test
