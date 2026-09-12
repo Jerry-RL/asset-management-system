@@ -796,7 +796,8 @@ Expected:
 7. 删除一个**无资产且无记录**的分区 → 成功，列表移除。注意这是**软删**（`deleted_at = now()`），
    不是物理删除：分区从列表消失是因为 `listProjectZones` 过滤了 `deleted_at IS NULL`。
 8. 切到**卡片模式** → 不出现展开入口（`expandable` 只在列表模式生效）。
-9. 进入 `/projects/:id/edit`（第二步「项目分区配置」）→ 分区表格正常加载与编辑，行为与本任务前一致。
+9. 进入 `/projects/:id/edit` → 第 2 步「项目分区配置」的分区表格正常加载与编辑；
+   行内「详情」入口（record-forms Task 16 新增）仍能跳到 `/projects/:projectId/zones/:zoneId`。
 
 - [ ] **Step 7: 提交**
 
@@ -1791,12 +1792,16 @@ export function ProjectZonesPage() {
 import { ProjectZonesPage } from '@/pages/ProjectZonesPage';
 ```
 
-(b) 在 `App.tsx` 的项目详情路由之后新增一行（紧接 `<Route path="projects/:id" element={<ProjectDetailPage />} />`）：
+(b) 在 `App.tsx` 中 record-forms 新增的分区详情路由之后新增一行（紧接 `<Route path="projects/:projectId/zones/:zoneId" element={<ZoneDetailPage />} />`）：
 
 ```tsx
               {/* 项目分区管理：左侧项目 / 右上分区 Tab / 右下资产 */}
               <Route path="project-zones" element={<ProjectZonesPage />} />
 ```
+
+> 刻意放在 ZoneDetailPage **之后**（而不是紧跟 `projects/:id`）：两条都是 `projects/*` 子路由，
+> 把新路由插在中间会把 record-forms 的 `projects/:id` + `projects/:projectId/zones/:zoneId` 成对块拆开。
+> 路由匹配顺序不受影响 —— `project-zones` 与 `projects/*` 首段不同，不会互相吞路径。
 
 - [ ] **Step 3: `lib/routeRegistry.ts` 登记**
 
@@ -1910,8 +1915,14 @@ cd backend && mvn -B verify
 
 Expected: 全部通过。重点关注：
 - `V47MigrationContractTest` 3 个用例通过；
-- `PermissionRegistryTest` 仍通过（本任务未新增 `@RequiresPerm`，`enforced` 集合应为 **57 个**前后不变）；
-- `AssetZoneEndpointPermissionTest` 仍通过（既有三个分区接口的权限未被触碰）。
+- `PermissionRegistryTest` 仍通过（本任务未新增 `@RequiresPerm`，`enforced` 集合应为 **60 个**前后不变）；
+- `AssetServiceZoneTest` 仍通过（既有三个分区接口的权限与口径未被触碰）。
+
+> **基线快照（2026-09-12 14:05，record-forms 18/18 完成后实测）**：本计划开工前的计数是
+> `后端 @RequiresPerm 60` / `前端 perm 声明 13 处（去重 9 个码）` / `测试夹具权限码 42` /
+> `PATH_TO_CODE 64` / `RESOURCES 49` / `STANDALONE_ROUTES 16` / `App.tsx 静态路由 26`。
+> 本计划**不新增任何 `@RequiresPerm`**，因此完成后 `后端` 应仍为 **60**、`前端 perm 声明的去重码数` 应仍为 **9**。
+> 若这两个数字变大 → 分别说明动到了控制器、或误把 `asset.projectZone` 写成了 `perm` 字面量。
 
 - [ ] **Step 2: 前端全量校验**
 
@@ -1923,14 +1934,14 @@ node scripts/check-perm-invariants.mjs
 Expected: `build` / `lint` 通过；守卫脚本输出 `检查通过`，其中：
 
 ```
-后端 @RequiresPerm : 57 个
-前端 perm 声明     : 11 处（去重 9 个码）
+后端 @RequiresPerm : 60 个
+前端 perm 声明     : 13 处（去重 9 个码）
 PATH_TO_CODE       : 65 条
 RESOURCES          : 49 个
 STANDALONE_ROUTES  : 17 条
 ```
 
-若 `前端 perm 声明` 的去重码数由 9 变大 → 说明误把 `asset.projectZone` 之类的新码写成了 `perm` 字面量，必须删掉（spec §4.1）。若 `后端 @RequiresPerm` 不是 57 → 说明动到了控制器，违反 Global Constraints 的「后端零业务改动」。
+若 `前端 perm 声明` 的去重码数由 9 变大 → 说明误把 `asset.projectZone` 之类的新码写成了 `perm` 字面量，必须删掉（spec §4.1）。若 `后端 @RequiresPerm` 不是 60 → 说明动到了控制器，违反 Global Constraints 的「后端零业务改动」。
 
 - [ ] **Step 3: 确认后端零业务改动**
 
