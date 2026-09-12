@@ -357,10 +357,20 @@ const selectZone = (id: number | null) =>
 |------|------|
 | `projectId` | 新增时预填「项目」；编辑时忽略（以接口返回为准） |
 | `zoneId` | 新增时预填「分区」；编辑时忽略。缺省表示「未指定」 |
-| `lockScope=1` | 禁用「项目」「分区」两个下拉并显示提示「由项目分区管理进入，归属已锁定」 |
+| `lockScope=1` | 禁用「资产公司」「项目」「分区」三个下拉并显示提示「由项目分区管理进入，归属已锁定」 |
 
 - 新增：并入 `Form` 的 `initialValues`（`{ assetType: 'property', projectId, zoneId }`）。
 - 编辑：不预填归属（避免与后端返回值竞争），只按 `lockScope` 禁用下拉。
+- **`lockScope=1` 时必须一并推导并锁定「资产公司」**（值由 `GET /projects/{projectId}` 取得，
+  与 `projectId` / `zoneId` 一次 `setFieldsValue` 写入）。这**不是可选的美化，而是锁定能否成立的前提**：
+  - 「项目」下拉的选项来自 `assetCompanyId`（`/projects?companyId=`）。不预填公司 ⇒ 下拉无匹配项，
+    只会显示原始 id（如 `1`）而不是项目名，用户无从确认自己锁在哪个项目上；
+  - 「资产公司」是**必填**项。靠用户手选会触发既有 `useCascadeReset`（资产公司变更 → 清空
+    项目/分区），把刚锁住的两项清成空且因为 `disabled` 再也改不回来 —— 表单卡死，只能刷新重来；
+  - 预填公司**不会**被这条级联清空：`useCascadeReset` 在 `previous === undefined` 时提前返回，
+    首次写入不算「变更」（这一点已在实现中核对过）。
+  - 查询契约因此**不变**（仍只有 `projectId` / `zoneId` / `lockScope`），多出的那次
+    `GET /projects/{projectId}` 由资产表单页自己承担，调用方（§6.5）无需改动。
 - 保存成功后：由硬编码的 `navigate('/assets')` 改为按 `location.state.from` 返回，fallback `/assets`。
   - 从资产台账进入时 `state.from = '/assets'` → 行为与现状**完全一致**；
   - 从本页进入时 `state.from = '/project-zones?projectId=..&zoneId=..'` → 精确回原页；
@@ -395,7 +405,7 @@ const selectZone = (id: number | null) =>
 | `GET /projects` | 左栏项目列表：`keyword` / 分页 / 数据范围 / 资产聚合字段全部现成 |
 | `GET /projects/{id}/zones` | Tab 数据源：`assetCount` / `assetArea` 现成，直接作 Tab 徽标与标题行 |
 | `GET /assets` | `projectId` + `zoneId` **均可选**，天然支持「全部分区」Tab；`zoneName` 已回显 |
-| `/assets` 写接口 | 归属锁定由前端 `lockScope` 负责，越权仍由后端 `validateZone` / `validateReferences` 兜底 |
+| `/assets` 写接口 | 归属锁定由前端 `lockScope` 负责；后端只兜底「分区必须属于所选项目」（`validateZone`），**不校验「资产公司 ↔ 项目」是否同一公司** —— 见 §8 的已知缺口 |
 
 ---
 
@@ -411,8 +421,9 @@ const selectZone = (id: number | null) =>
 | 删除非空置资产 | 后端 400「非空置资产不可删除」，前端原样提示 |
 | 选中「全部分区」时点「编辑/删除」 | 按钮 `disabled`（分区不存在），不发请求 |
 | `zoneId` 不属于所选项目 | 后端 400「分区不存在」（由既有 `requireProjectZone` 保证，不依赖前端传参正确性）；前端收到后回到「全部分区」并提示 |
-| `?projectId=` 指向不可见项目 | 新增资产页的「项目」下拉预填后仍受数据范围约束；保存时后端按既有级联校验拒绝 |
-| `?lockScope=1` 被人为去掉 | 仅影响前端的禁用体验；归属越权由后端 `validateZone` / `validateReferences` 拦截 |
+| `?projectId=` 指向不可见项目 | 新增资产页的「项目」下拉预填后仍受数据范围约束（选项按 `assetCompanyId` 过滤）。**注意**：与下一行同一个缺口 —— 服务端不校验公司↔项目一致性，故不能假设「保存时后端会拒」。靠 §6.7 从入口侧锁定归属来规避 |
+| `?lockScope=1` 被人为去掉 | 仅影响前端的禁用体验；后端仍保证「分区属于所选项目」（`validateZone` / `validateReferences`） |
+| **已知缺口：公司 ↔ 项目一致性后端未校验** | `validateZone(projectId, zoneId)`（`AssetService:1044-1053`）只校验「分区 ∃ 且属于该项目」，**从不校验 `assetCompanyId` 是否拥有 `projectId`**。因此「资产公司 = A、项目 = B 公司的项目」这种不一致归属后端会照单接受。本期靠 §6.7 的「预填并锁定资产公司」从入口侧消除；**未在服务端兜底**，若将来出现其它可改归属的入口，需另开任务补校验（本期不做，见 §10） |
 | 并发编辑 | 沿用既有口径（资产走 `@Version` 乐观锁并显式报冲突；分区本期不做乐观锁，最后一次保存为准） |
 | 从资产表单页返回 | 整页重新挂载 → 分区 Tab 与资产列表天然重拉；选中项目与分区由 URL query 保留（§5.4） |
 
@@ -454,6 +465,9 @@ const selectZone = (id: number | null) =>
 - 新增 `/project-zones/*` 后端接口组、新增 `asset.projectZone:create/update/delete` 权限码。
 - 分区详情页 `ZoneDetailPage` 与分区后续记录（属 record-forms 设计，另行实现）。
 - 卡片模式下的分区展开（属 project-list-zone-expand 设计）。
+- **服务端「资产公司 ↔ 项目」一致性校验**：`validateZone` 只校验分区属于项目，不校验公司拥有该项目。
+  本期只在入口侧（§6.7 锁定资产公司）规避，不在 `AssetService` 加校验 —— 加它会破坏本期
+  「后端零业务改动」的约束，且需要一套跨表校验与配套用例，属独立专项。
 
 ---
 

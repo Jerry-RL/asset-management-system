@@ -862,7 +862,12 @@ const toPositiveNumber = (raw: string | null): number | undefined => {
    */
   const presetProjectId = toPositiveNumber(searchParams.get('projectId'));
   const presetZoneId = toPositiveNumber(searchParams.get('zoneId'));
-  /** 归属锁定：本入口不允许把资产挪到别的项目 / 分区（越权仍由后端 validateZone 拦截） */
+  /**
+   * 归属锁定：本入口不允许把资产挪到别的项目 / 分区。
+   *
+   * <p>注意后端只兜底「分区属于所选项目」（`validateZone`），**不校验「资产公司 ↔ 项目」是否同一公司** ——
+   * 所以这里的锁定是入口侧的唯一防线，见设计 §8 已知缺口。
+   */
   const lockScope = searchParams.get('lockScope') === '1';
 ```
 
@@ -888,6 +893,90 @@ const toPositiveNumber = (raw: string | null): number | undefined => {
     ? { assetType: 'property' }
     : { assetType: 'property', projectId: presetProjectId, zoneId: presetZoneId };
 ```
+
+- [ ] **Step 4b: 锁定态下由项目反查并锁定「资产公司」（首审后新增，**必需**）**
+
+**为什么必需** —— 缺这一步，锁定功能实际是坏的，有两个确定可复现的故障：
+
+1. 「项目」下拉的选项来自 `assetCompanyId`（`useRemoteOptions(assetCompanyId ? '/projects?...&companyId=' : null)`）。
+   不预填公司 → 选项为空 → `Select` 有 `value` 却没有匹配的 `option`，页面显示原始 id（如 `1`）而非项目名，
+   用户无从确认自己锁在哪个项目上。
+2. 「资产公司」是**必填**项，且本步之前未被锁定。用户手选公司会触发既有
+   `useCascadeReset(form, 'assetCompanyId', ['projectId', 'zoneId', ...])`，把刚锁住的两项清空；
+   而它们已 `disabled`，用户再也改不回来 —— **表单卡死，只能刷新重来**。
+
+**为什么预填公司不会反过来清空项目/分区**：`useCascadeReset`（本文件第 65 行附近）的实现里
+`if (previous === undefined || previous === value) return;` —— 首次写入时 `previous` 是 `undefined`，
+直接提前返回，不算「变更」。所以「公司」的首次程序化写入是安全的。
+
+**为什么只写 `assetCompanyId` 一项**：`projectId` / `zoneId` 已由 Step 4 的 `initialValues` 在挂载时写好，
+公司到位后 `projectOptions` 一加载，`Select` 自然按已存的 `value` 匹配到对应 `option`。少写两项就少两处竞态。
+
+在 `initialValues` 声明之后新增：
+
+```tsx
+  /**
+   * 锁定态下由项目反查资产公司。
+   *
+   * <p>项目下拉的选项依赖资产公司（`/projects?companyId=`），且资产公司本身是必填项 ——
+   * 不预填就等于让用户手选，而手选会触发级联清空刚锁住的项目/分区（详见设计 §6.7）。
+   */
+  const [lockedCompanyId, setLockedCompanyId] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    // 只在「新增 + 锁定 + 有项目」时反查；编辑态归属一律以 /assets/{id} 为准
+    if (!lockScope || isEdit || presetProjectId == null) return;
+    let cancelled = false;
+    api
+      .get<Record<string, unknown>>(`/projects/${presetProjectId}`)
+      .then((project) => {
+        if (cancelled) return;
+        const companyId = Number(project.companyId);
+        if (Number.isFinite(companyId) && companyId > 0) setLockedCompanyId(companyId);
+      })
+      .catch(() => {
+        // 反查失败不阻断表单：用户仍可手选公司，只是失去锁定体验
+        if (!cancelled) setLockedCompanyId(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lockScope, isEdit, presetProjectId]);
+
+  /** 公司反查到位后写入。首次写入不算「变更」，因此不会触发级联清空（见上） */
+  useEffect(() => {
+    if (lockedCompanyId == null) return;
+    form.setFieldsValue({ assetCompanyId: lockedCompanyId });
+  }, [lockedCompanyId, form]);
+```
+
+然后把「资产公司」的 `Form.Item`（`name="assetCompanyId"`）改为：
+
+```tsx
+                <Form.Item
+                  name="assetCompanyId"
+                  label="资产公司"
+                  rules={[{ required: true, message: '请选择资产公司' }]}
+                  extra={
+                    lockScope ? '由项目分区管理进入，归属已锁定' : '项目、责任部门均按资产公司级联'
+                  }
+                >
+                  <TreeSelect
+                    allowClear
+                    showSearch
+                    treeDefaultExpandAll
+                    treeNodeFilterProp="key"
+                    placeholder="请选择资产公司（可输入名称搜索）"
+                    treeData={companyTree}
+                    listHeight={320}
+                    disabled={lockScope || undefined}
+                  />
+                </Form.Item>
+```
+
+（相对原实现三处变化：`extra` 改为按 `lockScope` 切换；`TreeSelect` 末尾新增 `disabled={lockScope || undefined}`；
+其余 props 原样保留。`extra` 的非锁定分支刻意保留原文案「项目、责任部门均按资产公司级联」—— 它本来就在这个
+元素上，与 Step 5/6 那两个 `Form.Item` 的情况不同。）
 
 - [ ] **Step 5: 「项目」下拉加锁定**
 
@@ -966,10 +1055,15 @@ Expected: 均通过，无类型错误、无 unused 变量（`navigate` 仍被使
 
 1. **回归 —— 从资产台账新增**：进入 `/assets` → 点「新增」→ URL 为 `/assets/create`，项目与分区下拉**可编辑**，且**没有**任何锁定提示文案（与改造前逐字一致）；填完保存 → 跳回 `/assets`（与改造前一致）。
 2. **回归 —— 从资产台账编辑**：点行内「编辑」→ URL 为 `/assets/{id}/edit`，归属可编辑，保存后跳回 `/assets`。
-3. **预填**：直接访问 `/assets/create?projectId=1&zoneId=2&lockScope=1` → 「项目」已选中 id=1，「分区」已选中 id=2，「分区」下拉的选项来自该项目的分区列表。
-4. **锁定**：「项目」「分区」两个下拉均**灰化不可改**，且分别显示锁定提示。
-5. **返回来源**：在资产台账里点「新增」前先进 `/assets`，然后手动访问 `/assets/create?projectId=1&zoneId=2&lockScope=1`（无 `state.from`）→ 保存后走 `useBackNavigate` 的兜底路径（浏览器上一页 / `/assets`），不报错。
-6. **编辑态不预填**：访问 `/assets/{id}/edit?projectId=999&lockScope=1` → 「项目」显示的是该资产真实归属（**不是 999**），且下拉灰化。
+3. **预填**：直接访问 `/assets/create?projectId=1&zoneId=2&lockScope=1` → 「项目」显示该项目**名称**（不是原始 id `1`），「分区」已选中 id=2 且选项来自该项目的分区列表。「资产公司」已自动填入该项目所属公司。
+4. **锁定**：「资产公司」「项目」「分区」三个下拉均**灰化不可改**，且都显示「由项目分区管理进入，归属已锁定」。
+   - 特别是：**无法再切换「资产公司」** —— 这是首审发现的那个死锁的正面验证（换公司会触发 `useCascadeReset`
+     清空已被禁用的项目/分区，导致表单再也无法提交）。
+5. **反查失败降级**：把 `projectId` 改成一个不存在的 id（如 `999999`）→ 反查失败不报错、不白屏；
+   「资产公司」保持可编辑，由用户手选，表单仍可正常使用。
+6. **返回来源**：在资产台账里点「新增」前先进 `/assets`，然后手动访问 `/assets/create?projectId=1&zoneId=2&lockScope=1`（无 `state.from`）→ 保存后走 `useBackNavigate` 的兜底路径（浏览器上一页 / `/assets`），不报错。
+7. **编辑态不预填**：访问 `/assets/{id}/edit?projectId=999&lockScope=1` → 「项目」显示的是该资产真实归属（**不是 999**），且下拉灰化；「资产公司」**不发起反查**（反查条件是「新增 + 锁定」，编辑态跳过），显示该资产真实公司且灰化。
+8. **反查只发一次**：在锁定态新增页停留，确认 `GET /projects/{projectId}` 只发一次（`useEffect` 依赖为 `[lockScope, isEdit, presetProjectId]`，不会因表单任意字段变化而重发）。
 
 - [ ] **Step 10: 提交**
 
