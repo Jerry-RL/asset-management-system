@@ -405,7 +405,7 @@ const selectZone = (id: number | null) =>
 | `GET /projects` | 左栏项目列表：`keyword` / 分页 / 数据范围 / 资产聚合字段全部现成 |
 | `GET /projects/{id}/zones` | Tab 数据源：`assetCount` / `assetArea` 现成，直接作 Tab 徽标与标题行 |
 | `GET /assets` | `projectId` + `zoneId` **均可选**，天然支持「全部分区」Tab；`zoneName` 已回显 |
-| `/assets` 写接口 | 归属锁定由前端 `lockScope` 负责；后端只兜底「分区必须属于所选项目」（`validateZone`），**不校验「资产公司 ↔ 项目」是否同一公司** —— 见 §8 的已知缺口 |
+| `/assets` 写接口 | 归属锁定由前端 `lockScope` 负责；服务端另有级联兜底 —— `validateReferences`（`AssetService:1064-1076`，创建/更新都会调用）校验「分区属于所选项目」与「项目、责任部门属于所选资产公司」，违反返回 400（如「所选项目不属于该资产公司」） |
 
 ---
 
@@ -421,9 +421,9 @@ const selectZone = (id: number | null) =>
 | 删除非空置资产 | 后端 400「非空置资产不可删除」，前端原样提示 |
 | 选中「全部分区」时点「编辑/删除」 | 按钮 `disabled`（分区不存在），不发请求 |
 | `zoneId` 不属于所选项目 | 后端 400「分区不存在」（由既有 `requireProjectZone` 保证，不依赖前端传参正确性）；前端收到后回到「全部分区」并提示 |
-| `?projectId=` 指向不可见项目 | 新增资产页的「项目」下拉预填后仍受数据范围约束（选项按 `assetCompanyId` 过滤）。**注意**：与下一行同一个缺口 —— 服务端不校验公司↔项目一致性，故不能假设「保存时后端会拒」。靠 §6.7 从入口侧锁定归属来规避 |
-| `?lockScope=1` 被人为去掉 | 仅影响前端的禁用体验；后端仍保证「分区属于所选项目」（`validateZone` / `validateReferences`） |
-| **已知缺口：公司 ↔ 项目一致性后端未校验** | `validateZone(projectId, zoneId)`（`AssetService:1044-1053`）只校验「分区 ∃ 且属于该项目」，**从不校验 `assetCompanyId` 是否拥有 `projectId`**。因此「资产公司 = A、项目 = B 公司的项目」这种不一致归属后端会照单接受。本期靠 §6.7 的「预填并锁定资产公司」从入口侧消除；**未在服务端兜底**，若将来出现其它可改归属的入口，需另开任务补校验（本期不做，见 §10） |
+| `?projectId=` 指向不可见项目 | 新增资产页的「项目」下拉预填后仍受数据范围约束（选项按 `assetCompanyId` 过滤）；即使被人为构造出不一致的归属，保存时 `validateReferences` 也会以「所选项目不属于该资产公司」拒绝 |
+| `?lockScope=1` 被人为去掉 | 仅影响前端的禁用体验；归属一致性仍有服务端兜底（`validateReferences` 校验「项目属于该资产公司」「分区属于该项目」，见 §7.1） |
+| `GET /projects/{id}` 反查失败（§6.7） | 不报错、不阻断：「资产公司」保持**可编辑**（`disabled` 条件含 `lockedCompanyId != null`），由用户手选；锁定体验降级但表单仍可提交 |
 | 并发编辑 | 沿用既有口径（资产走 `@Version` 乐观锁并显式报冲突；分区本期不做乐观锁，最后一次保存为准） |
 | 从资产表单页返回 | 整页重新挂载 → 分区 Tab 与资产列表天然重拉；选中项目与分区由 URL query 保留（§5.4） |
 
@@ -465,9 +465,6 @@ const selectZone = (id: number | null) =>
 - 新增 `/project-zones/*` 后端接口组、新增 `asset.projectZone:create/update/delete` 权限码。
 - 分区详情页 `ZoneDetailPage` 与分区后续记录（属 record-forms 设计，另行实现）。
 - 卡片模式下的分区展开（属 project-list-zone-expand 设计）。
-- **服务端「资产公司 ↔ 项目」一致性校验**：`validateZone` 只校验分区属于项目，不校验公司拥有该项目。
-  本期只在入口侧（§6.7 锁定资产公司）规避，不在 `AssetService` 加校验 —— 加它会破坏本期
-  「后端零业务改动」的约束，且需要一套跨表校验与配套用例，属独立专项。
 
 ---
 
