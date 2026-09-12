@@ -256,7 +256,11 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
           <Form.Item name="code" label="分区编码">
             <Input placeholder="如 A" />
           </Form.Item>
-          <Form.Item name="sort" label="排序" extra="留空表示追加到末尾">
+          <Form.Item
+            name="sort"
+            label="排序"
+            extra={editing?.id != null ? '留空表示保持原排序' : '留空表示追加到末尾'}
+          >
             <InputNumber className="w-full" />
           </Form.Item>
           <Form.Item name="remark" label="备注">
