@@ -123,13 +123,16 @@ for (const code of fixtureCodes) {
 // ---------------------------------------------------------------------------
 // 路由：PATH_TO_CODE 镜像 / RESOURCES / STANDALONE_ROUTES / App.tsx
 // ---------------------------------------------------------------------------
+// 镜像单独成文件（lib/pathToCode.ts）以断开 modules.tsx <-> routeRegistry.ts 的循环导入，
+// 故这里分别读取：路径码镜像读 pathToCode.ts，注册表读 routeRegistry.ts。
+const mirrorSrc = read(join(SRC, 'lib/pathToCode.ts'));
 const registrySrc = read(join(SRC, 'lib/routeRegistry.ts'));
 
 const pathToCode = new Map();
 {
-  const start = registrySrc.indexOf('export const PATH_TO_CODE');
-  if (start < 0) fail('未找到 PATH_TO_CODE（routeRegistry.ts 结构已变？）');
-  const body = registrySrc.slice(start, registrySrc.indexOf('\n};', start));
+  const start = mirrorSrc.indexOf('export const PATH_TO_CODE');
+  if (start < 0) fail('未找到 PATH_TO_CODE（lib/pathToCode.ts 结构已变？）');
+  const body = mirrorSrc.slice(start, mirrorSrc.indexOf('\n};', start));
   for (const m of body.matchAll(/^\s*'([^']+)':\s*'([^']+)',\s*$/gm)) pathToCode.set(m[1], m[2]);
 }
 expectAtLeast('PATH_TO_CODE 条目', pathToCode.size, 50);

@@ -12,12 +12,8 @@ import { api } from './api';
 import { useAuth } from './auth';
 import { getIconByName } from './menuIcons';
 import { MENU, type MenuGroup, type MenuItem } from '@/pages/modules';
-import {
-  checkCodeMappingDrift,
-  isPathViewable,
-  isRegisteredRoute,
-  routeTitle,
-} from './routeRegistry';
+import { checkCodeMappingDrift, isPathViewable } from './pathToCode';
+import { isRegisteredRoute, routeTitle } from './routeRegistry';
 
 /**
  * 侧边栏菜单数据源（设计 3.4）。

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
 import type { LoginUser } from './api';
-import { codeForPath } from './routeRegistry';
+import { codeForPath } from './pathToCode';
 import { ForbiddenNotice } from '@/components/ForbiddenNotice';
 
 /**
