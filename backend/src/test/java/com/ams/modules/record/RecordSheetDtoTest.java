@@ -37,7 +37,6 @@ class RecordSheetDtoTest {
         RecordSheetView view = new RecordSheetView();
         assertThat(view.getReceives()).isNotNull().isEmpty();
         assertThat(view.getDisposalRecords()).isNotNull().isEmpty();
-        assertThat(view.getDisposals()).isNotNull().isEmpty();
         assertThat(view.getSourceInfo()).isNull();
     }
 

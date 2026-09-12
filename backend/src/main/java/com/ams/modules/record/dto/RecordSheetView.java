@@ -7,9 +7,8 @@ import lombok.Data;
 /**
  * 后续记录聚合读视图（设计 §5.2）。
  *
- * <p>{@link #disposals} 只在资产主体下非空（来自 {@code disposal_order}）；
- * {@link #disposalRecords} 只在项目 / 分区下非空。两者**不同时非空**，
- * 前端按 ownerType 决定渲染「只读流程面板」还是「可编辑台账」。
+ * <p>{@link #disposalRecords} 只在项目 / 分区下非空；资产侧处置单走独立的
+ * {@code GET /assets/{id}/disposals}，不经本视图回显。
  *
  * <p>集合字段一律初始化，避免前端为「接口返回 null」写防御分支。
  */
@@ -22,6 +21,4 @@ public class RecordSheetView {
     private SourceInput sourceInfo;
 
     private List<DisposalInput> disposalRecords = new ArrayList<>();
-
-    private List<DisposalOrderView> disposals = new ArrayList<>();
 }

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -23,6 +24,10 @@ public class DisposalOrder extends BaseEntity {
     private BigDecimal bookValue;
     private BigDecimal actualAmount;
     private String counterparty;
+    private Long disposalUserId;
+    private String disposalUserName;
+    private LocalDate disposalDate;
+    private String remark;
     private String status; // draft/approving/rejected/pending_execute/executing/completed
     /** 处置损益金额（实际 − 账面/评估基准）。 */
     private BigDecimal pnlAmount;

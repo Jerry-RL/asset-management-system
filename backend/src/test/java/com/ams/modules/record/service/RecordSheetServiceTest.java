@@ -643,7 +643,7 @@ class RecordSheetServiceTest {
     }
 
     @Test
-    @DisplayName("读：资产主体不查台账表；项目主体回显台账（disposals 留空，由 Task 9 填充）")
+    @DisplayName("读：资产主体不查台账表；项目主体回显台账")
     void readBranchesByOwnerType() {
         when(receiveRecordMapper.selectList(any())).thenReturn(new ArrayList<>());
         when(receiveIssueMapper.selectList(any())).thenReturn(new ArrayList<>());
@@ -665,7 +665,6 @@ class RecordSheetServiceTest {
         RecordSheetView projectView = service.read(RecordOwnerType.PROJECT, 1L);
 
         assertThat(projectView.getDisposalRecords()).hasSize(1);
-        assertThat(projectView.getDisposals()).isEmpty();
     }
 
     // ---- 辅助 ----

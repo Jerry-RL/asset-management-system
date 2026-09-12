@@ -12,6 +12,8 @@ import com.ams.modules.disposal.entity.DisposalOrder;
 import com.ams.modules.disposal.mapper.DisposalOrderMapper;
 import com.ams.modules.finance.entity.FinanceVoucher;
 import com.ams.modules.finance.service.ReconcileService;
+import com.ams.modules.record.dto.DisposalOrderView;
+import com.ams.modules.record.service.RecordSheetService;
 import com.ams.platform.approval.ApprovalEngine;
 import com.ams.platform.event.DisposalCompletedEvent;
 import com.ams.platform.event.DomainEventPublisher;
@@ -19,7 +21,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +43,7 @@ public class DisposalService {
     private final ReconcileService reconcileService;
     private final ObjectMapper objectMapper;
     private final DomainEventPublisher eventPublisher;
+    private final RecordSheetService recordSheetService;
 
     public DisposalService(
             DisposalOrderMapper disposalOrderMapper,
@@ -48,7 +53,8 @@ public class DisposalService {
             PaymentService paymentService,
             ReconcileService reconcileService,
             ObjectMapper objectMapper,
-            DomainEventPublisher eventPublisher) {
+            DomainEventPublisher eventPublisher,
+            RecordSheetService recordSheetService) {
         this.disposalOrderMapper = disposalOrderMapper;
         this.leaseControlService = leaseControlService;
         this.approvalEngine = approvalEngine;
@@ -57,6 +63,7 @@ public class DisposalService {
         this.reconcileService = reconcileService;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
+        this.recordSheetService = recordSheetService;
     }
 
     public PageResult<DisposalOrder> page(long page, long pageSize, String status) {
@@ -66,6 +73,36 @@ public class DisposalService {
                         .eq(status != null, DisposalOrder::getStatus, status)
                         .orderByDesc(DisposalOrder::getId));
         return PageResult.of(result.getRecords(), result.getTotal(), page, pageSize);
+    }
+
+    /**
+     * 某资产的处置单列表（设计 §7.1 的面板数据源）。
+     *
+     * <p>按 id 倒序：面板最重要的是最近一次处置，历史处置往下排。
+     * 附件一并回显，避免前端为每条单子再发一次请求。
+     */
+    public List<DisposalOrderView> listByAsset(Long assetId) {
+        List<DisposalOrder> orders = disposalOrderMapper.selectList(
+                new LambdaQueryWrapper<DisposalOrder>()
+                        .eq(DisposalOrder::getAssetId, assetId)
+                        .orderByDesc(DisposalOrder::getId));
+        List<DisposalOrderView> views = new ArrayList<>();
+        for (DisposalOrder order : orders) {
+            DisposalOrderView view = new DisposalOrderView();
+            view.setId(order.getId());
+            view.setDisposalType(order.getDisposalType());
+            view.setDisposalUserId(order.getDisposalUserId());
+            view.setDisposalUserName(order.getDisposalUserName());
+            // 金额沿用 actual_amount 原值，不做万元换算（设计 §4.2 末尾）
+            view.setAmountWan(order.getActualAmount());
+            view.setActualAmount(order.getActualAmount());
+            view.setDisposalDate(order.getDisposalDate());
+            view.setRemark(order.getRemark());
+            view.setStatus(order.getStatus());
+            view.setAttachments(recordSheetService.orderAttachments(order.getId()));
+            views.add(view);
+        }
+        return views;
     }
 
     /** 处置申请（FR-DISP-001）。 */

@@ -929,7 +929,7 @@ git commit -m "feat(record): 宿主枚举（主体权限码映射 + 附件 biz_t
   - `SourceInput{Long id, Long sourcePersonId, String sourcePersonName, String sourceUnit, LocalDate sourceDate, String sourceDesc, List<AttachmentRef> attachments}`
   - `DisposalInput{Long id, String disposalType, Long disposalUserId, String disposalUserName, BigDecimal amountWan, LocalDate disposalDate, String remark, List<AttachmentRef> attachments}`
   - `RecordSheetRequest{List<ReceiveInput> receives, SourceInput sourceInfo, List<DisposalInput> disposalRecords}`
-  - `RecordSheetView{List<ReceiveInput> receives, SourceInput sourceInfo, List<DisposalInput> disposalRecords, List<DisposalOrderView> disposals}`
+  - `RecordSheetView{List<ReceiveInput> receives, SourceInput sourceInfo, List<DisposalInput> disposalRecords}`
   - `DisposalOrderView{Long id, String disposalType, Long disposalUserId, String disposalUserName, BigDecimal amountWan, LocalDate disposalDate, String remark, String status, BigDecimal actualAmount, List<AttachmentRef> attachments}`
 
 **设计要点（实现时不要"优化"掉）**：读写复用同一批 Input 类型。读时 `AttachmentRef.fileName` / `url` 被回填，写时被忽略 —— 复用让前端只需要维护一套 TypeScript 类型，也让「表单回显后再保存」天然幂等（回显出来什么就能原样提交回去）。
@@ -978,7 +978,6 @@ class RecordSheetDtoTest {
         RecordSheetView view = new RecordSheetView();
         assertThat(view.getReceives()).isNotNull().isEmpty();
         assertThat(view.getDisposalRecords()).isNotNull().isEmpty();
-        assertThat(view.getDisposals()).isNotNull().isEmpty();
         assertThat(view.getSourceInfo()).isNull();
     }
 
@@ -1310,9 +1309,8 @@ import lombok.Data;
 /**
  * 后续记录聚合读视图（设计 §5.2）。
  *
- * <p>{@link #disposals} 只在资产主体下非空（来自 {@code disposal_order}）；
- * {@link #disposalRecords} 只在项目 / 分区下非空。两者**不同时非空**，
- * 前端按 ownerType 决定渲染「只读流程面板」还是「可编辑台账」。
+ * <p>{@link #disposalRecords} 只在项目 / 分区下非空；资产侧处置单走独立的
+ * {@code GET /assets/{id}/disposals}，不经本视图回显。
  *
  * <p>集合字段一律初始化，避免前端为「接口返回 null」写防御分支。
  */
@@ -1325,8 +1323,6 @@ public class RecordSheetView {
     private SourceInput sourceInfo;
 
     private List<DisposalInput> disposalRecords = new ArrayList<>();
-
-    private List<DisposalOrderView> disposals = new ArrayList<>();
 }
 ```
 
@@ -2764,7 +2760,6 @@ import com.ams.modules.record.AttachmentOwner;
 import com.ams.modules.record.RecordOwnerType;
 import com.ams.modules.record.dto.AttachmentRef;
 import com.ams.modules.record.dto.DisposalInput;
-import com.ams.modules.record.dto.DisposalOrderView;
 import com.ams.modules.record.dto.IssueInput;
 import com.ams.modules.record.dto.ReceiveInput;
 import com.ams.modules.record.dto.RecordSheetRequest;
@@ -3601,7 +3596,7 @@ git commit -m "feat(record): record-sheet 三主体读写接口与权限闭环"
   - `DisposalService.createWithAttachments(DisposalOrder order, List<AttachmentRef> refs) → DisposalOrder`
   - `GET /api/v1/assets/{assetId}/disposals`（权限 `asset.ledger:view`）
 
-> **待办归属**：`RecordSheetView.disposals`（资产的处置单列表，来自 `disposal_order`）**不由 Task 7 的 `read()` 填充** —— `read()` 当前对该字段保持空列表。该字段的填充与 `GET /assets/{id}/disposals` 一起**在本 Task 落地**（复用同一个 `DisposalOrderView` 组装逻辑）。Task 8 派发时会带上这条。
+> 资产处置单列表由本 Task 的 `GET /assets/{assetId}/disposals` 提供；`RecordSheetView` **不**承载该字段（会与 `DisposalService → RecordSheetService` 形成循环依赖，且设计从未定义该字段）。前端资产第 3 步的处置面板单独调这个端点。
 
 **权限码逐字如下（这是本节的核心，也是设计 §5.3 的职责分离）：**
 
@@ -4485,12 +4480,11 @@ export interface RecordSheet {
   receives: ReceiveRecord[];
   sourceInfo: SourceInfo | null;
   disposalRecords: DisposalRecord[];
-  disposals: DisposalOrderView[];
 }
 
 export const recordSheetPath = (ownerType: RecordOwnerType, ownerId: number, projectId?: number): string;
 export const loadRecordSheet = (path: string): Promise<RecordSheet>;
-export const saveRecordSheet = (path: string, sheet: Omit<RecordSheet, 'disposals'>): Promise<RecordSheet>;
+export const saveRecordSheet = (path: string, sheet: RecordSheetPayload): Promise<RecordSheet>;
 /** 后端返回的附件（fileName/url）→ 组件值（fileId/url/name） */
 export const toAttachmentValues = (refs?: RecordAttachment[] | null): AttachmentValue[] => ...;
 /** 组件值 → 后端请求体（只提交 fileId 与顺序） */
@@ -4590,12 +4584,10 @@ export interface RecordSheet {
   receives: ReceiveRecord[];
   sourceInfo: SourceInfo | null;
   disposalRecords: DisposalRecord[];
-  /** 仅资产主体非空 */
-  disposals: DisposalOrderView[];
 }
 
-/** 写请求体：disposals 是只读回显，不参与写入 */
-export type RecordSheetPayload = Omit<RecordSheet, 'disposals'>;
+/** 写请求体：与读视图同形 —— 资产侧处置单列表走独立的 /assets/{id}/disposals，不在本类型里 */
+export type RecordSheetPayload = RecordSheet;
 
 /**
  * 记录路由。分区必须带上 projectId —— 后端把「分区不属于该项目」交给路由形态排斥，
@@ -4646,11 +4638,6 @@ const normalizeSheet = (raw: Partial<RecordSheet> | null | undefined): RecordShe
     // 资产侧回显字段是 actualAmount，统一映射到 amountWan 供表单使用
     amountWan: record.amountWan ?? (record as { actualAmount?: number }).actualAmount,
     attachments: toAttachmentValues(record.attachments as unknown as RecordAttachment[]),
-  })),
-  disposals: (raw?.disposals ?? []).map((order) => ({
-    ...order,
-    amountWan: order.amountWan ?? order.actualAmount,
-    attachments: toAttachmentValues(order.attachments as unknown as RecordAttachment[]),
   })),
 });
 
@@ -4723,7 +4710,7 @@ interface RecordSheetSectionsProps {
 ```
 
 **关键分工**：
-- `ownerType === 'asset'` → 处置模块渲染 `disposals`（只读列表 + 状态与操作按钮，按钮按 `operation.disposal:*` 权限显隐）；不渲染可编辑台账。
+- `ownerType === 'asset'` → 处置模块渲染只读列表（单独调 `GET /assets/{id}/disposals`，状态与操作按钮按 `operation.disposal:*` 权限显隐）；不渲染可编辑台账。
 - `ownerType !== 'asset'` → 处置模块渲染可编辑台账（`disposalRecords`）。
 - 接收信息 / 来源明细三主体完全一致。
 
@@ -6057,9 +6044,8 @@ git commit -m "docs: 后续记录接口契约、需求条目与 DBML 同步"
 
 **5. 代码块与实体字段的对照自查（防止「实体没有这个字段」）**
 
-- `DisposalOrderView.amountWan` 由 `DisposalService.listByAsset` 从 `disposal_order.actual_amount` 赋值（Task 9），
-  `lib/recordSheet.ts` 的 `normalizeSheet` 又做了 `amountWan ?? actualAmount` 兜底 —— 两处都写是为了让
-  资产侧与项目侧在前端走同一套渲染，**不要**只保留其中一处。
+- `DisposalOrderView.amountWan` 与 `actualAmount` 由 `DisposalService.listByAsset` 从 `disposal_order.actual_amount`
+  的原值赋同一个数（Task 9），**不做万元换算**；前端直接用该值渲染。
 - `SourceInput` 只有 `id` / `sourcePersonId` / `sourcePersonName` / `sourceUnit` / `sourceDate` /
   `sourceDesc` / `attachments`，**没有** `ownerType` / `ownerId`（它们由服务端按路径赋值）。
   任何试图给 DTO 加这两个字段的改动都会引入「客户端可指定归属」的越权面。

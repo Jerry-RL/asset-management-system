@@ -16,6 +16,8 @@ import com.ams.modules.asset.service.AssetDossierService;
 import com.ams.modules.asset.service.AssetQrService;
 import com.ams.modules.asset.service.AssetService;
 import com.ams.modules.asset.service.AssetStructureService;
+import com.ams.modules.disposal.service.DisposalService;
+import com.ams.modules.record.dto.DisposalOrderView;
 import com.ams.platform.security.Audited;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -51,6 +53,7 @@ public class AssetController {
     private final AssetQrService assetQrService;
     private final OwnershipResolver ownershipResolver;
     private final RbacService rbacService;
+    private final DisposalService disposalService;
 
     public AssetController(
             AssetService assetService,
@@ -58,13 +61,15 @@ public class AssetController {
             AssetDossierService dossierService,
             AssetQrService assetQrService,
             OwnershipResolver ownershipResolver,
-            RbacService rbacService) {
+            RbacService rbacService,
+            DisposalService disposalService) {
         this.assetService = assetService;
         this.structureService = structureService;
         this.dossierService = dossierService;
         this.assetQrService = assetQrService;
         this.ownershipResolver = ownershipResolver;
         this.rbacService = rbacService;
+        this.disposalService = disposalService;
     }
 
     // ---- 项目 ----
@@ -216,6 +221,19 @@ public class AssetController {
     public ApiResponse<AssetDossier> dossier(@PathVariable Long assetId) {
         assertAsset(assetId);
         return ApiResponse.ok(dossierService.getDossier(assetId), TraceIdUtil.get());
+    }
+
+    /**
+     * 某资产的处置单列表（资产编辑页第 3 步的处置面板数据源）。
+     *
+     * <p>权限用 {@code asset.ledger:view}（看资产的人就能看它的处置历史）；
+     * 推进流程用 {@code operation.disposal:*}，两者刻意分开（设计 §5.3）。
+     */
+    @GetMapping("/assets/{assetId}/disposals")
+    @RequiresPerm("asset.ledger:view")
+    public ApiResponse<List<DisposalOrderView>> assetDisposals(@PathVariable Long assetId) {
+        assertAsset(assetId);
+        return ApiResponse.ok(disposalService.listByAsset(assetId), TraceIdUtil.get());
     }
 
     /** 一产一码：下载资产二维码 PNG（扫码打开用户端招租/资产页）。 */
