@@ -345,7 +345,7 @@ FROM sys_dict_module m
 JOIN (VALUES
     ('disposal_type', '处置类型', 12),
     ('handover_type', '交接类型', 13),
-    ('issue_type',    '问题类型', 14)
+    ('issue_type', '问题类型', 14)
 ) AS v(code, name, sort) ON TRUE
 WHERE m.code = 'asset_management'
 ON CONFLICT (code) DO NOTHING;
@@ -354,18 +354,18 @@ INSERT INTO sys_dict_item (type_id, value, label, sort)
 SELECT t.id, v.value, v.label, v.sort
 FROM sys_dict_type t
 JOIN (VALUES
-    ('disposal_type', 'sale',     '出售',     1),
-    ('disposal_type', 'scrap',    '报废',     2),
-    ('disposal_type', 'transfer', '划转',     3),
-    ('disposal_type', 'other',    '其他',     4),
-    ('handover_type', 'receive',  '接收',     1),
-    ('handover_type', 'handover', '移交',     2),
+    ('disposal_type', 'sale', '出售', 1),
+    ('disposal_type', 'scrap', '报废', 2),
+    ('disposal_type', 'transfer', '划转', 3),
+    ('disposal_type', 'other', '其他', 4),
+    ('handover_type', 'receive', '接收', 1),
+    ('handover_type', 'handover', '移交', 2),
     ('handover_type', 'internal', '内部交接', 3),
-    ('issue_type', 'ownership',   '权属',     1),
-    ('issue_type', 'certificate', '证照',     2),
-    ('issue_type', 'facility',    '设施',     3),
-    ('issue_type', 'arrears',     '欠费',     4),
-    ('issue_type', 'other',       '其他',     5)
+    ('issue_type', 'ownership', '权属', 1),
+    ('issue_type', 'certificate', '证照', 2),
+    ('issue_type', 'facility', '设施', 3),
+    ('issue_type', 'arrears', '欠费', 4),
+    ('issue_type', 'other', '其他', 5)
 ) AS v(type_code, value, label, sort) ON v.type_code = t.code
 ON CONFLICT (type_id, value) DO NOTHING;
 ```

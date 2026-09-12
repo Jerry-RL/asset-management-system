@@ -84,15 +84,15 @@
 - **不建外键**，与现有库一致；一致性由服务层校验，配复合索引。
 - `owner_type` 统一小写枚举，本期取值 `asset` / `project` / `zone`。
 
-### 4.2 表 DDL（迁移 `V46__record_forms.sql`）
+### 4.2 表 DDL（迁移 `V46__record_sheets.sql`）
 
 ```sql
 -- ---------------- 通用附件关联 ----------------
 CREATE TABLE IF NOT EXISTS biz_attachment (
     id          BIGSERIAL PRIMARY KEY,
-    owner_type  VARCHAR(20)  NOT NULL,  -- asset/project/zone/receive_record/receive_issue/source_info/disposal_order/disposal_record
+    owner_type  VARCHAR(30)  NOT NULL,  -- asset/project/zone/receive_record/receive_issue/source_info/disposal_order/disposal_record
     owner_id    BIGINT       NOT NULL,
-    biz_type    VARCHAR(30)  NOT NULL,  -- receive_doc/issue_scene/source_attach/disposal_attach
+    biz_type    VARCHAR(40)  NOT NULL,  -- receive_doc/issue_scene/source_attach/disposal_attach
     file_id     BIGINT       NOT NULL,
     sort        INTEGER      NOT NULL DEFAULT 0,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
