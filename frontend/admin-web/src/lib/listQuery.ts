@@ -44,6 +44,19 @@ export function useListQuery(options: ListQueryOptions = {}) {
     [search, prefix, defaultPageSize, resolvedFilterKeys],
   );
 
+  // 只依赖筛选值本身：同一 URL 上的其它参数（view、zoneId 等）变化不该让 filters 换新引用，
+  // 否则把 filters 放进拉取 effect 依赖的调用方会被无关参数触发一次多余请求（设计 §6.1）。
+  // 签名里带上**键名**（`key=value` 而非仅值）：切换到 filterKeys 不同的资源时，
+  // 即便值恰好相同也不会命中上一份缓存的 filters，避免返回过期对象。
+  const filtersSignature = resolvedFilterKeys
+    .map((key) => `${key}=${state.filters[key] ?? ''}`)
+    .join('\u0000');
+  const filters = useMemo(
+    () => state.filters,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtersSignature],
+  );
+
   // 开发态提示筛选键撞保留字 —— 生产不崩（设计 §8）
   if (import.meta.env?.DEV) {
     const reserved = findReservedFilterKeys(resolvedFilterKeys);
@@ -88,7 +101,7 @@ export function useListQuery(options: ListQueryOptions = {}) {
     [patch, state.filters],
   );
 
-  return { ...state, patch, setPage, setPageSize, setKeyword, setFilter, setFilters };
+  return { ...state, filters, patch, setPage, setPageSize, setKeyword, setFilter, setFilters };
 }
 
 /** 单值参数的编解码（dayjs、字符串数组等非字符串量） */
