@@ -2184,7 +2184,7 @@ import java.time.LocalDateTime;
                 .apply("deleted_at IS NULL"));
     }
 
-    /** 分区可删性的唯一判定点：两条删除路径都调它，保证口径一致。 */
+    /** 分区可删性的唯一判定点：三条删除路径（就地删除 / 项目整体保存 / 项目删除）都调它，保证口径一致。 */
     private void assertZoneRemovable(ProjectZone zone) {
         long assetCount = assetMapper.selectCount(new LambdaQueryWrapper<Asset>()
                 .eq(Asset::getZoneId, zone.getId()));
@@ -2249,6 +2249,47 @@ git add backend/src/main/java/com/ams/modules/record/service/RecordPresenceCheck
         backend/src/test/java/com/ams/modules/asset/AssetServiceZoneTest.java
 git commit -m "feat(asset): 分区删除统一守卫与软删（两条路径口径一致，不再静默置空资产归属）"
 ```
+
+---
+
+### Task 6 修复轮（首审 1 Important，已落地 `41cc67d`）
+
+首审结论 Approved，但暴露了两件事，均已在 `101633c..41cc67d` 修复（另有 `b3de7bc` 只对齐注释与设计文案）：
+
+1. **[Important] `replaceZones` 的两条拒绝用例保护不住本 Task 的头号承诺。** 它们只断言「抛异常」+ `verify(projectZoneMapper, never()).deleteBatchIds(any())`，而 `deleteBatchIds` 已从生产代码删除 —— 该断言只防旧实现回流，对「置空资产 `zone_id`」毫无约束：把置空那两行移到守卫之前，两个用例依然全绿。已补：
+
+```java
+        verify(assetMapper, never()).update(any(), any());
+        verify(projectZoneMapper, never()).update(any(), any());
+```
+
+2. **第三条分区删除路径 `AssetService.deleteProject`。** 它 `projectZoneMapper.delete(...)` 把项目下**全部**分区硬删，再硬删项目，只拦「项目下有资产」、**不拦后续记录**，因此可以靠删项目绕过守卫，把分区连同其后续记录一起硬删成孤儿行。已改为：
+
+```java
+    @Transactional
+    public void deleteProject(Long id) {
+        getProject(id);
+        Long assetCount = assetMapper.selectCount(
+                new LambdaQueryWrapper<Asset>().eq(Asset::getProjectId, id));
+        if (assetCount != null && assetCount > 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "项目下存在资产，无法删除");
+        }
+        if (recordPresenceChecker.hasRecords(RecordOwnerType.PROJECT, id)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "项目下已有后续记录，请先处理后再删除");
+        }
+        for (ProjectZone zone : projectZoneMapper.selectList(activeZoneQuery()
+                .eq(ProjectZone::getProjectId, id))) {
+            assertZoneRemovable(zone);
+        }
+        projectZoneMapper.delete(
+                new LambdaQueryWrapper<ProjectZone>().eq(ProjectZone::getProjectId, id));
+        projectMapper.deleteById(id);
+    }
+```
+
+**已拍的取舍（不要改成软删）**：`deleteProject` 的分区与项目**保留物理删除**。守卫通过即证明整棵子树既无资产也无记录、是空壳，硬删不可能遗留孤儿行；而把项目改成软删要牵动全部项目读路径（`getProject` / 项目列表 / `AssetService:1040` / `OwnershipResolver` / 看板 / 地图），属于「项目软删」独立专项。这是设计 §7.3 第 3 条「不再保留硬删调用」的**显式例外**，已写进设计 §7.3 与验收标准 7。
+
+三条删除路径（`deleteProjectZone` / `replaceZones` / `deleteProject`）**共用** `assertZoneRemovable`，报错优先级「资产 → 记录」，路径内优先级「项目资产 → 项目记录 → 逐分区」。
 
 ---
 
@@ -6001,7 +6042,7 @@ git commit -m "docs: 后续记录接口契约、需求条目与 DBML 同步"
 - `RecordOwnerType` 的三个值与两处权限码在 Task 3 定义，Task 5 / 7 / 8 全部直接引用，未出现重复字面量。
 - `AttachmentOwner.bizType()` 是 `biz_attachment.biz_type` 的唯一来源，Task 7 的 `syncAttachments` 是唯一写入点。
 - `RecordSheetPayload`（前端）与 `RecordSheetRequest`（后端）字段逐字对应：`receives` / `sourceInfo` / `disposalRecords`。
-- 软删一律 `deleted_at`，唯一写入点是 Task 7 的 `markDeleted` 与 Task 6 的 `setSql("deleted_at = now()")`，**没有**任何 `deleteById` / `deleteBatchIds` 调用。
+- 软删一律 `deleted_at`，唯一写入点是 Task 7 的 `markDeleted` 与 Task 6 的 `setSql("deleted_at = now()")`，**没有**任何 `deleteBatchIds` 调用。硬删只剩两处：`AssetService.deleteProject`（走同一守卫确认空壳后硬删分区与项目，设计 §7.3 的显式例外）与既有的资产 `deleteById`。
 
 **4. 执行前必须人工确认的三项**
 
