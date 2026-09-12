@@ -5,7 +5,8 @@ import { Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { cn } from '@/lib/utils';
 import { getPathIcon } from '@/lib/menuIcons';
-import { MENU } from '@/pages/modules';
+import { useMenu } from '@/lib/menu';
+import { routeTitle } from '@/lib/routeRegistry';
 
 export interface TabItem {
   path: string;
@@ -16,11 +17,17 @@ const STORAGE_KEY = 'ams.pageTabs';
 const HOME: TabItem = { path: '/', title: '应用中心' };
 const SCROLL_STEP = 180;
 
-const titleByPath = (): Record<string, string> => {
-  const map: Record<string, string> = { '/': '应用中心', '/help': '用户手册' };
-  for (const group of MENU) {
+/**
+ * path → 标题：DB 菜单树优先（命名以 DB 为权威），注册表兜底。
+ *
+ * <p>不能再用静态 `MENU` 建表：菜单改名后页签标题会停留在旧名字，
+ * 与侧边栏显示的名字不一致。
+ */
+const collectTitles = (groups: { items: { path: string; title: string }[] }[]) => {
+  const map: Record<string, string> = {};
+  for (const group of groups) {
     for (const item of group.items) {
-      map[item.path] = item.title;
+      if (!(item.path in map)) map[item.path] = item.title;
     }
   }
   return map;
@@ -47,7 +54,11 @@ const ensureHome = (list: TabItem[]): TabItem[] => {
 export function PageTabs() {
   const location = useLocation();
   const navigate = useNavigate();
-  const titles = useMemo(() => titleByPath(), []);
+  const { groups } = useMenu();
+  const titles = useMemo<Record<string, string>>(
+    () => ({ ...collectTitles(groups), '/': '应用中心', '/help': '用户手册' }),
+    [groups],
+  );
   const [tabs, setTabs] = useState<TabItem[]>(loadTabs);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
@@ -83,9 +94,17 @@ export function PageTabs() {
 
   useEffect(() => {
     const path = location.pathname;
-    const title = titles[path] ?? path;
+    const title = titles[path] ?? routeTitle(path);
     setTabs((prev) => {
-      if (prev.some((t) => t.path === path)) return prev;
+      const existing = prev.find((t) => t.path === path);
+      // 菜单树到达后标题会变（首次渲染时 groups 还是空），必须同步已有页签，
+      // 否则页签会永久停留在加载期写入的兜底标题（通常是裸 path）
+      if (existing) {
+        if (existing.title === title) return prev;
+        const next = prev.map((t) => (t.path === path ? { ...t, title } : t));
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        return next;
+      }
       const next = [...prev, { path, title }];
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;

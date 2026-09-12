@@ -16,11 +16,23 @@ const formatDateTime = (value: unknown): string => {
 export interface MenuItem {
   path: string;
   title: string;
+  /**
+   * 侧栏图标。**只有 `MenuProvider` 从 DB 生成的分组才会填**：
+   * 静态 `MENU` 里始终为 `undefined`，由 `getPathIcon(path)` 兜底（设计 3.4 的图标优先级）。
+   */
+  icon?: React.ReactNode;
+  /** 权限码（`menu.code`）。静态 `MENU` 里为 `undefined`——权限码只存在于 DB。 */
+  code?: string;
 }
 
 export interface MenuGroup {
   title: string;
   items: MenuItem[];
+  /**
+   * 分组图标。同样只有 `MenuProvider` 从 DB 生成时才会填，
+   * 静态兜底走 `getGroupIcon(title)`。
+   */
+  icon?: React.ReactNode;
 }
 
 export const MENU: MenuGroup[] = [

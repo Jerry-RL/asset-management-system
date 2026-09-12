@@ -1,5 +1,3 @@
-import { MENU } from '@/pages/modules';
-
 export interface HelpModuleGuide {
   path: string;
   title: string;
@@ -327,24 +325,36 @@ const GUIDES: Record<string, GuideBody> = {
   },
 };
 
-/** 按侧栏 MENU 生成手册条目；缺文案时给兜底说明，避免漏模块 */
-export const HELP_MANUAL: HelpModuleGuide[] = MENU.flatMap((group) =>
-  group.items.map((item) => {
-    const body = GUIDES[item.path] ?? {
-      purpose: `用于「${item.title}」相关业务处理与查询。`,
-      capabilities: ['列表查询与筛选', '业务单据维护', '与上下游模块联动'],
-      operations: ['进入模块查看数据', '按权限办理业务', '异常时联系管理员'],
-    };
-    return {
-      path: item.path,
-      title: item.title,
-      group: group.title,
-      ...body,
-    };
-  }),
-);
+/**
+ * 按「API 菜单树 + 注册表」的合并结果生成手册条目；缺文案时给兜底说明，避免漏模块。
+ *
+ * <p>不再直接消费静态 `MENU`：手册条目必须与侧边栏当前显示的模块、分组、命名一致，
+ * 否则菜单改名或停用后手册会指向看不见的页面。
+ */
+export function buildHelpManual(
+  groups: readonly { title: string; items: readonly { path: string; title: string }[] }[],
+): HelpModuleGuide[] {
+  return groups.flatMap((group) =>
+    group.items.map((item) => {
+      const body = GUIDES[item.path] ?? {
+        purpose: `用于「${item.title}」相关业务处理与查询。`,
+        capabilities: ['列表查询与筛选', '业务单据维护', '与上下游模块联动'],
+        operations: ['进入模块查看数据', '按权限办理业务', '异常时联系管理员'],
+      };
+      return {
+        path: item.path,
+        title: item.title,
+        group: group.title,
+        ...body,
+      };
+    }),
+  );
+}
 
-export const HELP_GROUPS = Array.from(new Set(HELP_MANUAL.map((m) => m.group)));
+export const helpGroups = (manual: readonly HelpModuleGuide[]): string[] =>
+  Array.from(new Set(manual.map((m) => m.group)));
 
-export const findHelpGuide = (path: string): HelpModuleGuide | undefined =>
-  HELP_MANUAL.find((m) => m.path === path);
+export const findHelpGuide = (
+  manual: readonly HelpModuleGuide[],
+  path: string,
+): HelpModuleGuide | undefined => manual.find((m) => m.path === path);

@@ -57,6 +57,7 @@ import {
   CalendarOutlined,
   BookOutlined,
   PartitionOutlined,
+  FolderOutlined,
 } from '@ant-design/icons';
 
 /** 按路由 path 映射菜单/页签/标题图标 */
@@ -166,6 +167,102 @@ export function getPathIcon(path: string): ReactNode {
 
 export function getGroupIcon(title: string): ReactNode {
   return GROUP_ICONS[title] ?? <AppstoreOutlined />;
+}
+
+/**
+ * 具名图标目录（设计 3.3）：把 `menu.icon` 里存的名字解析成组件。
+ *
+ * <p>为什么不复用 {@link PATH_ICONS} / {@link GROUP_ICONS}：那两张表分别按<em>路由 path</em>
+ * 和<em>中文分组名</em>索引，而 `menu.icon` 存的是 `ledger` / `setting` 这类与 path、
+ * 中文名都无关的名字 —— 用它们去找必然全部落空，DB 权威图标会静默退回注册表图标。
+ *
+ * <p>三处共用同一张表：菜单管理页的图标选择器（U7）、侧边栏渲染（`MenuProvider`）、
+ * 以及后端 `V45` 种子的取值口径。
+ *
+ * <p><strong>取值即契约</strong>：新增取值必须同时出现在这里，否则该图标会退回
+ * {@link getPathIcon} 的默认图标。`ICON_NAMES` 供选择器与后端种子校对。
+ */
+export const ICON_BY_NAME: Record<string, ReactNode> = {
+  // ---- V45 目录种子实际使用的 24 个取值 ----
+  app: <AppstoreOutlined />,
+  chart: <BarChartOutlined />,
+  alert: <AlertOutlined />,
+  ledger: <BankOutlined />,
+  certificate: <FileProtectOutlined />,
+  listing: <ShopOutlined />,
+  operation: <DeploymentUnitOutlined />,
+  contract: <FileTextOutlined />,
+  bill: <AccountBookOutlined />,
+  payment: <PayCircleOutlined />,
+  dunning: <PhoneOutlined />,
+  repair: <ToolOutlined />,
+  task: <CarryOutOutlined />,
+  revitalize: <RocketOutlined />,
+  report: <AuditOutlined />,
+  notify: <BellOutlined />,
+  fixedasset: <ClusterOutlined />,
+  intangible: <CopyrightOutlined />,
+  org: <ApartmentOutlined />,
+  tenant: <TeamOutlined />,
+  config: <SettingOutlined />,
+  setting: <SettingOutlined />,
+  ai: <RobotOutlined />,
+  migration: <CloudUploadOutlined />,
+
+  // ---- 通用备用取值（菜单管理页选择器可用） ----
+  folder: <FolderOutlined />,
+  home: <HomeOutlined />,
+  dashboard: <DashboardOutlined />,
+  menu: <MenuOutlined />,
+  user: <UserOutlined />,
+  team: <TeamOutlined />,
+  book: <BookOutlined />,
+  calendar: <CalendarOutlined />,
+  money: <DollarOutlined />,
+  plan: <ScheduleOutlined />,
+  approval: <AuditOutlined />,
+  audit: <AuditOutlined />,
+  safety: <SafetyOutlined />,
+  map: <EnvironmentOutlined />,
+  file: <FileTextOutlined />,
+  word: <FileWordOutlined />,
+  search: <FileSearchOutlined />,
+  percentage: <PercentageOutlined />,
+  transaction: <TransactionOutlined />,
+  reconciliation: <ReconciliationOutlined />,
+  rollback: <RollbackOutlined />,
+  identity: <IdcardOutlined />,
+  swap: <SwapOutlined />,
+  project: <ProjectOutlined />,
+  bank: <BankOutlined />,
+  build: <BuildOutlined />,
+  message: <MessageOutlined />,
+  control: <ControlOutlined />,
+  experiment: <ExperimentOutlined />,
+  sync: <SyncOutlined />,
+  export: <ExportOutlined />,
+  time: <FieldTimeOutlined />,
+  thunder: <ThunderboltOutlined />,
+  solution: <SolutionOutlined />,
+  fund: <FundOutlined />,
+  form: <FormOutlined />,
+  notification: <NotificationOutlined />,
+  partition: <PartitionOutlined />,
+};
+
+/** 可按名字解析的图标名（选择器选项 + 与后端种子校对用）。 */
+export const ICON_NAMES: string[] = Object.keys(ICON_BY_NAME).sort();
+
+/**
+ * 按名字解析图标。
+ *
+ * @returns 未登记时返回 `undefined`（而不是默认图标）—— 调用方需要区分
+ *     「DB 明确指定了图标但名字拼错」与「DB 没配图标、该用注册表兜底」，
+ *     前者应该被看见（U7 会告警），后者是正常路径。
+ */
+export function getIconByName(name?: string | null): ReactNode | undefined {
+  if (!name) return undefined;
+  return ICON_BY_NAME[name];
 }
 
 /** 看板指标图标 */

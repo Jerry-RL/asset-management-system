@@ -393,6 +393,10 @@ scope(user):
 | D4 | 4.5 表格：`GET /system/menus/all` 说明为「菜单完整树」 | 返回值由扁平 `List<Menu>` 改为树 `List<MenuNode>` | 依正文。**这是破坏性变更**：U7（菜单管理页）落地前，现有 `/system/menus` ResourcePage 无法解析该响应 |
 | D5 | 未指定 | `finance` 的 `/bank-flows`、`/vouchers`、`/month-closes` 映射到 `finance.bankFlow:*` / `finance.voucher:*`；月结（`/month-closes`）无专属菜单，归入 `finance.voucher:*` | 种子里的财务菜单只有 bankFlow/voucher/invoice 三项，月结无独立页面。属判断项，若需独立授权应补菜单种子 |
 | D6 | 6.1：读详情越界「403 / 404」 | 统一 403（`DATA_SCOPE_FORBIDDEN`） | 与 `assertCompanyAccess` 的既有语义一致，避免同一越权在两处返回不同状态码 |
+| D7 | 3.4：接口失败「回退到静态 `MENU`，但必须先按 `permissions` 过滤」 | 额外落了一份 `PATH_TO_CODE` 镜像（`routeRegistry.ts`，由 V45 生成），并在接口成功时做漂移自检 | 静态 `MENU` 只有 `path` / `title`，**没有权限码**，而过滤必须用 `code:view` 判定 —— 没有镜像就只能把整个菜单原样显示给无权限账号。镜像的漂移风险被两条措施夹住：① 生成而非手抄；② 接口成功时逐条比对，不一致即 `console.warn` 列出差异（仅开发环境）。漂移后果也限于「接口失败」这一条路径，方向安全（缺条目→隐藏；多条目→点击 403，后端仍拦） |
+| D8 | 3.4：图标「`menu.icon` 为权威，注册表图标兜底」 | 图标优先级判定只放在**渲染处**一处（`AdminLayout` 的 `item.icon ?? getPathIcon(...)`），`MenuProvider` 只负责把 `menu.icon` 的名字解析成节点、不做兜底 | 若 provider 也兜底，同一个优先级规则会有两份实现，改一处漏一处就会出现「侧栏与页签图标不一致」。`getIconByName` 对未登记名字返回 `undefined`（而非默认图标），以区分「DB 明确指定但拼错」与「DB 没配、该走兜底」 |
+| D9 | 3.4 未提及静态兜底菜单的分组图标 | 降级态不填 `icon`，同样落回 `getGroupIcon(title)` | 与 D8 同一原则；静态 `MENU` 本就没有 DB 图标 |
+| D10 | 3.4 只要求「侧边栏改读 API」 | `PageTabs`（页签标题）与 `helpManual`（用户手册条目）一并改为消费同一份 `groups` | 两者原先都从静态 `MENU` 取 `title`。菜单在 DB 改名后，若它们仍读静态表，会出现「侧栏叫 A、页签叫 B、手册叫 C」。`HELP_MANUAL` / `HELP_GROUPS` 因此由常量改为 `buildHelpManual(groups)` / `helpGroups(manual)` 两个纯函数 |
 
 ### 11.2 已登记的缺口（未接入，仍需跟踪）
 
@@ -403,6 +407,7 @@ scope(user):
 | **财务银行流水 / 凭证 / 月结无数据隔离** | 这些表无任何公司归属链路，`OwnershipResolver` 无法推导 | 仅权限级拦截。需要业务上先确定归属口径（按账户？按公司？） |
 | **程序化断言不进 `enforced` 台账** | `UserController.page` 的 `system.role:view` 检查是程序化的，不在 `@RequiresPerm` 扫描结果里 | 权限矩阵会把该动作标为「未强制校验」。方向上是**低报**（安全侧），但会造成管理员误判，需要时可为台账增加程序化登记入口 |
 | **`strict-perm` 未切换** | 未加注解的变更类接口仍可访问 | 与 9 节一致：切换以「全部变更类接口完成注解」为前提，属后续交付。本轮已交付默认档 + `enforced` 标识 |
+| **`STANDALONE_ROUTES` 与 `App.tsx` 是双写** | 新增独立页面时只改了 `App.tsx`、漏改注册表 → 该路由不在 `ROUTE_REGISTRY` 里，**DB 菜单行会被当脏数据忽略，侧栏永远不显示该入口** | 需要双写是「菜单只渲染已注册路由」这条规则的必然代价（一个在编译期、一个在运行期，无法互相推导）。缓解：`MenuProvider` 会把被忽略的 DB 菜单 `console.warn` 出来（`[menu] ... 未在前端路由注册表中`），漏改能从首屏日志直接看到。后续可考虑改为从 `App.tsx` 的 `children` 反推注册表 |
 
 ### 11.3 本轮的启动期强校验（新增，非正文要求）
 

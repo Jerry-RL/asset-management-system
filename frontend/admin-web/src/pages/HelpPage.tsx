@@ -4,7 +4,8 @@ import { Button, Empty, Input } from 'antd';
 import { ArrowRightOutlined, SearchOutlined } from '@ant-design/icons';
 import { cn } from '@/lib/utils';
 import { getPathIcon } from '@/lib/menuIcons';
-import { HELP_MANUAL, type HelpModuleGuide } from '@/lib/helpManual';
+import { buildHelpManual, type HelpModuleGuide } from '@/lib/helpManual';
+import { useMenu } from '@/lib/menu';
 
 const matchGuide = (guide: HelpModuleGuide, q: string) => {
   if (!q) return true;
@@ -18,11 +19,14 @@ export function HelpPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [keyword, setKeyword] = useState('');
+  // 手册条目跟随侧边栏当前菜单（DB 决定模块与命名），不再用静态 MENU
+  const { groups } = useMenu();
+  const manual = useMemo(() => buildHelpManual(groups), [groups]);
 
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    return HELP_MANUAL.filter((g) => matchGuide(g, q));
-  }, [keyword]);
+    return manual.filter((g) => matchGuide(g, q));
+  }, [keyword, manual]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, HelpModuleGuide[]>();
@@ -40,11 +44,11 @@ export function HelpPage() {
       const fromFiltered = filtered.find((g) => g.path === selectedPath);
       if (fromFiltered) return fromFiltered;
       if (!keyword.trim()) {
-        return HELP_MANUAL.find((g) => g.path === selectedPath) ?? filtered[0] ?? HELP_MANUAL[0];
+        return manual.find((g) => g.path === selectedPath) ?? filtered[0] ?? manual[0];
       }
     }
-    return filtered[0] ?? HELP_MANUAL[0];
-  }, [filtered, keyword, selectedPath]);
+    return filtered[0] ?? manual[0];
+  }, [filtered, keyword, manual, selectedPath]);
 
   useEffect(() => {
     if (!selected) return;
