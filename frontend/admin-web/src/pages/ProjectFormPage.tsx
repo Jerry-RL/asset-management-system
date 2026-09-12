@@ -35,6 +35,7 @@ import { PROJECT_STATUS, PROJECT_TYPE, PROJECT_TYPE_DICT_CODE } from '@/lib/labe
 import { useBackNavigate, currentPath } from '@/lib/navigation';
 import { buildCompanyTree, loadCompanies, normalizeList } from '@/lib/org';
 import { ImageUploadField, type ImageValue } from '@/components/ImageUploadField';
+import type { ProjectZone } from '@/lib/projectZones';
 import { RecordSheetSections } from '@/components/RecordSheetSections';
 import {
   loadRecordSheet,
@@ -58,18 +59,6 @@ import { PermissionGuard } from '@/lib/perm';
 //   第二步 项目分区配置：名称、编码、排序、备注
 //   分区面积不在此手工维护，由「该分区下资产面积合计」在展示时给出（只读）
 // ============================================================================
-
-interface ProjectZone {
-  id?: number;
-  name: string;
-  code?: string;
-  sort?: number;
-  remark?: string;
-  /** 分区面积(㎡)：后端按分区下资产面积汇总，只读 */
-  assetArea?: number;
-  /** 分区下资产数量：只读 */
-  assetCount?: number;
-}
 
 interface CompanyOption {
   id: number;

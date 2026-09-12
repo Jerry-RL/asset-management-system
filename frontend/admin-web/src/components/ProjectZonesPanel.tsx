@@ -1,30 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Button, Empty, Form, Input, InputNumber, Modal, Spin, Table, message } from 'antd';
+import { useState } from 'react';
+import { Button, Empty, Spin, Table, message } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { api } from '@/lib/api';
 import { confirmDelete } from '@/lib/confirm';
 import { PermissionGuard, usePerm } from '@/lib/perm';
 import { TableActions } from '@/components/TableActions';
-
-/**
- * 项目分区（project_zone）行数据。
- *
- * <p>`assetArea` / `assetCount` 是后端汇总出来的**只读**字段：分区面积不接受人工维护，
- * 统一取该分区下资产面积合计（见 V25 迁移与 AssetService#fillZoneAssetStats）。
- */
-export interface ProjectZone {
-  id?: number;
-  projectId?: number;
-  name: string;
-  code?: string;
-  sort?: number;
-  remark?: string;
-  /** 只读：该分区下资产面积合计(㎡) */
-  assetArea?: number;
-  /** 只读：该分区下资产数量 */
-  assetCount?: number;
-}
+import { ZoneFormModal } from '@/components/ZoneFormModal';
+import { useProjectZones, type ProjectZone } from '@/lib/projectZones';
 
 /** 面积千分位展示，空值按 0 处理（后端对无资产分区已补 0） */
 const formatArea = (value: unknown) =>
@@ -39,46 +21,15 @@ const formatArea = (value: unknown) =>
  * <p>三个写操作与后端三个分区级接口一一对应，权限统一为 `asset.project:update`：
  * 这是**完整判定码**而不是 by-path 推导 —— 本组件挂在展开行里，没有自己的路由，
  * `usePermByPath()` 会解析不到 menuCode 而放行。
+ *
+ * <p>读写逻辑与「项目分区管理」页共用 {@link useProjectZones}，弹窗共用 {@link ZoneFormModal}：
+ * 两条入口必须给出同样的排序缺省、只读字段口径与报错透传。
  */
 export function ProjectZonesPanel({ projectId }: { projectId: number }) {
   const can = usePerm();
   const canUpdate = can('asset.project', 'update');
-
-  const [zones, setZones] = useState<ProjectZone[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const { zones, loading, loadFailed, saving, reload, save, remove } = useProjectZones(projectId);
   const [editing, setEditing] = useState<ProjectZone | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [form] = Form.useForm();
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadFailed(false);
-    try {
-      setZones(await api.get<ProjectZone[]>(`/projects/${projectId}/zones`));
-    } catch {
-      // 面板加载失败只影响本面板：外层项目列表继续可用，故不弹全局错误
-      setZones([]);
-      setLoadFailed(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  /** 打开新增（zone=null）或编辑；forceRender 保证 Form 已挂载，可安全回填 */
-  const openEditor = (zone: ProjectZone | null) => {
-    setEditing(zone ?? { name: '' });
-    form.setFieldsValue({
-      name: zone?.name ?? '',
-      code: zone?.code ?? '',
-      sort: zone?.sort,
-      remark: zone?.remark ?? '',
-    });
-  };
 
   const handleDelete = (zone: ProjectZone) => {
     confirmDelete({
@@ -86,11 +37,10 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
       resourceLabel: '分区',
       onOk: async () => {
         try {
-          await api.del(`/projects/${projectId}/zones/${zone.id}`);
+          await remove(zone);
           message.success('已删除');
-          await load();
         } catch (e) {
-          // 后端在分区下有资产时返回 400，原因必须原样透出（设计 §3.2）
+          // 后端在分区下有资产 / 有后续记录时返回 400，原因必须原样透出
           message.error(e instanceof Error ? e.message : '删除失败');
           throw e;
         }
@@ -98,25 +48,15 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
     });
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (values: ProjectZone) => {
     if (!editing) return;
     try {
-      const values = await form.validateFields();
-      setSubmitting(true);
-      if (editing.id != null) {
-        await api.put(`/projects/${projectId}/zones/${editing.id}`, values);
-        message.success('保存成功');
-      } else {
-        await api.post(`/projects/${projectId}/zones`, values);
-        message.success('新增成功');
-      }
+      // 编辑时 id 取自 editing（表单里没有这个字段），其余字段以表单为准
+      await save(editing.id != null ? { ...values, id: editing.id } : values);
+      message.success(editing.id != null ? '保存成功' : '新增成功');
       setEditing(null);
-      await load();
     } catch (e) {
-      if (e && typeof e === 'object' && 'errorFields' in e) return;
       message.error(e instanceof Error ? e.message : '保存失败');
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -171,7 +111,7 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
               key: 'edit',
               label: '编辑',
               icon: <EditOutlined />,
-              onClick: () => openEditor(zone),
+              onClick: () => setEditing(zone),
             },
             {
               key: 'delete',
@@ -196,7 +136,7 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
           </span>
         </span>
         <span className="flex items-center gap-2">
-          <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()}>
+          <Button size="small" icon={<ReloadOutlined />} onClick={() => void reload()}>
             刷新
           </Button>
           <PermissionGuard perm="asset.project:update">
@@ -204,7 +144,7 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
               size="small"
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => openEditor(null)}
+              onClick={() => setEditing({ name: '' })}
             >
               新增分区
             </Button>
@@ -215,7 +155,7 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
       {loadFailed ? (
         <div className="py-6 text-center text-sm text-gray-500">
           分区加载失败
-          <Button type="link" size="small" onClick={() => void load()}>
+          <Button type="link" size="small" onClick={() => void reload()}>
             重试
           </Button>
         </div>
@@ -235,39 +175,12 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
         />
       )}
 
-      <Modal
-        title={editing?.id != null ? '编辑分区' : '新增分区'}
-        open={!!editing}
-        // forceRender：Form 常驻挂载，openEditor 里的 setFieldsValue 不会因未连接而告警
-        forceRender
+      <ZoneFormModal
+        editing={editing}
+        submitting={saving}
         onCancel={() => setEditing(null)}
-        onOk={() => void handleSubmit()}
-        confirmLoading={submitting}
-        width={Math.min(480, typeof window !== 'undefined' ? window.innerWidth - 32 : 480)}
-      >
-        <Form form={form} layout="vertical" className="mt-2">
-          <Form.Item
-            name="name"
-            label="分区名称"
-            rules={[{ required: true, message: '请填写分区名称' }]}
-          >
-            <Input placeholder="如 A区" />
-          </Form.Item>
-          <Form.Item name="code" label="分区编码">
-            <Input placeholder="如 A" />
-          </Form.Item>
-          <Form.Item
-            name="sort"
-            label="排序"
-            extra={editing?.id != null ? '留空表示保持原排序' : '留空表示追加到末尾'}
-          >
-            <InputNumber className="w-full" />
-          </Form.Item>
-          <Form.Item name="remark" label="备注">
-            <Input.TextArea rows={2} />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onSubmit={(values) => void handleSubmit(values)}
+      />
     </div>
   );
 }
