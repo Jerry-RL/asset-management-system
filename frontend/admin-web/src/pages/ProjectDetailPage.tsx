@@ -19,10 +19,11 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api } from '@/lib/api';
-import { useBackNavigate } from '@/lib/navigation';
+import { currentPath, useBackNavigate } from '@/lib/navigation';
+import { useUrlParam } from '@/lib/listQuery';
 import { useDictLabelMaps } from '@/lib/dict';
 import { CoverImage } from '@/components/CoverImage';
 import {
@@ -157,13 +158,21 @@ const MetaLine = ({ icon, children }: { icon: React.ReactNode; children: React.R
 const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const goBack = useBackNavigate('/projects');
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [assets, setAssets] = useState<AssetRow[]>([]);
-  const [zoneTab, setZoneTab] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [assetView, setAssetView] = useState<'floor' | 'list'>('floor');
+  /**
+   * 分区 / 租控状态 / 视图进 URL（设计 §4）：从本页点「一物一档」再返回时本页会重新挂载，
+   * 只在 state 里就会丢。三者都是**客户端筛选**（资产一次拉 500 条在内存里筛），
+   * 所以 URL 变化只触发 useMemo 重算，不产生请求。
+   */
+  const [zoneTab, setZoneTab] = useUrlParam('zone', 'all');
+  const [statusFilter, setStatusFilter] = useUrlParam('status', '');
+  const [assetViewParam, setAssetView] = useUrlParam('view', 'floor');
+  /** 只认 floor / list，手改链接写成别的值也不至于渲染不出内容 */
+  const assetView: 'floor' | 'list' = assetViewParam === 'list' ? 'list' : 'floor';
 
   // 字典优先、静态 map 兜底：字典未加载完时不至于展示英文枚举值
   const dictMaps = useDictLabelMaps([PROJECT_TYPE_DICT_CODE, 'asset_type']);
@@ -268,6 +277,27 @@ const ProjectDetailPage = () => {
     () => statusSlices.map((s) => s.value).filter((v): v is string => !!v),
     [statusSlices],
   );
+
+  /**
+   * URL 里的 `zone` / `status` 若不属于当前数据（手改链接、换了项目、枚举被改）
+   * → 回落到默认，避免「URL 说筛了某分区、表格却空着且看不出原因」。
+   *
+   * <p>`overview` 未加载完时直接返回：那时 zones / statusOrder 都是空的，
+   * 提前自愈会把合法的筛选值误清掉。自愈会连带把该参数从 URL 删除（等于缺省值不写）。
+   */
+  useEffect(() => {
+    if (!overview) return;
+    if (zoneTab === 'all') return;
+    if (overview.zones.some((z) => String(z.id) === zoneTab)) return;
+    setZoneTab('all');
+  }, [overview, zoneTab, setZoneTab]);
+
+  useEffect(() => {
+    if (!overview) return;
+    if (!statusFilter) return;
+    if (statusOrder.includes(statusFilter)) return;
+    setStatusFilter('');
+  }, [overview, statusFilter, statusOrder, setStatusFilter]);
 
   /** 底部资产列表：按分区 + 租控状态筛选后再分组 */
   const visibleAssets = useMemo(() => {
@@ -504,7 +534,7 @@ const ProjectDetailPage = () => {
           <Segmented
             size="small"
             value={assetView}
-            onChange={(v) => setAssetView(v as 'floor' | 'list')}
+            onChange={(v) => setAssetView(String(v))}
             options={[
               { value: 'floor', icon: <AppstoreOutlined />, label: '按楼层' },
               { value: 'list', icon: <UnorderedListOutlined />, label: '列表' },
@@ -681,6 +711,7 @@ const ProjectDetailPage = () => {
                           </div>
                           <Link
                             to={`/assets/${asset.id}/dossier`}
+                            state={{ from: currentPath(location) }}
                             className="text-xs text-blue-600 hover:text-blue-700 shrink-0"
                           >
                             一物一档
