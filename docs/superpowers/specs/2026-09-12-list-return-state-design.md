@@ -128,6 +128,24 @@ useUrlParam<T>(key, defaultValue, codec?):
 - `codec` 用于非字符串量：`OpsCalendarPage` 的 `types: string[]`（逗号分隔）、`date`/`month`（dayjs 转换）。
 - 非法值由 `codec.parse` 自行回落到默认值，避免页面渲染崩溃。
 
+> **⚠️ `setValue` 不是引用稳定的，且必须保持这样。**
+> react-router 6.30 的 `useSearchParams` 内部是
+> `setSearchParams = useCallback(…, [navigate, searchParams])`（已在
+> `node_modules/…/react-router-dom/dist/index.js:1030-1036` 核对），所以 **URL 一变，
+> setter 换新引用**，`useUrlParam` / `useListQuery` 的 setter 同理。
+>
+> 由此得到两条硬约束：
+> 1. **不要把 setter 放进 effect 依赖数组里做「无条件写入」**
+>    （`useEffect(() => setX(compute()), [setX])`）—— 每次 URL 变化都会重跑并再次写入，
+>    直接死循环。
+> 2. 正确的写法是**带守卫的自愈**：先判断「当前值确实非法」，再回落到缺省，于是第一次
+>    写入后条件即不成立、effect 收敛（`ProjectDetailPage.tsx` 的两个自愈 effect 即此模式，
+>    也是本设计唯一允许把 setter 放进依赖数组的地方）。
+>
+> 为什么不去「修」成稳定引用：`setSearchParams` 的函数式更新是靠**闭包里的 `searchParams`**
+> 求 `prev` 的，用 ref 把它冻成稳定引用会让 `prev` 变成过期快照，
+> **并发写入时会丢更新** —— 那是个真 bug，比多跑几次 effect 严重得多。
+
 ### 5.2 `useListQuery` —— 列表分页/筛选
 
 ```
