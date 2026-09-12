@@ -15,8 +15,11 @@ import {
  * 只存在组件 state 里的页码与筛选无法幸存，返回后必然回到第 1 页、丢掉全部筛选。
  * 附带收益：可刷新保持、链接可分享、浏览器前进后退可用。
  *
- * <p>写入用 `setSearchParams` 的**函数式更新**：同一事件里连续两次写入会依次叠加，
- * 不会后者覆盖前者（react-router 6.9+ 支持该签名）。
+ * <p>写入用 `setSearchParams` 的**函数式更新**，让「保留其它参数」的逻辑集中在一处。
+ * 但要注意它**不会**让同一事件里的两次写入依次叠加：react-router 是把本次渲染闭包里的
+ * `searchParams` 交给更新函数求 `prev`，两次调用都从同一份旧参数出发，**后一次覆盖前一次**。
+ * 需要在一次交互里改多个键时，必须合并成**一次** `patch`（或参见 {@link useUrlParams}
+ * 的批量写入），不要连调两个 setter（设计 §5.1）。
  */
 export function useListQuery(options: ListQueryOptions = {}) {
   const { prefix = '', defaultPageSize = 10, filterKeys = [] } = options;
@@ -110,17 +113,68 @@ export interface UrlParamCodec<T> {
   serialize: (value: T) => string;
 }
 
+/** 单个键的待写值：`raw === null` 表示该键应被**删除**（写入值等于缺省值或为空） */
+export interface UrlParamWrite {
+  key: string;
+  raw: string | null;
+}
+
+type SetSearchParams = ReturnType<typeof useSearchParams>[1];
+
+/**
+ * 一次 `setSearchParams` 原子写入多个键 —— `useUrlParam` 与 {@link useUrlParams} 的共用底层。
+ *
+ * <p>为什么必须「一次写完」：react-router 的 `setSearchParams(fn)` 是把**本次渲染闭包里的
+ * `searchParams`** 交给 `fn` 去求 `prev`，所以同一事件里连着调两次 setter，两次都从同一份
+ * 旧参数出发 —— **后一次覆盖前一次**，先写的键会丢。凡是「一次交互要改多个键」的场景
+ * 都要走这里（设计 §5.1）。
+ */
+const writeUrlParams = (setSearchParams: SetSearchParams, writes: UrlParamWrite[]) => {
+  setSearchParams(
+    (prev) => {
+      const next = new URLSearchParams(prev);
+      for (const { key, raw } of writes) {
+        if (raw === null) next.delete(key);
+        else next.set(key, raw);
+      }
+      return next;
+    },
+    { replace: true },
+  );
+};
+
+/**
+ * 把某个键的新值翻译成待写描述：等于缺省值（或序列化为空串）→ 删除该键。
+ * 抽出来是为了让单键写入与 {@link useUrlParams} 的批量写入共用同一套判定，
+ * 不产生第二套「什么算缺省」的口径。
+ */
+const buildWrite = <T>(
+  key: string,
+  serialize: (value: T) => string,
+  defaultSerialized: string,
+  next: T,
+): UrlParamWrite => {
+  const serialized = serialize(next);
+  return { key, raw: serialized === defaultSerialized || serialized === '' ? null : serialized };
+};
+
 /**
  * 单值 URL 参数：非列表筛选的零散筛选量（项目详情选中的分区、地图选中的城市、
  * 日历的月份与事件类型）。与 {@link useListQuery} 同样的规则：函数式写入、
  * `replace`、等于缺省值就从 URL 删除（设计 §5.1）。
+ *
+ * <p>返回的第三项 `toWrite` 是给 {@link useUrlParams} 用的：把新值翻译成待写描述，
+ * 交给批量写入一次性提交。只改一个键时用第二项 `setValue` 即可，不需要它。
  */
-export function useUrlParam(key: string, defaultValue: string): [string, (next: string) => void];
+export function useUrlParam(
+  key: string,
+  defaultValue: string,
+): [string, (next: string) => void, (next: string) => UrlParamWrite];
 export function useUrlParam<T>(
   key: string,
   defaultValue: T,
   codec: UrlParamCodec<T>,
-): [T, (next: T) => void];
+): [T, (next: T) => void, (next: T) => UrlParamWrite];
 export function useUrlParam<T>(key: string, defaultValue: T, codec?: UrlParamCodec<T>) {
   const [searchParams, setSearchParams] = useSearchParams();
   const raw = searchParams.get(key);
@@ -148,21 +202,40 @@ export function useUrlParam<T>(key: string, defaultValue: T, codec?: UrlParamCod
   );
   const defaultSerialized = serialize(defaultValue);
 
-  const setValue = useCallback(
-    (next: T) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          const serialized = serialize(next);
-          if (serialized === defaultSerialized || serialized === '') params.delete(key);
-          else params.set(key, serialized);
-          return params;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams, key, serialize, defaultSerialized],
+  const toWrite = useCallback(
+    (next: T): UrlParamWrite => buildWrite(key, serialize, defaultSerialized, next),
+    [key, serialize, defaultSerialized],
   );
 
-  return [value, setValue] as [T, (next: T) => void];
+  const setValue = useCallback(
+    (next: T) => writeUrlParams(setSearchParams, [toWrite(next)]),
+    [setSearchParams, toWrite],
+  );
+
+  return [value, setValue, toWrite] as [T, (next: T) => void, (next: T) => UrlParamWrite];
+}
+
+/**
+ * 一次原子写入多个单值参数（`useUrlParam` 的批量版）。配合 `useUrlParam` 的第三项
+ * `toWrite` 使用：
+ *
+ * ```ts
+ * const [, , monthWrite] = useUrlParam('month', today, MONTH_CODEC);
+ * const [, , dateWrite] = useUrlParam('date', today, DATE_CODEC);
+ * const writeParams = useUrlParams();
+ * // 一次交互要同时改多个键时，必须合并成一次调用
+ * writeParams([monthWrite(day), dateWrite(day)]);
+ * ```
+ *
+ * <p>典型场景：antd `Calendar` 跨月选中某天时会**同时**触发 `onPanelChange` 与 `onSelect`
+ * （`generateCalendar.js` 里 `triggerChange` 先调 `triggerPanelChange`、再调 `onSelect`），
+ * 若两个 handler 各自写一次 URL，后写的会覆盖先写的、先写的键就丢了。让**最后**那次写入
+ * 同时覆盖两个键，结果就与 antd 到底触发几次无关。
+ */
+export function useUrlParams() {
+  const [, setSearchParams] = useSearchParams();
+  return useCallback(
+    (writes: UrlParamWrite[]) => writeUrlParams(setSearchParams, writes),
+    [setSearchParams],
+  );
 }

@@ -138,6 +138,27 @@ useUrlParam<T>(key, defaultValue, codec?):
 > `useUrlParam('types', TYPE_OPTIONS.map(...))` 会让 memo 每次都失效。
 
 - `codec` 用于非字符串量：`OpsCalendarPage` 的 `types: string[]`（逗号分隔）、`date`/`month`（dayjs 转换）。
+
+> **⚠️ 返回值是三元组，第三项 `toWrite` 用于「一次交互改多个键」。**
+> ```
+> [value, setValue, toWrite] = useUrlParam(key, defaultValue, codec?)
+>   setValue(next)        // 只改这一个键
+>   toWrite(next)         // 把新值翻译成 { key, raw }，raw=null 表示删除该键
+> writeParams = useUrlParams()      // 一次 setSearchParams 原子提交多个键
+>   writeParams([monthWrite(day), dateWrite(day)])
+> ```
+> **为什么需要它**：react-router 的 `setSearchParams(fn)` 是把**本次渲染闭包里的
+> `searchParams`** 交给 `fn` 求 `prev`（`react-router-dom/dist/index.js:1030-1036`），
+> 所以同一事件里连着调两次 setter，两次都从同一份旧参数出发，**后一次覆盖前一次**，
+> 先写的键会丢 —— 原设计以为「函数式更新会依次叠加」，实测源码是不成立的。
+>
+> 现实触发点：antd `Calendar` 跨月选中某天时会**同时**触发 `onPanelChange` 与 `onSelect`
+> （`es/calendar/generateCalendar.js` 的 `triggerChange` 先 `triggerPanelChange` 再
+> `onInternalSelect`）。让**最后**那次写入同时覆盖 `month` 与 `date`，结果就与触发次数无关。
+> 这也即 §6.5 里 `OpsCalendarPage` 必须用 `writeParams` 而不是两个 setter 的原因。
+>
+> 注意 `useListQuery.patch` 是**一次**调用内改多个键，不受此影响；受影响的是
+> 「连调两个不同 hook 的 setter」这种写法。
 - 非法值由 `codec.parse` 自行回落到默认值，避免页面渲染崩溃。
 
 > **⚠️ `setValue` 不是引用稳定的，且必须保持这样。**
@@ -308,7 +329,13 @@ selectZone(id):
 ### 6.5 `OpsCalendarPage.tsx`
 
 - `panelDate` → `useUrlParam('month', dayjs(), monthCodec)`；`selectedDate` → `useUrlParam('date', dayjs(), dateCodec)`；`types` → `useUrlParam('types', 全部类型, csvCodec)`。
+  - 三者都必须是**稳定引用**的默认值：`today` 用 `useMemo(() => dayjs(), [])`、全部类型用模块级
+    常量 `ALL_TYPES`（§5.1 的 memo 契约）。写成 `TYPE_OPTIONS.map(...)` 内联会把 memo 废掉。
 - `loadSummary` 已经依赖 `panelDate`/`types`，URL 化后仅来源变化，拉取时机不变。
+  - **`month` 与 `date` 必须用 `writeParams` 一次写完**（§5.1）：antd `Calendar` 跨月选中某天时
+    会同时触发 `onPanelChange` 与 `onSelect`，两个 handler 各写一次 URL 的话后写的会覆盖先写的。
+    让 `onSelect` 的处理函数一次写 `month` + `date`（两者都取自被选中的那天），
+    `onPanelChange`（只切面板、不选日期）只写 `month`。
 - 284 行 `ev.linkPath` 的 `<Link>` 补 `state={{ from: currentPath(location) }}`。
 - 校验：`month`/`date` 解析失败回落当天；`types` 过滤掉未知类型，全部未知则回落「全选」。
 
