@@ -13,9 +13,11 @@ import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -99,6 +101,20 @@ public class FileService {
                 "size", meta.getSize() == null ? 0L : meta.getSize(),
                 "bizType", meta.getBizType() == null ? "" : meta.getBizType(),
                 "url", objectStorageClient.resolveUrl(meta.getBucket(), meta.getObjectKey()));
+    }
+
+    /**
+     * 按 fileId 批量取视图（附件回显：{@code url} / {@code fileName}）。
+     *
+     * <p>不抛异常：附件可能指向一条已被清理的 file_metadata（孤儿文件问题本期不做清理），
+     * 回显时跳过即可，不能因为一条坏引用让整个 record-sheet 读不出来。
+     */
+    public Map<Long, Map<String, Object>> viewsByIds(Collection<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return Map.of();
+        }
+        return fileMetadataMapper.selectBatchIds(fileIds).stream()
+                .collect(Collectors.toMap(FileMetadata::getId, this::toView));
     }
 
     public InputStream openStream(FileMetadata meta) {

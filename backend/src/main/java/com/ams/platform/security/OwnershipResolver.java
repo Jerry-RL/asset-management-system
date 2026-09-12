@@ -2,8 +2,10 @@ package com.ams.platform.security;
 
 import com.ams.modules.asset.entity.Asset;
 import com.ams.modules.asset.entity.Project;
+import com.ams.modules.asset.entity.ProjectZone;
 import com.ams.modules.asset.mapper.AssetMapper;
 import com.ams.modules.asset.mapper.ProjectMapper;
+import com.ams.modules.asset.mapper.ProjectZoneMapper;
 import com.ams.modules.billing.entity.Bill;
 import com.ams.modules.billing.entity.Payment;
 import com.ams.modules.billing.entity.RefundOrder;
@@ -44,6 +46,7 @@ public class OwnershipResolver {
 
     private final AssetMapper assetMapper;
     private final ProjectMapper projectMapper;
+    private final ProjectZoneMapper projectZoneMapper;
     private final ContractMapper contractMapper;
     private final VacateOrderMapper vacateOrderMapper;
     private final BillMapper billMapper;
@@ -54,6 +57,7 @@ public class OwnershipResolver {
     public OwnershipResolver(
             AssetMapper assetMapper,
             ProjectMapper projectMapper,
+            ProjectZoneMapper projectZoneMapper,
             ContractMapper contractMapper,
             VacateOrderMapper vacateOrderMapper,
             BillMapper billMapper,
@@ -62,6 +66,7 @@ public class OwnershipResolver {
             InvoiceMapper invoiceMapper) {
         this.assetMapper = assetMapper;
         this.projectMapper = projectMapper;
+        this.projectZoneMapper = projectZoneMapper;
         this.contractMapper = contractMapper;
         this.vacateOrderMapper = vacateOrderMapper;
         this.billMapper = billMapper;
@@ -79,6 +84,17 @@ public class OwnershipResolver {
     public Long ofProject(Long projectId) {
         Project project = projectId == null ? null : projectMapper.selectById(projectId);
         return project == null ? null : project.getCompanyId();
+    }
+
+    /**
+     * 分区的归属公司 = 所属项目的公司（分区本身没有公司列）。
+     *
+     * <p>刻意走 {@link ProjectZoneMapper#selectActiveById}：已软删的分区不应再解析出归属，
+     * 否则删掉的分区还能继续被写入记录。
+     */
+    public Long ofZone(Long zoneId) {
+        ProjectZone zone = zoneId == null ? null : projectZoneMapper.selectActiveById(zoneId);
+        return zone == null ? null : ofProject(zone.getProjectId());
     }
 
     public Long ofContract(Long contractId) {
