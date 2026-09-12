@@ -65,6 +65,7 @@ export const MENU: MenuGroup[] = [
     title: '资产台账',
     items: [
       { path: '/projects', title: '项目管理' },
+      { path: '/project-zones', title: '项目分区管理' },
       { path: '/assets', title: '资产台账' },
       { path: '/assets/structure-logs', title: '拆分合并日志' },
       { path: '/asset-map', title: '资产地图' },

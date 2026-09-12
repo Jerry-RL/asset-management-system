@@ -70,6 +70,7 @@ export const PATH_ICONS: Record<string, ReactNode> = {
   '/alerts/rules': <ControlOutlined />,
   '/alerts/records': <AlertOutlined />,
   '/projects': <ProjectOutlined />,
+  '/project-zones': <PartitionOutlined />,
   '/assets': <BankOutlined />,
   '/certificates': <FileProtectOutlined />,
   '/mortgages': <IdcardOutlined />,

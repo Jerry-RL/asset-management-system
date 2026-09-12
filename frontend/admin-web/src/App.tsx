@@ -22,6 +22,7 @@ import { SystemRolePage } from '@/pages/SystemRolePage';
 import { OrgStructurePage } from '@/pages/OrgStructurePage';
 import { ProjectFormPage } from '@/pages/ProjectFormPage';
 import ProjectDetailPage from '@/pages/ProjectDetailPage';
+import { ProjectZonesPage } from '@/pages/ProjectZonesPage';
 import ZoneDetailPage from '@/pages/ZoneDetailPage';
 import { AssetFormPage } from '@/pages/AssetFormPage';
 import { AdminLayout } from '@/components/AdminLayout';
@@ -78,6 +79,8 @@ export default function App() {
               <Route path="projects/:id" element={<ProjectDetailPage />} />
               {/* 分区详情页：钻取页，不挂侧边栏、不进 PATH_TO_CODE 镜像 */}
               <Route path="projects/:projectId/zones/:zoneId" element={<ZoneDetailPage />} />
+              {/* 项目分区管理：左侧项目 / 右上分区 Tab / 右下资产 */}
+              <Route path="project-zones" element={<ProjectZonesPage />} />
               {Object.entries(RESOURCES).map(([key, config]) => (
                 <Route key={key} path={key} element={<ResourcePage config={config} />} />
               ))}
