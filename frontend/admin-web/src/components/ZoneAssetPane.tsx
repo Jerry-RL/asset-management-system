@@ -5,6 +5,7 @@ import {
   EditOutlined,
   FileTextOutlined,
   PlusOutlined,
+  ProfileOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -17,6 +18,7 @@ import { currentPath } from '@/lib/navigation';
 import { usePerm } from '@/lib/perm';
 import { useProjectZones, type ProjectZone } from '@/lib/projectZones';
 import { TableActions, actionsColumnWidth, type TableActionItem } from '@/components/TableActions';
+import { RecordSheetModal } from '@/components/RecordSheetModal';
 import { ZoneFormModal } from '@/components/ZoneFormModal';
 
 /** 资产行：列表接口已回显 zoneName（AssetService#fillZoneNames），无需前端再查 */
@@ -98,6 +100,12 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
   } = useProjectZones(canViewProject ? projectId : null);
 
   const [editingZone, setEditingZone] = useState<ProjectZone | null>(null);
+  /**
+   * 分区后续记录弹窗：记录挂在具体分区上，「全部分区」下不可用。
+   * 存**分区对象**而不是布尔量：切到「全部分区」时若只关掉 open，布尔量仍是 true，
+   * 再选回任一分区会凭空弹出弹窗；存对象则天然只对用户点过的那一个分区生效。
+   */
+  const [recordSheetZone, setRecordSheetZone] = useState<ProjectZone | null>(null);
 
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -423,6 +431,16 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
                 >
                   编辑
                 </Button>
+                {/* 后续记录逐分区维护：「全部分区」下没有可挂的归属，故须先选中具体分区 */}
+                <Button
+                  size="small"
+                  icon={<ProfileOutlined />}
+                  disabled={!currentZone}
+                  title={currentZone ? '查看 / 编辑该分区的后续记录' : '请先选中一个具体分区'}
+                  onClick={() => setRecordSheetZone(currentZone)}
+                >
+                  后续记录
+                </Button>
                 <Button
                   size="small"
                   danger
@@ -512,6 +530,18 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
         submitting={zoneSaving}
         onCancel={() => setEditingZone(null)}
         onSubmit={(values) => void handleSubmitZone(values)}
+      />
+
+      {/* 分区后续记录：与分区详情页同一套读写，就地增删改查而不必跳页 */}
+      <RecordSheetModal
+        open={!!recordSheetZone}
+        ownerType="zone"
+        ownerId={recordSheetZone?.id}
+        projectId={projectId}
+        subjectLabel={recordSheetZone?.name}
+        // 与分区详情页、后端 PUT /projects/{pid}/zones/{zoneId}/record-sheet 的权限口径一致
+        savePerm="asset.project:update"
+        onClose={() => setRecordSheetZone(null)}
       />
     </div>
   );

@@ -252,6 +252,11 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     // 详情走独立页面（行点击 / 卡片点击 / 「详情」按钮均进入），优先于默认抽屉详情
     detailLink: (id) => `/projects/${id}`,
     detailLinkLabel: '详情',
+    /**
+     * 操作栏「编辑后续记录」：就地弹窗读写，不必跳进全量编辑页的两步走表单。
+     * 分区维度的记录不挂在项目行上，走「项目分区管理」页的分区工具栏。
+     */
+    recordSheetOwner: 'project',
     /** 列表模式下展开行显示该项目的分区，可就地增删改（卡片模式不支持展开） */
     expandable: { render: renderProjectZones },
     columns: [
@@ -349,6 +354,8 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     qrcodePath: (id) => `/assets/${id}/qrcode`,
     exportPath: '/io/assets/export',
     importPath: '/io/assets/import',
+    /** 操作栏「编辑后续记录」：就地弹窗读写，不必跳进全量编辑页的两步走表单（资产侧含处置单流程） */
+    recordSheetOwner: 'asset',
     columns: [
       { key: 'assetNo', label: '资产编号' },
       { key: 'name', label: '名称' },

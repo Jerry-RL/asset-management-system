@@ -27,6 +27,7 @@ import {
   QrcodeOutlined,
   AppstoreOutlined,
   BarsOutlined,
+  ProfileOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { FormInstance } from 'antd/es/form';
@@ -35,6 +36,9 @@ import { api, type PageResult } from '@/lib/api';
 import { confirmDelete } from '@/lib/confirm';
 import { useDictLabelMaps, useDictOptions } from '@/lib/dict';
 import { usePermByPath, type PermAction } from '@/lib/perm';
+import { codeForPath } from '@/lib/pathToCode';
+import { RecordSheetModal } from '@/components/RecordSheetModal';
+import type { RecordOwnerType } from '@/lib/recordSheet';
 import { AssetQrLabel } from '@/components/AssetQrLabel';
 import { CoverImage } from '@/components/CoverImage';
 import { TableActions, actionsColumnWidth, type TableActionItem } from '@/components/TableActions';
@@ -65,25 +69,41 @@ import { useListQuery, useUrlParam } from '@/lib/listQuery';
 export function resolveRowActions(
   config: Pick<
     ResourceConfig,
-    'update' | 'deletable' | 'rowActions' | 'detailPath' | 'detailLink' | 'qrcodePath'
+    | 'update'
+    | 'deletable'
+    | 'rowActions'
+    | 'detailPath'
+    | 'detailLink'
+    | 'qrcodePath'
+    | 'recordSheetOwner'
   >,
   canDo: (action: PermAction) => boolean,
 ): {
   showEdit: boolean;
   showDelete: boolean;
   rowActions: RowActionConfig[];
+  /** 「编辑后续记录」是否可用：配了归属类型且当前账号有 update 权限 */
+  showRecordSheet: boolean;
   hasColumn: boolean;
 } {
   const showEdit = Boolean(config.update) && canDo('update');
   const showDelete = Boolean(config.deletable) && canDo('delete');
   const rowActions = (config.rowActions ?? []).filter((a) => !a.perm || canDo(a.perm));
+  // 与后端 PUT /record-sheet 的 @RequiresPerm 同源：能改主体才能改它的后续记录
+  const showRecordSheet = Boolean(config.recordSheetOwner) && canDo('update');
   const hasDetail = Boolean(config.detailPath || config.detailLink);
   return {
     showEdit,
     showDelete,
     rowActions,
+    showRecordSheet,
     hasColumn:
-      showEdit || showDelete || rowActions.length > 0 || hasDetail || Boolean(config.qrcodePath),
+      showEdit ||
+      showDelete ||
+      showRecordSheet ||
+      rowActions.length > 0 ||
+      hasDetail ||
+      Boolean(config.qrcodePath),
   };
 }
 
@@ -299,6 +319,14 @@ export interface ResourceConfig {
   importPath?: string;
   /** 行内快捷操作 */
   rowActions?: RowActionConfig[];
+  /**
+   * 「编辑后续记录」入口（设计见 recordSheet.ts）。配置后操作栏出现该动作，
+   * 点开 {@link RecordSheetModal} 就地读写该行的后续记录，不必跳进全量编辑页。
+   *
+   * <p>取值即归属类型：`project` / `asset`。分区维度的记录不在列表行上，走分区管理页。
+   * 动作按当前资源的 `update` 权限门控（与后端 `record-sheet` 的 `PUT` 口径一致）。
+   */
+  recordSheetOwner?: RecordOwnerType;
 }
 
 type Row = Record<string, unknown>;
@@ -731,6 +759,8 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   const [editRow, setEditRow] = useState<Row | null>(null);
   const [actionCtx, setActionCtx] = useState<{ action: RowActionConfig; row: Row } | null>(null);
   const [actionSubmitting, setActionSubmitting] = useState(false);
+  /** 「编辑后续记录」的目标行（null = 弹窗关闭）。就地编辑，不跳全量编辑页 */
+  const [recordSheetRow, setRecordSheetRow] = useState<Row | null>(null);
   const [qrModal, setQrModal] = useState<{
     open: boolean;
     loading: boolean;
@@ -752,6 +782,15 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   const idField = config.idField ?? 'id';
   const rows = data.list ?? [];
   const pageIcon = getPathIcon(location.pathname);
+  /**
+   * 当前路由的菜单码：拼动作级权限码给 RecordSheetModal 的保存按钮用。
+   *
+   * <p>这里**必须**能解析出码：`canByPath` 对镜像里没有的 path 是**放行**的，
+   * 若此处拿到 undefined 就会与 `canDo('update')` 相反（动作可见、保存按钮却消失）。
+   * 不变式由「每个 ResourcesPage 路由都登记在 PATH_TO_CODE」保证 —— 任何菜单化的列表页
+   * 都在镜像里，新增资源忘记登记会先被 `checkCodeMappingDrift` 拦下。
+   */
+  const menuCode = codeForPath(location.pathname);
 
   // 列上声明的字典编码去重后统一拉取，返回 { 字典编码: { value: label } }
   const columnDictMaps = useDictLabelMaps(
@@ -1062,9 +1101,12 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       },
     }));
     // 操作列的存在性也要按权限算：无权时整列消失，而不是留一个只有「详情」的空操作列
-    const { showEdit, showDelete, rowActions, hasColumn } = resolveRowActions(config, canDo);
+    const { showEdit, showDelete, rowActions, showRecordSheet, hasColumn } = resolveRowActions(
+      config,
+      canDo,
+    );
     if (hasColumn) {
-      const hasMore = !!config.qrcodePath || showDelete || rowActions.length > 0;
+      const hasMore = !!config.qrcodePath || showDelete || showRecordSheet || rowActions.length > 0;
       cols.push({
         title: '操作',
         key: '_actions',
@@ -1125,6 +1167,15 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               onClick: () => void handleOpenRowAction(action, row),
             });
           });
+          if (showRecordSheet) {
+            // 收进「更多」而不是内联：文案有 6 个字，内联会把固定宽的操作列显著撑宽
+            more.push({
+              key: 'recordSheet',
+              label: '编辑后续记录',
+              icon: <ProfileOutlined />,
+              onClick: () => setRecordSheetRow(row),
+            });
+          }
           if (showDelete) {
             more.push({
               key: 'delete',
@@ -1149,6 +1200,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     config.detailLink,
     config.detailLinkLabel,
     config.qrcodePath,
+    config.recordSheetOwner,
     config.update,
     config.editLink,
     config.rowActions,
@@ -1497,6 +1549,21 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
           {renderFormFields(config.fields ?? [], undefined, 'edit', editForm)}
         </Form>
       </Modal>
+
+      {/* 就地编辑后续记录：全量 diff 语义要求先读回整张 sheet，见 RecordSheetModal 的 why */}
+      {config.recordSheetOwner && (
+        <RecordSheetModal
+          open={!!recordSheetRow}
+          ownerType={config.recordSheetOwner}
+          ownerId={recordSheetRow?.[idField] as number | undefined}
+          // 缺 companyId 只影响员工搜索范围（退化成全局搜人），不影响读写本身
+          companyId={recordSheetRow?.companyId as number | undefined}
+          subjectLabel={String(recordSheetRow?.name ?? recordSheetRow?.assetNo ?? '') || undefined}
+          // 动作本身已按 canDo('update') 门控，此处是纵深防御（menuCode 见上文的强不变式）
+          savePerm={menuCode ? `${menuCode}:update` : ''}
+          onClose={() => setRecordSheetRow(null)}
+        />
+      )}
 
       <Modal
         title={actionCtx?.action.title ?? actionCtx?.action.label ?? '快捷操作'}
