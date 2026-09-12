@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { loadAmap, type AMapMap, type MapConfig } from '@/lib/amap';
 import { LEASE_CONTROL_STATUS, enumLabel } from '@/lib/labels';
 import { currentPath } from '@/lib/navigation';
+import { useUrlParam } from '@/lib/listQuery';
 
 interface MapPoint {
   assetId: number;
@@ -76,8 +77,13 @@ export function AssetMapPage() {
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [config, setConfig] = useState<MapConfig>({ provider: 'canvas' });
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [city, setCity] = useState<string>();
-  const [statusFilter, setStatusFilter] = useState<string>();
+  /**
+   * 城市 / 租控状态进 URL（设计 §4）：从本页点「查看资产档案」再返回时本页会重新挂载。
+   * 两者都是客户端筛选，URL 变化只触发 useMemo 重算，不产生请求。
+   * `selectedId` 刻意**不**进 URL：它是「当前看哪个点」的瞬态选择，且默认值依赖数据加载。
+   */
+  const [city, setCity] = useUrlParam('city', '');
+  const [statusFilter, setStatusFilter] = useUrlParam('status', '');
   const mapRef = useRef<HTMLDivElement | null>(null);
   const amapRef = useRef<AMapMap | null>(null);
 
@@ -195,8 +201,8 @@ export function AssetMapPage() {
             placeholder="按城市筛选"
             className="!w-40"
             options={cities.map((c) => ({ value: c, label: c }))}
-            value={city}
-            onChange={setCity}
+            value={city || undefined}
+            onChange={(v) => setCity(v ?? '')}
           />
           <Select
             allowClear
@@ -215,8 +221,8 @@ export function AssetMapPage() {
                 </span>
               ),
             }))}
-            value={statusFilter}
-            onChange={setStatusFilter}
+            value={statusFilter || undefined}
+            onChange={(v) => setStatusFilter(v ?? '')}
           />
           <Tag>{filtered.length} 个点位</Tag>
           <Tag color={useAmap ? 'blue' : 'default'}>{useAmap ? '高德地图' : '平面示意图'}</Tag>
