@@ -203,8 +203,8 @@ COMMENT ON COLUMN disposal_order.disposal_date   IS '处置日期';
 
 - `biz_attachment.owner_type` 是**多态**的：除三种主体外，还包含子实体 `receive_record` / `receive_issue` / `source_info` / `disposal_order` / `disposal_record`，使「交接文件」「现场文件」「来源附件」「处置附件」共用一张表。
 - `biz_type` 表达用途，与 `file_metadata.biz_type`（上传时的业务类型）职责不同：前者是「这笔附件属于哪个字段」，后者是「上传来源」。
-- 写入流程：先 `POST /files/upload`（复用现有 `FileController`）拿到 `fileId`，再 `POST /attachments` 建立关联。附件列表随宿主表单**全量 diff 提交**（`sort` 保序）。
-- 删除：只软删 `biz_attachment` 行，**不删** `file_metadata`（可能被多处引用）。
+- 写入流程：先 `POST /files/upload`（复用现有 `FileController`）拿到 `fileId`，再把 `{fileId, sort}` 内嵌进 record-sheet 请求体（或 `POST /disposals` 的请求体），由聚合写做**全量 diff**（`sort` 保序）。**不提供独立的附件 CRUD 端点**（理由见 §5.2）。
+- 删除：diff 中未出现的关联行软删，**不删** `file_metadata`（可能被多处引用）。
 - 孤儿文件清理：本期**不做**，登记为后续（需扫描无有效关联的 `file_metadata`）。
 
 ### 4.4 相对人字段口径（混合）
@@ -223,64 +223,105 @@ COMMENT ON COLUMN disposal_order.disposal_date   IS '处置日期';
 
 ```
 modules/record/
-  controller/RecordController.java          # 接收信息 / 遗留问题 / 来源明细 / 附件
-  controller/DisposalRecordController.java  # 项目 / 分区处置台账
+  controller/RecordSheetController.java     # 三主体的 record-sheet（GET/PUT）
   entity/BizAttachment.java
   entity/ReceiveRecord.java
   entity/ReceiveIssue.java
   entity/SourceInfo.java
   entity/DisposalRecord.java
   mapper/*.java
-  service/RecordService.java                # 共享：多态归属校验 + 全量 diff 保存
-  dto/RecordSaveRequest.java
+  dto/RecordSheetRequest.java               # 聚合写请求
+  dto/RecordSheetView.java                  # 聚合读视图
+  dto/AttachmentRef.java                    # {fileId, sort}
+  service/RecordOwner.java                  # ownerType/ownerId 值对象 + 解析
+  service/OwnerResolver.java                # ownerType/ownerId → 归属公司 + 权限码
+  service/RecordSheetService.java           # 聚合读写 + 全量 diff
+  service/RecordPresenceChecker.java        # 「该 owner 是否已有记录」（供分区删除守卫）
 ```
 
-分区 CRUD 已落在现有 `AssetController` / `AssetService`（`modules/asset`）；本设计只在其上扩展记录路由与「可删性」校验，不新建分区控制器。
+另新增 `modules/disposal` 侧：`DisposalOrderView`（含附件回显）+ `GET /assets/{id}/disposals`。
+分区 CRUD 已落在现有 `AssetController` / `AssetService`（`modules/asset`）；本设计只在其上扩展 record-sheet 路由与「可删性」校验，不新建分区控制器。
 
 ### 5.2 接口清单
 
-三种主体**同一套语义**，路径按主体嵌套（后端一个共享 Service，三组薄路由）：
+**设计取舍：三模块按「一张表单 = 一个聚合」暴露，而不是每个模块一组 CRUD。**
+
+理由：§5.4 要求「宿主表单一次提交 = 一个事务，包含主体字段 + 三模块子记录 + 附件」。若同时提供「每模块独立 PUT」，就会出现两条语义冲突的写入路径（聚合提交与逐模块提交），并发下互相覆盖；而按模块拆 CRUD 会让三种主体 × 三个模块展开成近 40 个端点。因此聚合成**一张 record-sheet**：读一次、写一次。
 
 | 方法 | 路径 | 权限 | 说明 |
 |------|------|------|------|
-| GET | `/api/v1/assets/{id}/receive-records` | `asset.ledger:view` | 接收信息列表（含遗留问题） |
-| POST/PUT/DELETE | `/api/v1/assets/{id}/receive-records[/{rid}]` | `asset.ledger:create/update` | 增改删（删除亦用 `update`，见下） |
-| POST/PUT/DELETE | `/api/v1/receive-records/{rid}/issues[/{iid}]` | 由 `receive_record` 宿主决定 | 遗留问题（asset → `asset.ledger:*`；project/zone → `asset.project:*`） |
-| GET/PUT | `/api/v1/assets/{id}/source-info` | `asset.ledger:view/update` | 来源明细（1:1） |
-| GET/POST/DELETE | `/api/v1/attachments` | 见下方映射 | `?ownerType=&ownerId=` |
-| GET | `/api/v1/assets/{id}/disposals` | `asset.ledger:view` | 该资产处置单列表 |
-| POST | `/api/v1/disposals`（沿用） | `operation.disposal:create` | 新建处置单 |
+| GET | `/api/v1/assets/{id}/record-sheet` | `asset.ledger:view` | 资产后续记录聚合读 |
+| PUT | `/api/v1/assets/{id}/record-sheet` | `asset.ledger:update` | 资产后续记录聚合写（单事务，全量 diff） |
+| GET/PUT | `/api/v1/projects/{pid}/record-sheet` | `asset.project:view/update` | 项目后续记录 |
+| GET/PUT | `/api/v1/projects/{pid}/zones/{zoneId}/record-sheet` | `asset.project:view/update` | 分区后续记录 |
+| GET | `/api/v1/assets/{id}/disposals` | `asset.ledger:view` | 该资产处置单列表（只读，流程走下面的既有端点） |
+| POST | `/api/v1/disposals`（沿用） | `operation.disposal:create` | 新建处置单（draft） |
 | POST | `/api/v1/disposals/{id}/submit`（沿用） | `operation.disposal:create` | 提交审批 |
 | POST | `/api/v1/disposals/{id}/approve`（沿用） | `operation.disposal:approve` | 审批 |
 | POST | `/api/v1/disposals/{id}/execute`（沿用） | `operation.disposal:update` | 执行 |
 | POST | `/api/v1/disposals/{id}/complete`（沿用） | `operation.disposal:update` | 完成（置 `lifecycle_status=exited`） |
-| GET/POST/PUT/DELETE | `/api/v1/projects/{pid}/receive-records...` | `asset.project:*` | 同资产，项目主体 |
-| GET/PUT | `/api/v1/projects/{pid}/source-info` | `asset.project:view/update` | 同资产 |
-| GET/POST/PUT/DELETE | `/api/v1/projects/{pid}/disposal-records...` | `asset.project:*` | 项目处置台账 |
-| GET/POST/PUT/DELETE | `/api/v1/projects/{pid}/zones/{zoneId}/receive-records...` | `asset.project:*` | 分区接收信息（1:N） |
-| GET/PUT | `/api/v1/projects/{pid}/zones/{zoneId}/source-info` | `asset.project:view/update` | 分区来源明细 |
-| GET/POST/PUT/DELETE | `/api/v1/projects/{pid}/zones/{zoneId}/disposal-records...` | `asset.project:*` | 分区处置台账 |
 
-附件端点不挂在某个主体的路径下，权限码由 `ownerType` 显式映射（集中一张表，不散落判断）：
+**附件不单独开端点**：文件本体走既有 `POST /files/upload` 取到 `fileId`，关联关系**内嵌在 record-sheet 的请求体里**（每条记录带 `attachments: [{fileId, sort}]`），随聚合写做全量 diff。这样附件与宿主的写入天然同事务，不会出现「记录存了、附件丢了」的半成品状态。
 
-| `ownerType`（附件的直接宿主） | 根主体解析 | 权限码前缀 |
-|-------------|-----------|-------------|
-| `asset` | 自身 | `asset.ledger` |
-| `project` / `zone` | 自身（zone → project） | `asset.project` |
-| `receive_record` / `source_info` | 自身行上的 `owner_type + owner_id` | 根主体为 asset → `asset.ledger`；为 project/zone → `asset.project` |
-| `receive_issue` | `receive_issue → receive_record → owner_type + owner_id` | 同上 |
-| `disposal_order` | 自身 `asset_id` | 读写附件用 `asset.ledger`；状态流转另用 `operation.disposal` |
-| `disposal_record` | 自身行上的 `owner_type + owner_id` | 本期仅 project/zone → `asset.project` |
+**record-sheet 请求体形状**（三段全量提交，`id` 存在即更新、缺失即新增、未出现即软删）：
 
-> 子实体（`receive_record` / `source_info` / `receive_issue`）的表本身不带 `owner_type` 的权限语义，必须先解析到宿主主体（资产 / 项目 / 分区）再取权限码与公司归属。
+```json
+{
+  "receives": [
+    {
+      "id": 12,
+      "handoverType": "receive",
+      "docName": "移交清单",
+      "handoverUserId": 8,
+      "handoverUserName": "张三",
+      "handoverDate": "2026-08-01",
+      "remark": "",
+      "attachments": [{ "fileId": 101, "sort": 0 }],
+      "issues": [
+        {
+          "id": 31,
+          "issueType": "ownership",
+          "description": "土地证未过户",
+          "discovererId": null,
+          "discovererName": "外部测绘单位",
+          "attachments": [{ "fileId": 102, "sort": 0 }]
+        }
+      ]
+    }
+  ],
+  "sourceInfo": {
+    "sourcePersonId": 9,
+    "sourcePersonName": "李四",
+    "sourceUnit": "淮安市财政局",
+    "sourceDate": "2026-07-15",
+    "sourceDesc": "无偿划转",
+    "attachments": [{ "fileId": 103, "sort": 0 }]
+  },
+  "disposalRecords": [
+    {
+      "id": null,
+      "disposalType": "sale",
+      "disposalUserId": 8,
+      "disposalUserName": "张三",
+      "amountWan": 1200.5,
+      "disposalDate": "2026-08-20",
+      "remark": "",
+      "attachments": [{ "fileId": 104, "sort": 0 }]
+    }
+  ]
+}
+```
 
-**动作到操作的映射**（避免把「能删资产」和「能删一条记录」绑在一起）：
+- **资产主体**：`disposalRecords` 段**被忽略**（资产的处置一律走 `disposal_order` 与上面的流转端点，保持审批与生命周期语义单一）。资产的 `disposal_order` 附件通过 `POST /disposals` 请求体里的 `attachments` 提交。
+- **项目 / 分区主体**：`disposalRecords` 段落到 `biz_disposal_record` 台账（无审批、不改生命周期）。
+- `sourceInfo` 为 `null` 或整体缺失时表示不修改；传 `{}` 表示清空该行。
+
+**动作映射**（避免把「能删资产」和「能删一条记录」绑在一起）：
 
 | 操作 | 动作 | 理由 |
 |------|------|------|
-| 新增记录 / 附件 | `create` | 常规 |
-| 编辑记录 / 附件 | `update` | 常规 |
-| **删除记录 / 附件** | `update` | 删除的是一条后续记录，**不改资产本体**；占用 `asset.ledger:delete` 会让「能删资产」成为「能删记录」的前置，权限过宽 |
+| 读 record-sheet | `view` | 常规 |
+| 写 record-sheet（含新增 / 修改 / 删除子记录与附件） | `update` | 全部子记录操作收敛到一个 `update`：删除的是一条后续记录，**不改资产本体**；占用 `asset.ledger:delete` 会让「能删资产」成为「能删记录」的前置，权限过宽 |
 | 处置流转 | `operation.disposal:create/update/approve` | 与资产业务权限解耦，见 §5.3 |
 
 - 分区记录路由**嵌套在既有分区资源下**（`/projects/{pid}/zones/{zoneId}/...`），归属可由路径直接解析，且与已上线的分区 CRUD 保持一致（现有分区端点位于 `AssetController` 第 111-150 行）。
@@ -299,9 +340,10 @@ modules/record/
 
 ### 5.4 事务与并发
 
-- **保存语义**：宿主表单一次提交 = 一个事务，包含主体字段 + 三模块子记录 + 附件。子表用**按 id 增量 diff**（保留 id 更新、无 id 新增、未提交的软删），沿用 `replaceZones` 范式，不先删后插。
-- **并发**：主体沿用 `version` 乐观锁（`Asset` / 项目现状）。子表**不引入独立版本号**，冲突以最后写入生效；主体 `version` 冲突则整单失败，避免子记录写进一个已过期的编辑上下文。
-- **遗留问题** 挂在 `receive_id` 下，随之全量 diff；`receive_id` 必须校验属于同一 `owner_type + owner_id`，防止跨主体拼接。
+- **保存语义**：record-sheet 的 PUT = **一个事务**，包含三模块子记录与各自的附件。子表用**按 id 增量 diff**（保留 id 更新、无 id 新增、未提交的软删），沿用 `replaceZones` 范式，不先删后插。
+- **与主体表单的边界**：主体字段（资产 / 项目本体）仍由各自既有端点保存，record-sheet 只管后续记录。因此资产表单第 3 步的「保存」会触发**两个请求**（主体 PUT + record-sheet PUT）；顺序为先主体后记录（记录依赖主体已存在）。新增态第 3 步禁用（§6.1），不存在先记后主的情形。
+- **并发**：主体沿用 `version` 乐观锁（`Asset` / 项目现状）。子表**不引入独立版本号**，同一次 record-sheet 写入以最后提交为准。
+- **遗留问题** 挂在 `receive_id` 下，随所属接收记录一起 diff；请求体里出现在某条接收记录下的 issue，其 `receive_id` 必须由服务端按该接收记录 id 赋值，**不接受客户端传入**，从结构上杜绝跨主体拼接。
 
 ---
 
@@ -315,6 +357,7 @@ modules/record/
   3. **后续记录**（处置记录 / 接收信息 / 来源明细）
 - 新增态：第 3 步**可进入但禁用录入**，显示「保存资产后可录入后续记录」——资产还没有 id，处置与接收都无主体。
 - 提交按钮移到第 3 步底部；沿用现有 `version` 回传逻辑。
+- 「保存」的请求编排：先 `PUT /assets/{id}`（主体，带 `version`），成功后 `PUT /assets/{id}/record-sheet`（后续记录）。两步都成功才提示保存成功；主体成功而记录失败时明确提示「资产已保存，后续记录保存失败，请重试」，避免用户误以为整体回滚。
 - 步骤间切换保持「隐藏不卸载」，避免表单值丢失（与项目表单一致）。
 
 ### 6.2 项目表单加第 3 步（`ProjectFormPage.tsx`）
@@ -322,13 +365,14 @@ modules/record/
 - `Steps` 增加 `{ title: '后续记录' }`，内容为项目级三模块。
 - 第二步的分区表格新增「详情」操作，跳转分区详情页。
 - 分区表格其余字段（名称/编码/排序/备注/资产面积）保持不变。
+- 提交同样为两步编排：`PUT /projects/{id}`（含 `zones`）→ `PUT /projects/{id}/record-sheet`。
 
 ### 6.3 分区详情页（新增 `ZoneDetailPage.tsx`）
 
-- 路由：`/projects/:projectId/zones/:zoneId`（钻取页，不挂侧边栏）。
-- 上半部分：分区基本信息（名称、编码、排序、备注；资产面积/资产宗数只读）。
-- 下半部分 Tabs：处置记录 / 接收信息 / 来源明细，复用与资产、项目完全相同的三个组件。
-- 依赖已上线的分区端点：`GET /projects/{pid}/zones` 取基本信息，记录走新增的 `/projects/{pid}/zones/{zoneId}/...` 路由（无需新增分区 CRUD）。
+- 路由：`/projects/:projectId/zones/:zoneId`（钻取页，不挂侧边栏，**不进** `STANDALONE_ROUTES` / `PATH_TO_CODE`）。
+- 上半部分：分区基本信息（名称、编码、排序、备注；资产面积/资产宗数只读），保存走已上线的 `PUT /projects/{pid}/zones/{zoneId}`。
+- 下半部分：三个模块（处置记录 / 接收信息 / 来源明细），读写走 `GET/PUT /projects/{pid}/zones/{zoneId}/record-sheet`。
+- 保存按钮只提交 record-sheet（分区本体有独立保存），避免把两件事塞进一次交互。
 
 ### 6.4 附件组件（新增 `AttachmentField.tsx`）
 
@@ -340,6 +384,12 @@ modules/record/
 
 - 受控，值形态 `{ userId?: number; name: string }`。
 - 默认远程搜索 `sys_user`；无匹配时提供「使用外部人员：<输入值>」。
+
+### 6.6 三模块复用组件（新增 `RecordSheetSections.tsx`）
+
+- 一个组件吃一个 `ownerType`（`asset` / `project` / `zone`）+ 读写路径，内部渲染三个模块，供资产表单第 3 步、项目表单第 3 步、分区详情页三处复用。
+- 处置模块按 `ownerType` 切换数据源：`asset` → 只读列表 + 状态与操作按钮（走 `disposal_order` 流程）；`project` / `zone` → 可编辑台账（走 record-sheet 的 `disposalRecords` 段）。
+- 该组件不直接画 UI，而是组合 `AttachmentField` / `ActorField` 与 antd 表单，保持「一处修改三处生效」。
 
 ---
 
@@ -394,13 +444,14 @@ modules/record/
 
 1. **迁移 `V46`**：5 张新表 + `disposal_order` 扩列 + 3 组字典种子（全部带存在性守卫，保证可重复执行）。
 2. **后端**：
-   1. `modules/record` 实体 / Mapper / Service（共享多态归属校验 + 全量 diff）；
-   2. `RecordController` / `DisposalRecordController` 三套嵌套路由；
-   3. `OwnershipResolver.ofZone`；抽出共享的「分区可删性」校验，两条删除路径接入；
-   4. `replaceZones` 去静默置空 + 子记录校验；两条删除路径转软删；
-   5. `DisposalController` 补 `@RequiresPerm` 与 `@Audited`。
-3. **权限**：新接口使用既有菜单码 + 既有动作词表；按权限设计 §7 的动作级回填把 `asset.ledger:*`、`asset.project:*`、`operation.disposal:approve` 授予相关角色（**必须与注解上线同批**，否则存量角色全部 403）。
-4. **前端**：`AttachmentField` / `ActorField` → `AssetFormPage` 分步 → `ProjectFormPage` 第 3 步 → `ZoneDetailPage` + 路由 + 分区「详情」入口。
+   1. `modules/record` 实体 / Mapper；
+   2. `RecordOwner` / `OwnerResolver`（多态归属解析 + 权限码映射）；
+   3. `RecordSheetService`（聚合读写 + 全量 diff）与 `RecordSheetController`（6 个端点）；
+   4. `RecordPresenceChecker`；`OwnershipResolver.ofZone`；抽出共享的「分区可删性」校验，两条删除路径接入；
+   5. `replaceZones` 去静默置空 + 子记录校验；两条删除路径转软删；
+   6. `GET /assets/{id}/disposals`；`DisposalController` 补 `@RequiresPerm` 与 `@Audited`；`POST /disposals` 接收 `attachments`。
+3. **权限**：新接口使用既有菜单码 + 既有动作词表；把 `asset.ledger:update`、`asset.project:update`、`operation.disposal:create/update/approve` 授予相关角色与测试夹具（**必须与注解上线同批**，否则存量角色全部 403）。`PermissionRegistry` 启动即校验菜单码存在性，`operation.disposal` / `asset.ledger` / `asset.project` 均已在 V45 种子中，无需新增菜单。
+4. **前端**：`AttachmentField` / `ActorField` → `RecordSheetSections` → `AssetFormPage` 分步 → `ProjectFormPage` 第 3 步 → `ZoneDetailPage` + 路由 + 分区「详情」入口。
 5. **文档**：把本设计口径回写 `docs/需求规格说明书.md`（补 FR 编号与字段表），更新 `docs/database/ams.dbml`。
 
 ---
@@ -410,12 +461,13 @@ modules/record/
 1. 资产新增态第 3 步不可录入；保存后重新进入可录入三模块，附件支持多传、预览、删除。
 2. 资产、项目、分区三处录入的三模块数据互相隔离，且都能被同一套组件渲染。
 3. 资产处置从资产编辑页可完成 draft→…→complete 全链路，完成后 `lifecycle_status = exited`；无 `operation.disposal:approve` 的账号看不到审批按钮，直接调接口返回 403。
-4. 项目/分区处置只落 `biz_disposal_record`，不产生 `disposal_order`，不改 `lifecycle_status`。
+4. 项目/分区处置只落 `biz_disposal_record`，不产生 `disposal_order`，不改 `lifecycle_status`；资产的 record-sheet 提交 `disposalRecords` 段**不产生任何行**（该段对 asset 被忽略）。
 5. 来源明细为 1:1：重复保存不产生第二行（唯一索引生效）。
-6. 遗留问题随接收信息保存/删除同步；跨主体拼接 `receive_id` 被拒绝。
+6. 遗留问题随接收信息保存/删除同步；`receive_id` 由服务端按所属接收记录赋值，客户端传入被忽略。
 7. 两条删除路径一致：有后续记录的分区被拒绝并提示；项目 PUT 移除「已有记录的分区」时整单拒绝，不再静默置空资产 `zone_id`；无记录分区的删除为软删，`deleted_at` 落值且列表中不再出现。
-8. 越权访问：用 A 公司账号访问 B 公司的资产/项目/分区子记录接口，全部 403（含仅凭 id 直取详情的场景）。
+8. 越权访问：用 A 公司账号访问 B 公司的资产/项目/分区 record-sheet，全部 403（含仅凭 id 直取的场景）。
 9. 所有新写接口在 `operation_log` / 审计中留有 `@Audited` 记录。
+10. record-sheet 的 PUT 是原子的：请求体中间某条记录非法（如 issue 描述超长）时，**整单不落库**，不出现半成品。
 
 ---
 
@@ -434,10 +486,10 @@ modules/record/
 
 | 风险 | 说明 | 缓解 |
 |------|------|------|
-| 处置模型不对称 | 资产的处置记录来自 `disposal_order`（带状态机），项目/分区来自 `biz_disposal_record`（台账）。同一个前端组件要吃两种数据源 | 前端建 `useDisposalSource(ownerType)` 适配层，统一成 `{type, user, amount, date, remark, attachments, status?, actions[]}`；后端返回体也向该形状对齐 |
+| 处置模型不对称 | 资产的处置记录来自 `disposal_order`（带状态机），项目/分区来自 `biz_disposal_record`（台账）。同一个前端组件要吃两种数据源 | `RecordSheetSections` 内部按 `ownerType` 切换数据源与编辑能力，对外暴露统一的 `{type, user, amount, date, remark, attachments, status?, actions[]}` 形状 |
 | 表单内审批 = 自提自批 | 「可走完整流程」会让能编辑资产的人同时看到审批按钮 | 审批用独立权限码 `operation.disposal:approve`，按钮按权限显隐 + 后端强校验 |
-| 无外键的一致性风险 | `owner_type/owner_id` 多态归属无法用数据库约束 | 服务层统一 `resolveOwner` 校验 + 复合索引；所有写入必须过 `RecordService`，禁止直接写 Mapper |
-| 相对人快照与 `sys_user` 脱节 | 存姓名快照后，员工改名历史记录不跟着变 | 这是**有意为之**（历史凭证应保留当时姓名）；查询时若有 `xxx_id` 可同时回显当前姓名并标注差异 |
+| 无外键的一致性风险 | `owner_type/owner_id` 多态归属无法用数据库约束 | 服务层统一 `OwnerResolver` 校验 + 复合索引；所有写入必须过 `RecordSheetService`，禁止直接写 Mapper |
+| 相对人快照与 `sys_user` 脱节 | 存姓名快照后，员工改名历史记录不跟着变 | 这是**有意为之**（历史凭证应保留当时姓名）；查询时若有 `xxx_id` 可同时回显当前名称并标注差异 |
 | 物理删除缺陷被放大 | 全局 `logic-delete-field` 与表范式不一致，新表若不显式处理会重蹈覆辙 | 新实体统一显式 `isNull("deleted_at")`，并在实体 Javadoc 写明；`V46` 后单独提一个修复全局口径的条目 |
 | 权限回填遗漏 | 新增注解 + 未回填动作 → 存量角色全 403 | 按权限设计 §7 与注解同批回填，并纳入上线清单 |
 
