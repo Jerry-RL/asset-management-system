@@ -45,8 +45,22 @@ public class LoginUser {
     /** 数据范围（all/company/dept/project/self，取最宽） */
     private String dataScope;
 
+    /**
+     * 角色级数据范围排除清单展开后的公司集合（含各自的下级子树），见设计 5.2。
+     *
+     * <p>由 {@code buildLoginUser} 从 {@code role_data_exclude} 装配（只取已启用角色），
+     * 供 {@code companyScope()} 从基线中扣除。为空表示无排除，不表示不受限。
+     */
+    @Builder.Default
+    private Set<Long> excludedCompanyIds = Set.of();
+
     public boolean isSuperAdmin() {
         return roles != null && roles.contains("super_admin");
+    }
+
+    /** 权限点集合（menuCode:action），只读用途；判定请走 {@link #hasPermission}。 */
+    public Set<String> permissionSet() {
+        return permissions == null ? Set.of() : permissions;
     }
 
     public boolean hasPermission(String permission) {

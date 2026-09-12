@@ -360,7 +360,10 @@ public class AuthService {
         List<CompanyScopeOptions.Item> companies =
                 companyTreeService.listCompaniesTreeOrdered().stream()
                         .filter(c -> c.getStatus() != null && c.getStatus() == 1)
-                        .filter(c -> unrestricted || allowed.contains(c.getId()))
+                        // 不再用 unrestricted 短路：switchableCompanyIds 现在对不受限账号也显式枚举
+                        // 全部可切换公司，并已扣除角色排除子树。否则被排除的公司会重新出现在切换器里，
+                        // 出现「能切进去、但切进去什么都看不到」的不一致。
+                        .filter(c -> allowed.contains(c.getId()))
                         .map(c -> CompanyScopeOptions.Item.builder()
                                 .id(c.getId())
                                 .name(c.getName())
