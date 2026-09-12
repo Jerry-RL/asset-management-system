@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { currentPath } from '@/lib/navigation';
+import { useUrlParam, useUrlParams, type UrlParamCodec } from '@/lib/listQuery';
 import {
   Badge,
   Button,
@@ -60,6 +62,47 @@ const TYPE_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const TYPE_MAP = Object.fromEntries(TYPE_OPTIONS.map((t) => [t.value, t]));
 
+/** 事件类型的**全选**集合：模块级常量，保证 useUrlParam 的默认值引用稳定 */
+const ALL_TYPES = TYPE_OPTIONS.map((t) => t.value);
+
+/**
+ * 严格解析日期：本仓未加载 dayjs 的 customParseFormat 插件，`dayjs(raw, fmt, true)`
+ * 的第三参数不生效，且宽松解析会把 `2026-13`「修」成 2027-01。
+ * 用「格式化回写后与原文一致」做严格性判定，不依赖插件。
+ */
+const parseStrict = (raw: string, format: 'YYYY-MM' | 'YYYY-MM-DD'): Dayjs | null => {
+  const value = dayjs(raw);
+  if (!value.isValid()) return null;
+  return value.format(format) === raw ? value : null;
+};
+
+/** 月份：`2026-09`；非法值回落当天 */
+const MONTH_CODEC: UrlParamCodec<Dayjs> = {
+  parse: (raw) => parseStrict(raw, 'YYYY-MM') ?? dayjs(),
+  serialize: (value) => value.format('YYYY-MM'),
+};
+
+/** 选中日期：`2026-09-12`；非法值回落当天 */
+const DATE_CODEC: UrlParamCodec<Dayjs> = {
+  parse: (raw) => parseStrict(raw, 'YYYY-MM-DD') ?? dayjs(),
+  serialize: (value) => value.format('YYYY-MM-DD'),
+};
+
+/**
+ * 事件类型：逗号分隔；**缺省（参数不存在）= 全选**，`none` = 一个都不选。
+ *
+ * <p>用显式的 `none` 而不是空串：空串在 URL 上既是「没选」又像「没写」，
+ * 与「缺省即全选」无法区分（设计 §8 要求不写空值参数）。
+ */
+const TYPES_CODEC: UrlParamCodec<string[]> = {
+  parse: (raw) => {
+    if (raw === 'none') return [];
+    const known = raw.split(',').filter((value) => TYPE_MAP[value] != null);
+    return known.length > 0 ? known : ALL_TYPES;
+  },
+  serialize: (value) => (value.length === 0 ? 'none' : value.join(',')),
+};
+
 const levelColor = (level: number) => (level >= 3 ? 'red' : level === 2 ? 'orange' : 'blue');
 
 const monthRange = (d: Dayjs) => ({
@@ -68,9 +111,36 @@ const monthRange = (d: Dayjs) => ({
 });
 
 export function OpsCalendarPage() {
-  const [panelDate, setPanelDate] = useState(() => dayjs());
-  const [selectedDate, setSelectedDate] = useState(() => dayjs());
-  const [types, setTypes] = useState<string[]>(TYPE_OPTIONS.map((t) => t.value));
+  /**
+   * 面板月份 / 选中日期 / 事件类型进 URL（设计 §4）：从本页点某事件的「处理」跳走后
+   * 本页会重新挂载，只在 state 里就会丢。
+   *
+   * <p>`today` 与 `ALL_TYPES` 都必须是**稳定引用**（`useMemo` / 模块常量）：hook 内部按
+   * `raw` 缓存解析结果，默认值每次渲染换新对象会把那份缓存带失效（设计 §5.1）。
+   */
+  const today = useMemo(() => dayjs(), []);
+  const [panelDate, , monthWrite] = useUrlParam('month', today, MONTH_CODEC);
+  const [selectedDate, , dateWrite] = useUrlParam('date', today, DATE_CODEC);
+  const [types, setTypes] = useUrlParam('types', ALL_TYPES, TYPES_CODEC);
+
+  /**
+   * 一次原子写入多个 URL 参数（见 `useUrlParams` 的 why）。
+   *
+   * <p>选中某天时必须**同时**写 `month` 与 `date`：antd `Calendar` 跨月选中某天会同时触发
+   * `onPanelChange` 与 `onSelect`，两个 handler 各写一次 URL 的话，后写的会覆盖先写的
+   * （react-router 的函数式更新用的是本渲染的旧参数快照），`month` 会丢。
+   * 让最后一次写入同时覆盖两个键，结果就与 antd 触发几次无关。
+   */
+  const writeParams = useUrlParams();
+
+  /** 选中某天：面板跟着跳到那一天，所以 `month` 与 `date` 都写这一天 */
+  const handleSelectDate = (d: Dayjs) => writeParams([monthWrite(d), dateWrite(d)]);
+
+  /** 只切面板月份（没有选日期）：只写 `month`，不碰 `date` */
+  const handlePanelChange = (d: Dayjs) => writeParams([monthWrite(d)]);
+
+  const location = useLocation();
+
   const [summary, setSummary] = useState<DaySummary | null>(null);
   const [events, setEvents] = useState<OpsCalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -223,8 +293,8 @@ export function OpsCalendarPage() {
         <div className="xl:col-span-3 bg-white rounded-xl border border-[var(--ams-border)] p-2 sm:p-3 min-w-0 overflow-hidden">
           <Calendar
             value={selectedDate}
-            onSelect={(d) => setSelectedDate(d)}
-            onPanelChange={(d) => setPanelDate(d)}
+            onSelect={handleSelectDate}
+            onPanelChange={handlePanelChange}
             cellRender={(current, info) => {
               if (info.type === 'date') return dateCellRender(current);
               return info.originNode;
@@ -283,6 +353,7 @@ export function OpsCalendarPage() {
                         {ev.linkPath && ev.type !== 'note' && (
                           <Link
                             to={ev.linkPath}
+                            state={{ from: currentPath(location) }}
                             className="text-xs text-[var(--ams-primary)] flex items-center gap-0.5"
                             aria-label={`查看 ${ev.title}`}
                           >
