@@ -307,7 +307,133 @@ Table disposal_order {
   asset_id bigint [not null, ref: > asset.id]
   disposal_type varchar(30)
   status varchar(20)
+  reason varchar(500)
+  assessed_value numeric(18,2)
+  book_value numeric(18,2)
+  actual_amount numeric(18,2)
+  counterparty varchar(200)
+  pnl_amount numeric(18,2)
+  payment_id bigint [ref: > payment.id]
+  disposal_user_id bigint
+  disposal_user_name varchar(100)
+  disposal_date date
+  remark varchar(500)
   created_at timestamptz [not null]
+
+  Note: '资产的处置单（带状态机与退出租控语义）。V46 新增 disposal_user_id / disposal_user_name / disposal_date / remark 四个表单展示字段；本表无 deleted_at，不参与后续记录的全量 diff 软删。'
+}
+
+// ============================================================================
+// 资产 / 项目 / 分区「后续记录」（V46）
+//   设计见 docs/superpowers/specs/2026-09-12-record-forms-design.md
+//   四张记录表用 owner_type + owner_id 多态定位宿主（无外键，故 DBML 无法表达 ref）：
+//     owner_type ∈ asset | project | zone
+// ============================================================================
+
+Table biz_attachment {
+  id bigserial [pk, increment]
+  owner_type varchar(30) [not null]
+  owner_id bigint [not null]
+  biz_type varchar(40) [not null]
+  file_id bigint [not null]
+  sort integer [not null, default: 0]
+  created_at timestamptz [not null]
+  updated_at timestamptz
+  created_by bigint
+  updated_by bigint
+  deleted_at timestamptz
+
+  Note: '通用附件关联（多态）。biz_type: receive_doc/issue_scene/source_attach/disposal_attach；file_id 指向 file_metadata.id。新增引用时校验文件归属，防跨账号关联。'
+
+  indexes {
+    (owner_type, owner_id, sort) [name: 'idx_biz_attachment_owner']
+    file_id [name: 'idx_biz_attachment_file']
+  }
+}
+
+Table biz_receive_record {
+  id bigserial [pk, increment]
+  owner_type varchar(20) [not null]
+  owner_id bigint [not null]
+  handover_type varchar(50)
+  doc_name varchar(200)
+  handover_user_id bigint
+  handover_user_name varchar(100)
+  handover_date date
+  remark varchar(500)
+  created_at timestamptz [not null]
+  updated_at timestamptz
+  created_by bigint
+  updated_by bigint
+  deleted_at timestamptz
+
+  indexes {
+    (owner_type, owner_id, id) [name: 'idx_biz_receive_record_owner']
+  }
+}
+
+Table biz_receive_issue {
+  id bigserial [pk, increment]
+  receive_id bigint [not null, ref: > biz_receive_record.id]
+  issue_type varchar(50)
+  description varchar(1000)
+  discoverer_id bigint
+  discoverer_name varchar(100)
+  sort integer [not null, default: 0]
+  created_at timestamptz [not null]
+  updated_at timestamptz
+  created_by bigint
+  updated_by bigint
+  deleted_at timestamptz
+
+  indexes {
+    (receive_id, sort) [name: 'idx_biz_receive_issue_receive']
+  }
+}
+
+Table biz_source_info {
+  id bigserial [pk, increment]
+  owner_type varchar(20) [not null]
+  owner_id bigint [not null]
+  source_person_id bigint
+  source_person_name varchar(100)
+  source_unit varchar(200)
+  source_date date
+  source_desc varchar(1000)
+  created_at timestamptz [not null]
+  updated_at timestamptz
+  created_by bigint
+  updated_by bigint
+  deleted_at timestamptz
+
+  Note: '1:1 由部分唯一索引 uk_biz_source_info_owner (owner_type, owner_id) WHERE deleted_at IS NULL 保证；软删后允许重新录入。'
+
+  indexes {
+    (owner_type, owner_id) [name: 'uk_biz_source_info_owner', unique]
+  }
+}
+
+Table biz_disposal_record {
+  id bigserial [pk, increment]
+  owner_type varchar(20) [not null]
+  owner_id bigint [not null]
+  disposal_type varchar(50)
+  disposal_user_id bigint
+  disposal_user_name varchar(100)
+  amount_wan numeric(18,2)
+  disposal_date date
+  remark varchar(500)
+  created_at timestamptz [not null]
+  updated_at timestamptz
+  created_by bigint
+  updated_by bigint
+  deleted_at timestamptz
+
+  Note: '项目 / 分区处置台账（owner_type 本期仅 project|zone），无审批流程；资产处置仍走 disposal_order。amount_wan 单位万元。'
+
+  indexes {
+    (owner_type, owner_id, id) [name: 'idx_biz_disposal_record_owner']
+  }
 }
 
 Table occupation_order {

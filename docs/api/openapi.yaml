@@ -28,6 +28,7 @@ tags:
   - name: Files
   - name: System
   - name: Disposals
+  - name: RecordSheets
   - name: Occupations
   - name: Refunds
   - name: Approvals
@@ -969,6 +970,105 @@ paths:
         '200':
           description: Tool 调用与模型审计
 
+  /assets/{assetId}/record-sheet:
+    get:
+      tags: [RecordSheets]
+      summary: 资产后续记录（处置 / 接收 / 来源）聚合读
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 asset.ledger:view
+        '404':
+          description: 资产不存在、已软删，或超出当前账号的数据范围（两者同响应，不区分，避免存在性探针）
+    put:
+      tags: [RecordSheets]
+      summary: 资产后续记录聚合写（单事务全量 diff）
+      description: >-
+        未出现在请求体里的记录与附件会被软删，因此必须提交完整列表。
+        资产侧处置走 disposal_order 独立流程（见 /assets/{assetId}/disposals），
+        本请求体的 disposalRecords 段被忽略。归属（owner_type / owner_id / receive_id /
+        biz_type）由服务端按路径赋值，客户端传值无效；新增附件引用会校验 fileId 归属。
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 asset.ledger:update
+        '404':
+          description: 资产不存在、已软删，或超出当前账号的数据范围
+
+  /projects/{projectId}/record-sheet:
+    get:
+      tags: [RecordSheets]
+      summary: 项目后续记录聚合读
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 asset.project:view
+        '404':
+          description: 项目不存在、已软删，或超出当前账号的数据范围
+    put:
+      tags: [RecordSheets]
+      summary: 项目后续记录聚合写（全量 diff；处置段为 biz_disposal_record 台账）
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 asset.project:update
+        '404':
+          description: 项目不存在、已软删，或超出当前账号的数据范围
+
+  /projects/{projectId}/zones/{zoneId}/record-sheet:
+    get:
+      tags: [RecordSheets]
+      summary: 分区后续记录聚合读
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/ZoneId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 asset.project:view
+        '404':
+          description: 分区不存在、已软删、不属于该 projectId，或超出当前账号的数据范围
+    put:
+      tags: [RecordSheets]
+      summary: 分区后续记录聚合写（全量 diff；处置段为 biz_disposal_record 台账）
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/ZoneId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 asset.project:update
+        '404':
+          description: 分区不存在、已软删、不属于该 projectId，或超出当前账号的数据范围
+
+  /assets/{assetId}/disposals:
+    get:
+      tags: [Disposals]
+      summary: 某资产的处置单列表（只读回显，推进流程走 /disposals）
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 asset.ledger:view
+        '404':
+          description: 资产不存在、已软删，或超出当前账号的数据范围
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1001,6 +1101,18 @@ components:
         default: 10
     AssetId:
       name: assetId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ZoneId:
+      name: zoneId
       in: path
       required: true
       schema:
