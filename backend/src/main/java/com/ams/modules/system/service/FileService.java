@@ -17,6 +17,7 @@ import java.util.Collection;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,6 +77,39 @@ public class FileService {
             throw new AppException(ErrorCode.NOT_FOUND, "文件不存在");
         }
         return meta;
+    }
+
+    /**
+     * 校验这批 fileId 可被当前用户在本系统内使用（设计 §4.3 的附件归属口径）。
+     *
+     * <p>规则：id 必须存在；且上传者是当前用户本人，或 {@code created_by} 为空（历史/种子文件 ——
+     * 应用启动时的 seed 没有安全上下文，{@code created_by} 天然为 null，允许它们被引用）。
+     *
+     * <p>**只校验「新挂上来的」fileId**，调用方负责滤掉已经挂在该宿主上的旧引用：
+     * 否则一条指向已清理 file_metadata 的存量附件会让整个 record-sheet **再也保存不了**
+     * （§4.3 明确本期不做孤儿文件清理，存量脏引用必须可继续原样提交）。
+     *
+     * <p>无安全上下文（{@code currentUserIdOrNull()} 为 null）时只校验存在性、跳过归属比较：
+     * record-sheet 的写入只能经鉴权控制器到达，系统内部调用不按人归属。
+     */
+    public void assertAttachable(Collection<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return;
+        }
+        Map<Long, FileMetadata> found = fileMetadataMapper.selectBatchIds(fileIds).stream()
+                .collect(Collectors.toMap(FileMetadata::getId, Function.identity()));
+        Long currentUserId = SecurityUtils.currentUserIdOrNull();
+        for (Long fileId : fileIds) {
+            FileMetadata meta = found.get(fileId);
+            if (meta == null) {
+                // 与「非本人上传」同码同文案：不把 fileId 是否存在变成可探测信息（设计 §5.3 越权收敛口径）
+                throw new AppException(ErrorCode.BAD_REQUEST, "附件不存在，请先调用 /files/upload");
+            }
+            if (currentUserId != null && meta.getCreatedBy() != null
+                    && !currentUserId.equals(meta.getCreatedBy())) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "附件不存在，请先调用 /files/upload");
+            }
+        }
     }
 
     /**

@@ -2301,6 +2301,7 @@ git commit -m "feat(asset): 分区删除统一守卫与软删（两条路径口�
 
 **Interfaces:**
 - Consumes: Task 2 的五个 Mapper、Task 3 的两个枚举、Task 4 的八个 DTO、`FileService.viewsByIds`、`UserMapper`。
+- Consumes（附件归属）：`FileService.assertAttachable(Collection<Long> fileIds)` —— `syncAttachments` 只对**新挂上来的** `fileId` 调它（已挂在该宿主上的旧引用滤掉后再传，见核心不变量 3）。
 - Produces（Task 8 / 9 逐字依赖）：
   - `RecordSheetService.read(RecordOwnerType type, Long ownerId) → RecordSheetView`
   - `RecordSheetService.save(RecordOwnerType type, Long ownerId, RecordSheetRequest request) → RecordSheetView`
@@ -2311,8 +2312,8 @@ git commit -m "feat(asset): 分区删除统一守卫与软删（两条路径口�
 
 1. **全量 diff**：带 id → 更新；无 id → 新增；库中存在但未提交 → 软删。
 2. **不跨主体**：某条 receive 只影响它自己的 issues；未提交的 receive 连同 issues 与附件一起软删。
-3. **服务端赋值**：`owner_type` / `owner_id` / `receive_id` / `sort` 全部由服务端决定，忽略客户端传值。
-4. **姓名快照**：`xxxUserId` 非空时用 `sys_user.name` 覆盖 `xxxUserName`；id 为空时姓名必填。
+3. **服务端赋值 + 新增附件归属校验**：`owner_type` / `owner_id` / `receive_id` / 附件的 `biz_type` 由服务端决定，忽略客户端传值；`sort` 是客户端可传的**排序意图**（设计 §4.3 `sort` 保序、`AttachmentRef.sort` javadoc 写明「为空时服务端按数组下标赋值」），服务端只在为 null 时按下标兜底。新增附件引用时校验**新** `fileId` 的归属（`FileService.assertAttachable`）；已挂在该宿主上的旧引用不重复校验（存量脏引用必须可原样往返）。
+4. **姓名快照**：`xxxUserId` 非空时用 `sys_user.name` 覆盖 `xxxUserName`；**交接人 / 发现人 / 处置人**在 id 为空时姓名必填，**来源人可为空**（设计 §4.4）。
 5. **asset 忽略处置段**：`type == ASSET` 时完全不碰 `biz_disposal_record`。
 6. **来源明细 1:1**：`sourceInfo` 为 null → 不动；传了内容 → upsert 同一行；传空对象（全字段空）→ 软删该行。
 
@@ -3597,6 +3598,8 @@ git commit -m "feat(record): record-sheet 三主体读写接口与权限闭环"
   - `DisposalService.listByAsset(Long assetId) → List<DisposalOrderView>`
   - `DisposalService.createWithAttachments(DisposalOrder order, List<AttachmentRef> refs) → DisposalOrder`
   - `GET /api/v1/assets/{assetId}/disposals`（权限 `asset.ledger:view`）
+
+> **待办归属**：`RecordSheetView.disposals`（资产的处置单列表，来自 `disposal_order`）**不由 Task 7 的 `read()` 填充** —— `read()` 当前对该字段保持空列表。该字段的填充与 `GET /assets/{id}/disposals` 一起**在本 Task 落地**（复用同一个 `DisposalOrderView` 组装逻辑）。Task 8 派发时会带上这条。
 
 **权限码逐字如下（这是本节的核心，也是设计 §5.3 的职责分离）：**
 

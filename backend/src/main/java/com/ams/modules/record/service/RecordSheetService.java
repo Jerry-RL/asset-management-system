@@ -8,7 +8,6 @@ import com.ams.modules.record.AttachmentOwner;
 import com.ams.modules.record.RecordOwnerType;
 import com.ams.modules.record.dto.AttachmentRef;
 import com.ams.modules.record.dto.DisposalInput;
-import com.ams.modules.record.dto.DisposalOrderView;
 import com.ams.modules.record.dto.IssueInput;
 import com.ams.modules.record.dto.ReceiveInput;
 import com.ams.modules.record.dto.RecordSheetRequest;
@@ -29,11 +28,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -95,9 +90,8 @@ public class RecordSheetService {
         }
         SourceInfo source = findSourceInfo(type, ownerId);
         view.setSourceInfo(source == null ? null : toSourceInput(source));
-        if (type == RecordOwnerType.ASSET) {
-            view.setDisposalRecords(new ArrayList<>());
-        } else {
+        // asset 的 disposalRecords 保持字段初始化的空列表；资产的处置走 disposal_order（Task 9）
+        if (type != RecordOwnerType.ASSET) {
             for (DisposalRecord record : activeDisposals(type, ownerId)) {
                 view.getDisposalRecords().add(toDisposalInput(record));
             }
@@ -332,6 +326,15 @@ public class RecordSheetService {
         Map<Long, BizAttachment> existing = activeAttachments(owner, ownerId).stream()
                 .collect(Collectors.toMap(BizAttachment::getFileId, Function.identity(),
                         (a, b) -> a, LinkedHashMap::new));
+        // 只校验新挂上来的 fileId：已挂在该宿主上的旧引用原样放过，
+        // 否则存量脏引用（file_metadata 已被清理但本期不做清理）会让整张表单再也保存不了。
+        // null 元素先滤掉：循环里的 `ref == null` 仍会给出 400，不能在这里先抛 NPE。
+        fileService.assertAttachable(incoming.stream()
+                .filter(Objects::nonNull)
+                .map(AttachmentRef::getFileId)
+                .filter(Objects::nonNull)
+                .filter(fileId -> !existing.containsKey(fileId))
+                .collect(Collectors.toCollection(LinkedHashSet::new)));
         Set<Long> kept = new LinkedHashSet<>();
         int index = 0;
         for (AttachmentRef ref : incoming) {
@@ -457,7 +460,14 @@ public class RecordSheetService {
         return input;
     }
 
-    /** 批量回显附件：一次查全部 fileId，避免每条附件一次查询。 */
+    /**
+     * 批量回显附件：一次查全部 fileId，避免每条附件一次查询。
+     *
+     * <p>查不到 file 的引用**保留**（{@code fileName}/{@code url} 为 null），前端按 null 兜底展示；
+     * **不丢行** —— 丢弃会让该 fileId 在下次保存时不在请求体里，从而被 {@code syncAttachments}
+     * 静默软删，把一个展示层的取舍变成静默数据丢失（设计 §4.3：不删 {@code file_metadata}、
+     * 本期不做孤儿文件清理）。
+     */
     List<AttachmentRef> toAttachmentRefs(AttachmentOwner owner, Long ownerId) {
         List<BizAttachment> rows = activeAttachments(owner, ownerId);
         if (rows.isEmpty()) {
