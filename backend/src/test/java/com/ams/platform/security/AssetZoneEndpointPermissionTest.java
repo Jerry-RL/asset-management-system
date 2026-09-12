@@ -1,5 +1,6 @@
 package com.ams.platform.security;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -95,7 +97,12 @@ class AssetZoneEndpointPermissionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
-        verify(assetService).createProjectZone(eq(PROJECT_ID), any());
+        ArgumentCaptor<ProjectZone> captor = ArgumentCaptor.forClass(ProjectZone.class);
+        verify(assetService).createProjectZone(eq(PROJECT_ID), captor.capture());
+        // 断言请求体真的被绑定并透传到服务：any() 会在 @RequestBody 被去掉/绑错时照样通过
+        assertThat(captor.getValue().getName()).isEqualTo("A区");
+        // 归属必须来自 URL 而非请求体（用例未在 body 里给 projectId，故应为 null）
+        assertThat(captor.getValue().getProjectId()).isNull();
     }
 
     @Test
@@ -123,7 +130,11 @@ class AssetZoneEndpointPermissionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
-        verify(assetService).updateProjectZone(eq(PROJECT_ID), eq(ZONE_ID), any());
+        ArgumentCaptor<ProjectZone> captor = ArgumentCaptor.forClass(ProjectZone.class);
+        verify(assetService).updateProjectZone(eq(PROJECT_ID), eq(ZONE_ID), captor.capture());
+        // 同上：证明路径参数与请求体分别正确落位
+        assertThat(captor.getValue().getName()).isEqualTo("A区");
+        assertThat(captor.getValue().getProjectId()).isNull();
     }
 
     @Test
