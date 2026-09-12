@@ -48,3 +48,6 @@ backend/data/
 
 # Local toolchain (JDK downloads)
 .tools/
+
+# subagent-driven development 工作区（进度台账 / 任务简报 / 审查包，纯本地 scratch）
+.superpowers/
