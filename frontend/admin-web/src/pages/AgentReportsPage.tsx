@@ -3,7 +3,7 @@ import { Button, Card, Table, Tag, message } from 'antd';
 import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { AGENT_REPORT_STATUS, enumLabel } from '@/lib/labels';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 
 interface AgentReport {
   id: number;
@@ -105,7 +105,7 @@ export function AgentReportsPage() {
             {
               title: '操作',
               key: 'actions',
-              width: 140,
+              width: actionsColumnWidth(['下载 HTML']),
               render: (_: unknown, row: AgentReport) => (
                 <TableActions
                   actions={[

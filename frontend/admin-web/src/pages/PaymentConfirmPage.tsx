@@ -4,7 +4,7 @@ import { CheckOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, type PageResult } from '@/lib/api';
 import { confirmDangerous } from '@/lib/confirm';
 import { CHANNEL, PAYMENT_CONFIRM, PAYMENT_METHOD, enumLabel } from '@/lib/labels';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 
 interface Payment {
   id: number;
@@ -105,7 +105,7 @@ export function PaymentConfirmPage() {
             {
               title: '操作',
               key: 'actions',
-              width: 130,
+              width: actionsColumnWidth(['确认到账']),
               render: (_: unknown, row: Payment) => (
                 <TableActions
                   actions={[

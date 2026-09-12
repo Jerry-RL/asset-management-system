@@ -4,7 +4,7 @@ import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant
 import type { ColumnsType } from 'antd/es/table';
 import { confirmDelete } from '@/lib/confirm';
 import { PermissionGuard, usePerm } from '@/lib/perm';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 import { ZoneFormModal } from '@/components/ZoneFormModal';
 import { useProjectZones, type ProjectZone } from '@/lib/projectZones';
 
@@ -103,7 +103,7 @@ export function ProjectZonesPanel({ projectId }: { projectId: number }) {
     columns.push({
       title: '操作',
       key: '_actions',
-      width: 140,
+      width: actionsColumnWidth(['编辑', '删除']),
       render: (_: unknown, zone: ProjectZone) => (
         <TableActions
           actions={[

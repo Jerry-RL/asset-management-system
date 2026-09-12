@@ -25,7 +25,7 @@ import {
 } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { confirmDelete } from '@/lib/confirm';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 import { usePermByPath } from '@/lib/perm';
 
 // ============================================================================
@@ -399,7 +399,7 @@ export function SystemDictionaryPage() {
     {
       title: '操作',
       key: '_actions',
-      width: 150,
+      width: actionsColumnWidth(['编辑', '删除']),
       fixed: 'right',
       render: (_, row) => (
         <TableActions

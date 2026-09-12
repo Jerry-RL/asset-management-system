@@ -66,6 +66,46 @@ const linkClassOf = (action: TableActionItem) =>
   cn('ams-action-link', action.danger && 'is-danger', action.disabled && 'is-disabled');
 
 /**
+ * 单个文字链接的宽度（px）：左右内边距 12 + 图标 12 + 图标间距 4 + 字数 × 汉字宽 13。
+ *
+ * <p>刻意**按汉字宽度估算每一个字符**（含 ASCII 与空格）：估算偏大是安全的
+ * （列宽多几像素不影响观感），偏小则会让 nowrap 的内容溢出固定右列而被裁掉。
+ */
+const actionLinkWidth = (label: string) => 28 + label.length * 13;
+
+/** 「更多」按钮：2 字 + MoreOutlined 图标 */
+const MORE_WIDTH = actionLinkWidth('更多');
+
+/** 用户要求的统一额外加宽（px）：在内容所需宽度之上再留 100px */
+const ACTION_COLUMN_EXTRA_WIDTH = 100;
+
+/**
+ * 操作列宽度（px）。
+ *
+ * <p>内联数量必须与传给 {@link TableActions} 的 `max` 同源，否则算出来的宽度与
+ * 实际渲染不符。`labels` 传「可能内联出现的全部操作文案」，helper 取**最长的 max 个**
+ * —— 与渲染顺序无关，因此同一份配置在不同权限账号下宽度一致。
+ *
+ * <p>构成：单元格内边距 32 − `.ams-actions` 负左边距 6 = 26；加上各项宽度；
+ * 加上项间 4px 间隙；再加 8px 基础缓冲；最后加 {@link ACTION_COLUMN_EXTRA_WIDTH} 统一加宽。
+ */
+export const actionsColumnWidth = (
+  labels: string[],
+  { max = 2, hasMore = false }: { max?: number; hasMore?: boolean } = {},
+) => {
+  const inline = [...labels].sort((a, b) => b.length - a.length).slice(0, max);
+  const items = inline.map(actionLinkWidth);
+  if (hasMore) items.push(MORE_WIDTH);
+  return (
+    26 +
+    items.reduce((sum, w) => sum + w, 0) +
+    Math.max(0, items.length - 1) * 4 +
+    8 +
+    ACTION_COLUMN_EXTRA_WIDTH
+  );
+};
+
+/**
  * 统一「操作」列：内联文字链接（含图标），超出部分与次要操作收进「更多」下拉。
  * 点击默认阻止冒泡，避免触发行点击（如打开详情抽屉）。
  */

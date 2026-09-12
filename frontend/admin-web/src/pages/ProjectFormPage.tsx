@@ -50,7 +50,7 @@ import {
   regionPathOf,
   type RegionOption,
 } from '@/lib/regions';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 import { PermissionGuard } from '@/lib/perm';
 
 // ============================================================================
@@ -471,7 +471,7 @@ export function ProjectFormPage() {
     {
       title: '操作',
       key: '_actions',
-      width: 140,
+      width: actionsColumnWidth(['详情', '删除']),
       render: (_: unknown, row: ProjectZone, index: number) => (
         <TableActions
           actions={[

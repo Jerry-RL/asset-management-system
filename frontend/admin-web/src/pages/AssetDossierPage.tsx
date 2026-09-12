@@ -17,7 +17,7 @@ import { ArrowLeftOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icon
 import { api } from '@/lib/api';
 import { AssetQrLabel } from '@/components/AssetQrLabel';
 import { AssetQuickActions } from '@/components/AssetQuickActions';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 import { useBackNavigate } from '@/lib/navigation';
 import {
   ASSET_NATURE,
@@ -599,7 +599,7 @@ export function AssetDossierPage() {
                         title: '操作',
                         key: 'actions',
                         fixed: 'right',
-                        width: 100,
+                        width: actionsColumnWidth(['查看']),
                         render: (_: unknown, row: Row) => (
                           <TableActions
                             actions={[

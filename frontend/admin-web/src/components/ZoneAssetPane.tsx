@@ -15,7 +15,7 @@ import { ASSET_TYPE, LEASE_CONTROL_STATUS } from '@/lib/labels';
 import { currentPath } from '@/lib/navigation';
 import { usePerm } from '@/lib/perm';
 import { useProjectZones, type ProjectZone } from '@/lib/projectZones';
-import { TableActions, type TableActionItem } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth, type TableActionItem } from '@/components/TableActions';
 import { ZoneFormModal } from '@/components/ZoneFormModal';
 
 /** 资产行：列表接口已回显 zoneName（AssetService#fillZoneNames），无需前端再查 */
@@ -324,7 +324,8 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
     columns.push({
       title: '操作',
       key: '_actions',
-      width: 170,
+      // 删除在 more 里：hasMore 必须与下方 more 数组的实际内容（canDeleteLedger）一致
+      width: actionsColumnWidth(['编辑', '一物一档'], { hasMore: canDeleteLedger }),
       render: (_: unknown, asset: AssetRow) => {
         const actions: TableActionItem[] = [];
         if (canUpdateLedger) {

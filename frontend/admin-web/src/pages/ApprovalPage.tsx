@@ -4,7 +4,7 @@ import { CheckOutlined, CloseOutlined, ReloadOutlined } from '@ant-design/icons'
 import { api } from '@/lib/api';
 import { confirmDangerous } from '@/lib/confirm';
 import { APPROVAL_STATUS, BIZ_TYPE, TASK_STATUS, enumLabel } from '@/lib/labels';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 
 interface InboxRow {
   taskId: number;
@@ -162,7 +162,7 @@ export function ApprovalPage() {
                       title: '操作',
                       key: 'actions',
                       fixed: 'right',
-                      width: 160,
+                      width: actionsColumnWidth(['通过', '驳回']),
                       render: (_: unknown, row: InboxRow) => (
                         <TableActions
                           actions={[

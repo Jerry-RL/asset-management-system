@@ -8,7 +8,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { api } from '@/lib/api';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 
 interface DunningQueueItem {
   billId: number;
@@ -235,7 +235,7 @@ export function DunningAutoPage() {
             { title: '截止时间', dataIndex: 'deadline', width: 180 },
             {
               title: '操作',
-              width: 110,
+              width: actionsColumnWidth(['去处理']),
               render: () => (
                 <TableActions
                   actions={[

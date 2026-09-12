@@ -37,7 +37,7 @@ import { useDictLabelMaps, useDictOptions } from '@/lib/dict';
 import { usePermByPath, type PermAction } from '@/lib/perm';
 import { AssetQrLabel } from '@/components/AssetQrLabel';
 import { CoverImage } from '@/components/CoverImage';
-import { TableActions, type TableActionItem } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth, type TableActionItem } from '@/components/TableActions';
 import {
   BILL_STATUS,
   BILL_TYPE,
@@ -1015,7 +1015,18 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         title: '操作',
         key: '_actions',
         fixed: 'right',
-        width: hasMore ? 180 : showEdit ? 150 : 110,
+        // 宽度与文案同源推导；hasMore / showEdit 必须复用下方渲染的同一份判定
+        width: actionsColumnWidth(
+          [
+            config.detailPath || config.detailLink
+              ? config.detailLink
+                ? (config.detailLinkLabel ?? '档案')
+                : '详情'
+              : null,
+            showEdit ? '编辑' : null,
+          ].filter((v): v is string => v != null),
+          { hasMore },
+        ),
         render: (_: unknown, row: Row) => {
           const actions: TableActionItem[] = [];
           if (config.detailPath || config.detailLink) {

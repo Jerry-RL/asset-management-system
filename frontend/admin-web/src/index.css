@@ -92,9 +92,9 @@ body {
 .ams-actions {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  /* 操作链接不折行：列宽由 actionsColumnWidth() 派生保证够用（设计 §3.1） */
+  flex-wrap: nowrap;
   gap: 2px 4px;
-  max-width: 100%;
   /* 抵消首个链接的左右内边距，使文字与表头对齐 */
   margin-left: -6px;
 }

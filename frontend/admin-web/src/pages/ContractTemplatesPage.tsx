@@ -23,7 +23,7 @@ import {
   SaveOutlined,
 } from '@ant-design/icons';
 import { api, type PageResult } from '@/lib/api';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 
 interface SlotDef {
   key: string;
@@ -276,7 +276,8 @@ export function ContractTemplatesPage() {
             {
               title: '操作',
               key: 'actions',
-              width: 220,
+              // 「导出 Word」收在 more 里
+              width: actionsColumnWidth(['预览', '编辑'], { hasMore: true }),
               render: (_: unknown, row: ContractTemplate) => (
                 <TableActions
                   actions={[

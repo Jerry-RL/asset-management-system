@@ -29,7 +29,7 @@ import { ICON_NAMES, getIconByName } from '@/lib/menuIcons';
 import { isRegisteredRoute } from '@/lib/routeRegistry';
 import { useMenu, type ApiMenuNode } from '@/lib/menu';
 import { PermissionGuard } from '@/lib/perm';
-import { TableActions } from '@/components/TableActions';
+import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 
 // ============================================================================
 // 菜单管理（设计 3.3）：树 + 抽屉 + 校验
@@ -358,7 +358,8 @@ export function SystemMenuPage() {
     {
       title: '操作',
       key: '_actions',
-      width: 140,
+      // DIR 行的「新增子菜单」收在 more 里；列宽按可能出现的上界算（部分行无更多按钮）
+      width: actionsColumnWidth(['编辑', '删除'], { hasMore: true }),
       fixed: 'right',
       render: (_, row) => (
         <TableActions
