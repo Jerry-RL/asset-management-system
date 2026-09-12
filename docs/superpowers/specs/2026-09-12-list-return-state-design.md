@@ -259,7 +259,9 @@ selectZone(id):
 
 > 现状的整包替换会把左栏 `projectPage` / `projectKeyword` 一起抹掉（今天因为它们是本地 state 所以看不出来）。改合并后，左栏搜索在切项目时保留。
 
-- `ZoneAssetPane` 的「刷新」：`setPage(1)` + `setAssetsReloadToken(t => t + 1)`（若本就在第 1 页，令牌保证重拉），维持 spec §5.2 第 7 条「刷新归第 1 页」。
+- `ZoneAssetPane` 的「刷新」：`setPage(1)` + `setAssetsReloadToken(t => t + 1)`（若本就在第 1 页，令牌保证重拉），维持**分区联动设计**（`2026-09-12-project-zone-management-design.md`）§5.2 表格第 7 行「刷新归第 1 页」。
+
+> **跨设计契约（易漏）**：分区联动设计 §5.2 的表格里，第 3/4/5 行（新增或编辑分区、删除分区、增删改资产）都要求「资产区分页归 1 + 重拉」。本设计把资产分页搬进 URL 后，这些行**不会自动满足** —— 原先它们靠「上下文变化 effect 里的 `setPage(1)`」顺带实现，而 §6.2 又要求删掉那个 effect。因此改完后必须由 `reloadAssets()` 自己归 1（`setPage(1)` + 令牌），否则新增/编辑/删除分区与删除资产都会停在第 2 页上，删除末页最后一条还会停在空页。`rows 1/2`（切项目、切分区）仍由父级原子删 `assetPage` 负责。
 
 ### 6.3 `ProjectDetailPage.tsx`
 
