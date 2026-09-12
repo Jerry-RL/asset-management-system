@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Alert,
   Button,
@@ -75,11 +75,33 @@ const useCascadeReset = (form: FormInstance, source: string, dependents: string[
   }, [value, key, form]);
 };
 
+/** URL 数字参数解析：缺失 / 非法 / 非正数一律视为「未提供」，避免拼出 ?projectId=NaN */
+const toPositiveNumber = (raw: string | null): number | undefined => {
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+};
+
 export function AssetFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
   const goBack = useBackNavigate('/assets');
+
+  const [searchParams] = useSearchParams();
+  /**
+   * 「项目分区管理」页跳转过来时带的归属预设。
+   * 编辑态**不使用**它：归属一律以 `/assets/{id}` 的返回值为准，两处都写同一字段会产生竞争。
+   */
+  const presetProjectId = toPositiveNumber(searchParams.get('projectId'));
+  const presetZoneId = toPositiveNumber(searchParams.get('zoneId'));
+  /** 归属锁定：本入口不允许把资产挪到别的项目 / 分区（越权仍由后端 validateZone 拦截） */
+  const lockScope = searchParams.get('lockScope') === '1';
+
+  /** 新增时预填归属；编辑态只保留 assetType，归属交给接口返回值 */
+  const initialValues = isEdit
+    ? { assetType: 'property' }
+    : { assetType: 'property', projectId: presetProjectId, zoneId: presetZoneId };
 
   const [form] = Form.useForm();
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
@@ -307,7 +329,9 @@ export function AssetFormPage() {
         await api.post('/assets', payload);
         message.success('创建成功');
       }
-      navigate('/assets');
+      // 按来源返回：从资产台账进来回 /assets（与改造前一致），从「项目分区管理」进来
+      // 回到带 projectId/zoneId 的原地（见 useBackNavigate 的 state.from 约定）
+      goBack();
     } catch (e) {
       if (e && typeof e === 'object' && 'errorFields' in e) {
         jumpToErrorStep((e as { errorFields?: { name: (string | number)[] }[] }).errorFields ?? []);
@@ -343,7 +367,7 @@ export function AssetFormPage() {
         </Space>
       </div>
 
-      <Form form={form} layout="vertical" initialValues={{ assetType: 'property' }}>
+      <Form form={form} layout="vertical" initialValues={initialValues}>
         {/* 乐观锁版本号：编辑保存时随 PUT 回传，缺失会被判定为并发冲突 */}
         <Form.Item name="version" hidden>
           <InputNumber />
@@ -408,26 +432,27 @@ export function AssetFormPage() {
                   name="projectId"
                   label="项目"
                   rules={[{ required: true, message: '请选择项目' }]}
+                  extra={lockScope ? '由项目分区管理进入，归属已锁定' : undefined}
                 >
                   <Select
                     allowClear
                     showSearch
                     optionFilterProp="label"
                     loading={projectOptions.loading}
-                    disabled={!assetCompanyId}
+                    disabled={lockScope || !assetCompanyId}
                     placeholder={assetCompanyId ? '请选择项目（可搜索）' : '请先选择资产公司'}
                     options={projectOptions.options}
                   />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12} lg={8}>
-                <Form.Item name="zoneId" label="分区">
+                <Form.Item name="zoneId" label="分区" extra={lockScope ? '归属已锁定' : undefined}>
                   <Select
                     allowClear
                     showSearch
                     optionFilterProp="label"
                     loading={zoneOptions.loading}
-                    disabled={!watchProjectId}
+                    disabled={lockScope || !watchProjectId}
                     placeholder={watchProjectId ? '请选择分区' : '请先选择项目'}
                     options={zoneOptions.options}
                   />
