@@ -115,6 +115,40 @@ public class AssetController {
         return ApiResponse.ok(assetService.listProjectZones(id), TraceIdUtil.get());
     }
 
+    /**
+     * 新增分区（项目列表展开行内维护）。
+     *
+     * <p>归属由路径参数决定：请求体里的 {@code id} / {@code projectId} 在服务层被忽略。
+     */
+    @PostMapping("/projects/{id}/zones")
+    @RequiresPerm("asset.project:update")
+    @Audited(module = "asset", action = "create_project_zone")
+    public ApiResponse<ProjectZone> createProjectZone(@PathVariable Long id,
+            @RequestBody ProjectZone zone) {
+        assertProject(id);
+        return ApiResponse.ok(assetService.createProjectZone(id, zone), TraceIdUtil.get());
+    }
+
+    /** 编辑分区（项目列表展开行内维护）。 */
+    @PutMapping("/projects/{id}/zones/{zoneId}")
+    @RequiresPerm("asset.project:update")
+    @Audited(module = "asset", action = "update_project_zone")
+    public ApiResponse<ProjectZone> updateProjectZone(@PathVariable Long id,
+            @PathVariable Long zoneId, @RequestBody ProjectZone zone) {
+        assertProject(id);
+        return ApiResponse.ok(assetService.updateProjectZone(id, zoneId, zone), TraceIdUtil.get());
+    }
+
+    /** 删除分区（项目列表展开行内维护；分区下有资产时返回 400 并提示数量）。 */
+    @DeleteMapping("/projects/{id}/zones/{zoneId}")
+    @RequiresPerm("asset.project:update")
+    @Audited(module = "asset", action = "delete_project_zone")
+    public ApiResponse<Void> deleteProjectZone(@PathVariable Long id, @PathVariable Long zoneId) {
+        assertProject(id);
+        assetService.deleteProjectZone(id, zoneId);
+        return ApiResponse.ok(null, TraceIdUtil.get());
+    }
+
     @PostMapping("/projects")
     @RequiresPerm("asset.project:create")
     @Audited(module = "asset", action = "create_project")
