@@ -53,9 +53,12 @@ class V47MigrationContractTest {
     @Test
     @DisplayName("菜单行按设计 §3.1 落种子：code / name / type / path / 排序 / 父目录")
     void seedsProjectZoneMenu() {
+        // 类型断言必须带引号（`'menu'`）：裸 `"menu"` 会被 `INSERT INTO menu`、`menu_type`、
+        // `menu_code` 一并满足，于是把第 3 个 SELECT 字面量改成 'dir' 测试依然全绿 ——
+        // 而 `@DisplayName` 声称它守住了「type」。这是本任务唯一一处真正会漏事的断言。
         assertThat(SQL)
                 .as("必须插入 asset.projectZone 菜单行，且路径与名称与设计一致")
-                .contains("'" + MENU_CODE + "'", "'项目分区管理'", "menu", "'" + MENU_PATH + "'");
+                .contains("'" + MENU_CODE + "'", "'项目分区管理'", "'menu'", "'" + MENU_PATH + "'");
         // 父目录由 code 解析，不能硬编码 parent_id（V45 的 id 在其它环境不保证一致）
         assertThat(SQL)
                 .as("父目录必须按 code 解析（d.code = 'asset'），不得硬编码 parent_id")
