@@ -88,6 +88,11 @@ Create `frontend/admin-web/src/lib/listQueryParams.ts`:
  *
  * <p>**只解释自己声明的键**：`filterKeys` 之外的 query 参数原样保留、不解释，避免外部
  * 深链参数被误当列表筛选拼进接口（设计 §8）。
+ *
+ * <p>**前缀采用驼峰拼接**（设计 §4 命名约定）：`prefix: 'asset'` 对应
+ * `assetPage` / `assetPageSize` / `assetKeyword` / `asset<筛选键>`（筛选键首字母同样大写），
+ * 而不是平铺的 `assetpage`。这样 `ProjectListPane` 的 `projectPage` /
+ * `projectKeyword` 与 `ZoneAssetPane` 的 `assetPage` 才与设计表一致。
  */
 
 /** 单个列表负责的参数集合（键名相对 `prefix`） */
@@ -127,6 +132,16 @@ export const findReservedFilterKeys = (filterKeys: string[]): string[] =>
   filterKeys.filter((key) => (RESERVED_LIST_KEYS as readonly string[]).includes(key));
 
 /**
+ * 把「本列表内的相对键」拼成 URL 键名（设计 §4）。
+ *
+ * <p>无前缀时原样（`page` / `status`）；有前缀时前缀 + 首字母大写（`assetPage`、
+ * `projectKeyword`）。前缀必须让两套列表在同一 URL 上互不覆盖，而驼峰命名与设计表
+ * 里登记的 `assetPage` / `projectPage` / `projectKeyword` 保持一致。
+ */
+const buildKey = (prefix: string, key: string): string =>
+  prefix ? `${prefix}${key.charAt(0).toUpperCase()}${key.slice(1)}` : key;
+
+/**
  * 正整数解析：缺失 / 非纯数字 / 非正数一律回落到 `fallback`。
  *
  * <p>用正则而不是 `Number.isFinite`：后者会把 `'1.5'` / `'1e3'` / `'0x10'` 都当成合法
@@ -148,15 +163,15 @@ export const readListQuery = (
 
   const filters: Record<string, string> = {};
   filterKeys.forEach((key) => {
-    const value = params.get(`${prefix}${key}`);
+    const value = params.get(buildKey(prefix, key));
     // 只收非空值：`?status=` 与「没有这个参数」等价
     if (value) filters[key] = value;
   });
 
   return {
-    page: readPositiveInt(params.get(`${prefix}page`), 1),
-    pageSize: readPositiveInt(params.get(`${prefix}pageSize`), defaultPageSize),
-    keyword: params.get(`${prefix}keyword`) ?? '',
+    page: readPositiveInt(params.get(buildKey(prefix, 'page')), 1),
+    pageSize: readPositiveInt(params.get(buildKey(prefix, 'pageSize')), defaultPageSize),
+    keyword: params.get(buildKey(prefix, 'keyword')) ?? '',
     filters,
   };
 };
@@ -183,17 +198,17 @@ export const applyListPatch = (
 
   /** 写一个键：空值删除，避免留下 `?keyword=` 这种噪声 */
   const write = (key: string, value: string | number | undefined) => {
-    const name = `${prefix}${key}`;
+    const name = buildKey(prefix, key);
     if (value == null || value === '') next.delete(name);
     else next.set(name, String(value));
   };
 
   if (patch.page !== undefined) {
-    if (patch.page === 1) next.delete(`${prefix}page`);
+    if (patch.page === 1) next.delete(buildKey(prefix, 'page'));
     else write('page', patch.page);
   }
   if (patch.pageSize !== undefined) {
-    if (patch.pageSize === defaultPageSize) next.delete(`${prefix}pageSize`);
+    if (patch.pageSize === defaultPageSize) next.delete(buildKey(prefix, 'pageSize'));
     else write('pageSize', patch.pageSize);
   }
   if (patch.keyword !== undefined) write('keyword', patch.keyword);
@@ -204,7 +219,7 @@ export const applyListPatch = (
   }
 
   // 显式给了 page 就以它为准；否则 resetPage 表示「回到第 1 页」= 删掉 page 参数
-  if (resetPage && patch.page === undefined) next.delete(`${prefix}page`);
+  if (resetPage && patch.page === undefined) next.delete(buildKey(prefix, 'page'));
 
   return next;
 };
