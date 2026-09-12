@@ -1,4 +1,5 @@
 import type { ResourceConfig } from '@/components/ResourcePage';
+import { ProjectZonesPanel } from '@/components/ProjectZonesPanel';
 import { ASSET_QUICK_ACTIONS } from '@/lib/assetQuickActions';
 import * as L from '@/lib/labels';
 
@@ -226,6 +227,17 @@ const common: Record<string, { value: string; label: string }[]> = {
   billStatus: Object.entries(L.BILL_STATUS).map(([value, label]) => ({ value, label })),
 };
 
+/**
+ * 项目列表展开行：分区就地维护（设计 §5.3）。
+ *
+ * <p>刻意定义在 `RESOURCES` 对象字面量**之外**：一是在配置里嵌 JSX 会让
+ * `scripts/check-perm-invariants.mjs` 的区间解析更容易被箭头函数体带偏，
+ * 二是具名函数在调试时能看到名字，而不是一个匿名箭头。
+ */
+const renderProjectZones = (row: Record<string, unknown>) => (
+  <ProjectZonesPanel projectId={Number(row.id)} />
+);
+
 export const RESOURCES: Record<string, ResourceConfig> = {
   projects: {
     title: '项目管理',
@@ -239,6 +251,8 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     // 详情走独立页面（行点击 / 卡片点击 / 「详情」按钮均进入），优先于默认抽屉详情
     detailLink: (id) => `/projects/${id}`,
     detailLinkLabel: '详情',
+    /** 列表模式下展开行显示该项目的分区，可就地增删改（卡片模式不支持展开） */
+    expandable: { render: renderProjectZones },
     columns: [
       { key: 'id', label: 'ID' },
       { key: 'name', label: '项目名称' },
