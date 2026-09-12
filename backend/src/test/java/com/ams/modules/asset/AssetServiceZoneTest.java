@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ams.common.exception.AppException;
+import com.ams.modules.asset.dto.ProjectSaveRequest;
 import com.ams.modules.asset.entity.Project;
 import com.ams.modules.asset.entity.ProjectZone;
 import com.ams.modules.asset.mapper.AssetMapper;
@@ -23,12 +25,15 @@ import com.ams.modules.org.mapper.CompanyMapper;
 import com.ams.modules.org.mapper.DepartmentMapper;
 import com.ams.modules.org.mapper.UserMapper;
 import com.ams.modules.org.service.CompanyTreeService;
+import com.ams.modules.record.service.RecordPresenceChecker;
 import com.ams.platform.security.RbacService;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,9 +45,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
  * <ol>
  *   <li>归属一律由路径参数决定，请求体里的 {@code id} / {@code projectId} 必须被忽略（防跨项目写入）；</li>
  *   <li>新增时排序缺省 = 当前最大排序 + 1（追加到末尾），而不是 0；</li>
- *   <li>删除挂资产的分区必须被拒 —— 这是与「两步走」整体保存刻意不同的一点，
- *       后者会把资产 {@code zone_id} 静默置空。</li>
+ *   <li>删除挂资产的分区必须被拒；有后续记录的分区同样被拒（两条理由分开报）。</li>
  * </ol>
+ *
+ * <p>删除语义（设计 §7.3）：`deleteProjectZone` 与 `replaceZones` 共用同一个可删性守卫，
+ * 且都得是**软删**（写 {@code deleted_at}）—— 硬删会让分区的后续记录变成悬空数据。
  */
 @ExtendWith(MockitoExtension.class)
 class AssetServiceZoneTest {
@@ -74,6 +81,8 @@ class AssetServiceZoneTest {
     private BillPaymentMapper billPaymentMapper;
     @Mock
     private AssetUnitService assetUnitService;
+    @Mock
+    private RecordPresenceChecker recordPresenceChecker;
 
     @InjectMocks
     private AssetService service;
@@ -124,7 +133,7 @@ class AssetServiceZoneTest {
         ProjectZone existing = zone(ZONE_ID, 2);
         existing.setCode("A");
         existing.setRemark("旧备注");
-        when(projectZoneMapper.selectById(ZONE_ID)).thenReturn(existing);
+        when(projectZoneMapper.selectActiveInProject(PROJECT_ID, ZONE_ID)).thenReturn(existing);
         when(assetMapper.selectMaps(any())).thenReturn(List.of());
         when(projectZoneMapper.updateById(any(ProjectZone.class))).thenReturn(1);
 
@@ -149,7 +158,7 @@ class AssetServiceZoneTest {
     void updateZoneKeepsSortWhenNull() {
         when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
         ProjectZone existing = zone(ZONE_ID, 3);
-        when(projectZoneMapper.selectById(ZONE_ID)).thenReturn(existing);
+        when(projectZoneMapper.selectActiveInProject(PROJECT_ID, ZONE_ID)).thenReturn(existing);
         when(assetMapper.selectMaps(any())).thenReturn(List.of());
         when(projectZoneMapper.updateById(any(ProjectZone.class))).thenReturn(1);
 
@@ -163,9 +172,8 @@ class AssetServiceZoneTest {
     @DisplayName("分区不属于该项目时拒绝（防跨项目写入）")
     void zoneOfAnotherProjectIsRejected() {
         when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
-        ProjectZone foreign = zone(ZONE_ID, 1);
-        foreign.setProjectId(999L);
-        when(projectZoneMapper.selectById(ZONE_ID)).thenReturn(foreign);
+        // 归属与存在性合并成一次 SQL：分区属于别的项目时查不到，所以不会再在 Java 侧比对 projectId
+        when(projectZoneMapper.selectActiveInProject(PROJECT_ID, ZONE_ID)).thenReturn(null);
 
         assertThatThrownBy(() -> service.deleteProjectZone(PROJECT_ID, ZONE_ID))
                 .isInstanceOf(AppException.class)
@@ -177,7 +185,7 @@ class AssetServiceZoneTest {
     @DisplayName("删除分区：分区下有资产时拒绝并提示数量，且不写库")
     void deleteZoneWithAssetsIsRejected() {
         when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
-        when(projectZoneMapper.selectById(ZONE_ID)).thenReturn(zone(ZONE_ID, 1));
+        when(projectZoneMapper.selectActiveInProject(PROJECT_ID, ZONE_ID)).thenReturn(zone(ZONE_ID, 1));
         when(assetMapper.selectCount(any())).thenReturn(3L);
 
         assertThatThrownBy(() -> service.deleteProjectZone(PROJECT_ID, ZONE_ID))
@@ -187,15 +195,90 @@ class AssetServiceZoneTest {
     }
 
     @Test
-    @DisplayName("删除分区：无资产时删除成功")
+    @DisplayName("删除分区：无资产无记录时软删（SET deleted_at = now()），不调用 deleteById")
     void deleteZoneWithoutAssetsSucceeds() {
         when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
-        when(projectZoneMapper.selectById(ZONE_ID)).thenReturn(zone(ZONE_ID, 1));
+        when(projectZoneMapper.selectActiveInProject(PROJECT_ID, ZONE_ID)).thenReturn(zone(ZONE_ID, 1));
         when(assetMapper.selectCount(any())).thenReturn(0L);
+        when(recordPresenceChecker.hasRecordsForZone(ZONE_ID)).thenReturn(false);
 
         service.deleteProjectZone(PROJECT_ID, ZONE_ID);
 
-        verify(projectZoneMapper).deleteById(ZONE_ID);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<LambdaUpdateWrapper<ProjectZone>> wrapper =
+                ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
+        verify(projectZoneMapper).update(isNull(), wrapper.capture());
+        assertThat(wrapper.getValue().getSqlSet()).contains("deleted_at = now()");
+        verify(projectZoneMapper, never()).deleteById(anyLong());
+    }
+
+    @Test
+    @DisplayName("编辑分区：已软删的分区视为不存在（防对已删行继续编辑）")
+    void updateZoneOnSoftDeletedZoneIsRejected() {
+        when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
+        when(projectZoneMapper.selectActiveInProject(PROJECT_ID, ZONE_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.updateProjectZone(PROJECT_ID, ZONE_ID, inputZone("A区")))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("分区不存在");
+        verify(projectZoneMapper, never()).updateById(any(ProjectZone.class));
+    }
+
+    @Test
+    @DisplayName("删除分区：有后续记录时拒绝，且提示「后续记录」而不是「资产」")
+    void deleteZoneWithRecordsIsRejected() {
+        when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
+        when(projectZoneMapper.selectActiveInProject(PROJECT_ID, ZONE_ID)).thenReturn(zone(ZONE_ID, 1));
+        when(assetMapper.selectCount(any())).thenReturn(0L);
+        when(recordPresenceChecker.hasRecordsForZone(ZONE_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteProjectZone(PROJECT_ID, ZONE_ID))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("后续记录");
+        verify(projectZoneMapper, never()).deleteById(anyLong());
+    }
+
+    @Test
+    @DisplayName("删除分区：无资产无记录时写 deleted_at 软删，不调用 deleteById")
+    void deleteZoneSoftDeletes() {
+        when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
+        when(projectZoneMapper.selectActiveInProject(PROJECT_ID, ZONE_ID)).thenReturn(zone(ZONE_ID, 1));
+        when(assetMapper.selectCount(any())).thenReturn(0L);
+        when(recordPresenceChecker.hasRecordsForZone(ZONE_ID)).thenReturn(false);
+
+        service.deleteProjectZone(PROJECT_ID, ZONE_ID);
+
+        verify(projectZoneMapper, never()).deleteById(anyLong());
+        verify(projectZoneMapper).update(isNull(), any());
+    }
+
+    @Test
+    @DisplayName("项目整体保存：移除「有资产」的分区时整单拒绝，不再静默置空资产归属")
+    void replaceZonesRejectsRemovalOfZoneWithAssets() {
+        when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
+        when(projectZoneMapper.selectList(any())).thenReturn(List.of(zone(ZONE_ID, 1)));
+        when(assetMapper.selectCount(any())).thenReturn(2L);
+        when(recordPresenceChecker.hasRecordsForZone(ZONE_ID)).thenReturn(false);
+
+        // 走 PUT /projects/{id} 的公开入口（replaceZones 是私有辅助，测试不绕开入口）
+        assertThatThrownBy(() -> service.updateProject(PROJECT_ID, zonesRemovedRequest()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("2 项资产");
+        verify(projectZoneMapper, never()).deleteBatchIds(any());
+    }
+
+    @Test
+    @DisplayName("项目整体保存：移除「有后续记录」的分区时整单拒绝")
+    void replaceZonesRejectsRemovalOfZoneWithRecords() {
+        when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
+        when(projectZoneMapper.selectList(any())).thenReturn(List.of(zone(ZONE_ID, 1)));
+        when(assetMapper.selectCount(any())).thenReturn(0L);
+        when(recordPresenceChecker.hasRecordsForZone(ZONE_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateProject(PROJECT_ID, zonesRemovedRequest()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("后续记录");
+        verify(projectZoneMapper, never()).deleteBatchIds(any());
     }
 
     private static Project project(long id) {
@@ -211,6 +294,14 @@ class AssetServiceZoneTest {
         z.setName("分区" + id);
         z.setSort(sort);
         return z;
+    }
+
+    /** 项目整体保存请求：不带任何分区 = 移除现有全部分区。 */
+    private static ProjectSaveRequest zonesRemovedRequest() {
+        ProjectSaveRequest request = new ProjectSaveRequest();
+        request.setName("测试项目");
+        request.setCompanyId(1L);
+        return request;
     }
 
     /** 请求体形态：刻意带上错误的 projectId，用于证明归属只认路径参数。 */

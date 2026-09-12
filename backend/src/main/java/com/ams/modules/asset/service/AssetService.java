@@ -24,6 +24,7 @@ import com.ams.modules.org.mapper.CompanyMapper;
 import com.ams.modules.org.mapper.DepartmentMapper;
 import com.ams.modules.org.mapper.UserMapper;
 import com.ams.modules.org.service.CompanyTreeService;
+import com.ams.modules.record.service.RecordPresenceChecker;
 import com.ams.platform.security.CompanyScope;
 import com.ams.platform.security.LoginUser;
 import com.ams.platform.security.RbacService;
@@ -31,7 +32,6 @@ import com.ams.platform.security.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -72,6 +72,8 @@ public class AssetService {
     private final BillPaymentMapper billPaymentMapper;
     /** 新增资产后补齐计租单元（INV-2）；租控状态由占用派生，本类不直接写状态列。 */
     private final AssetUnitService assetUnitService;
+    /** 分区删除前的水位检查：有后续记录的分区不许删（设计 §7.3）。 */
+    private final RecordPresenceChecker recordPresenceChecker;
 
     public AssetService(
             ProjectMapper projectMapper,
@@ -85,7 +87,8 @@ public class AssetService {
             RbacService rbacService,
             BillMapper billMapper,
             BillPaymentMapper billPaymentMapper,
-            AssetUnitService assetUnitService) {
+            AssetUnitService assetUnitService,
+            RecordPresenceChecker recordPresenceChecker) {
         this.projectMapper = projectMapper;
         this.projectZoneMapper = projectZoneMapper;
         this.assetMapper = assetMapper;
@@ -98,6 +101,7 @@ public class AssetService {
         this.billMapper = billMapper;
         this.billPaymentMapper = billPaymentMapper;
         this.assetUnitService = assetUnitService;
+        this.recordPresenceChecker = recordPresenceChecker;
     }
 
     // ---- 项目 ----
@@ -249,15 +253,14 @@ public class AssetService {
     /**
      * 项目分区列表：按排序号升序，并汇总每个分区的资产面积/资产数。
      *
-     * <p>分区面积不接受人工维护，统一取该分区下资产面积合计。
+     * <p>分区面积不接受人工维护，统一取该分区下资产面积合计。已软删的分区不再返回。
      */
     public List<ProjectZone> listProjectZones(Long projectId) {
         getProject(projectId);
-        List<ProjectZone> zones = projectZoneMapper.selectList(
-                new LambdaQueryWrapper<ProjectZone>()
-                        .eq(ProjectZone::getProjectId, projectId)
-                        .orderByAsc(ProjectZone::getSort)
-                        .orderByAsc(ProjectZone::getId));
+        List<ProjectZone> zones = projectZoneMapper.selectList(activeZoneQuery()
+                .eq(ProjectZone::getProjectId, projectId)
+                .orderByAsc(ProjectZone::getSort)
+                .orderByAsc(ProjectZone::getId));
         fillZoneAssetStats(zones);
         return zones;
     }
@@ -362,13 +365,18 @@ public class AssetService {
      *
      * <p>刻意不做「先删后插」—— 分区 id 若每次保存都变化，资产的 zone_id 会立即失效；
      * 这里保留既有 id 仅更新字段，未提交的分区才删除，并把其下资产的归属置空。
+     *
+     * <p>移除分区前先过 {@link #assertZoneRemovable}：有资产或有后续记录都**整单拒绝**，
+     * 由使用者先显式处理。旧实现直接 {@code deleteBatchIds} 并把资产 {@code zone_id} 静默置空，
+     * 会无声丢失资产归属，也会让分区的后续记录变成悬空数据（设计 §7.3）。
+     * 只有确认分区可删后，才允许置空资产归属并软删该分区。
      */
     private void replaceZones(Long projectId, List<ProjectZone> zones) {
-        List<ProjectZone> existing = projectZoneMapper.selectList(
-                new LambdaQueryWrapper<ProjectZone>().eq(ProjectZone::getProjectId, projectId));
+        List<ProjectZone> existing = projectZoneMapper.selectList(activeZoneQuery()
+                .eq(ProjectZone::getProjectId, projectId));
         Map<Long, ProjectZone> existingById = existing.stream()
                 .collect(Collectors.toMap(ProjectZone::getId, zone -> zone));
-        Set<Long> kept = new LinkedHashSet<>();
+        Set<Long> keptIds = new LinkedHashSet<>();
         int index = 0;
         for (ProjectZone zone : zones == null ? List.<ProjectZone>of() : zones) {
             if (zone == null || zone.getName() == null || zone.getName().isBlank()) {
@@ -380,26 +388,35 @@ public class AssetService {
             Long zoneId = zone.getId();
             if (zoneId != null && existingById.containsKey(zoneId)) {
                 projectZoneMapper.updateById(zone);
-                kept.add(zoneId);
+                keptIds.add(zoneId);
             } else {
                 zone.setId(null);
                 projectZoneMapper.insert(zone);
-                kept.add(zone.getId());
+                keptIds.add(zone.getId());
             }
             index++;
         }
-        List<Long> removed = existing.stream()
+        // 移除分区前先过可删性守卫：有资产或有后续记录都整单拒绝（异常 → 整个事务回滚）。
+        // 与 deleteProjectZone 共用同一个 assertZoneRemovable，两条删除路径口径一致。
+        List<Long> removedIds = existing.stream()
                 .map(ProjectZone::getId)
-                .filter(zoneId -> !kept.contains(zoneId))
+                .filter(id -> !keptIds.contains(id))
                 .toList();
-        if (removed.isEmpty()) {
-            return;
+        for (ProjectZone zone : existing) {
+            if (removedIds.contains(zone.getId())) {
+                assertZoneRemovable(zone);
+            }
         }
-        projectZoneMapper.deleteBatchIds(removed);
-        // 分区已删除，其下资产的归属同步置空，避免遗留悬空 zone_id
-        assetMapper.update(null, new UpdateWrapper<Asset>()
-                .setSql("zone_id = NULL")
-                .in("zone_id", removed));
+        if (!removedIds.isEmpty()) {
+            // 分区可删：先置空其下资产的归属，再软删分区（避免遗留悬空 zone_id）
+            assetMapper.update(null, new LambdaUpdateWrapper<Asset>()
+                    .set(Asset::getZoneId, null)
+                    .in(Asset::getZoneId, removedIds));
+            projectZoneMapper.update(null, new LambdaUpdateWrapper<ProjectZone>()
+                    .setSql("deleted_at = now()")
+                    .in(ProjectZone::getId, removedIds)
+                    .apply("deleted_at IS NULL"));
+        }
     }
 
     // ---- 项目分区（项目列表展开行内的就地维护） ----
@@ -435,7 +452,7 @@ public class AssetService {
      */
     @Transactional
     public ProjectZone updateProjectZone(Long projectId, Long zoneId, ProjectZone zone) {
-        getProject(projectId);
+        // 存在性与归属校验都在 requireProjectZone 里（含 getProject），不重复查一次
         ProjectZone existing = requireProjectZone(projectId, zoneId);
         existing.setName(requireZoneName(zone));
         existing.setCode(zone == null ? null : zone.getCode());
@@ -451,29 +468,51 @@ public class AssetService {
     }
 
     /**
-     * 删除分区：分区下有资产时**拒绝**，提示资产数量。
+     * 删除分区（设计 §7.3）：有资产或有后续记录一律拒绝，否则**软删**。
      *
-     * <p>与 {@link #replaceZones(Long, List)} 刻意不同：后者会把被删分区的资产
-     * {@code zone_id} 静默置空，那会让资产归属在无感知的情况下丢失。就地删除改为显式拒绝，
-     * 由使用者先把资产调整出去。
+     * <p>两条拒绝理由分开报，是因为使用者的处理动作不同 —— 有资产要去改资产归属，
+     * 有记录要去先处理记录。合并成一句「无法删除」会让使用者无从下手。
+     *
+     * <p>软删用 {@code setSql} 而不是实体上的属性 setter：{@code ProjectZone} 实体上**没有**
+     * {@code deletedAt} 字段（它是分区接口的请求体类型，加了客户端就能自己软删分区），
+     * 所以只能按列名写。
      */
     @Transactional
     public void deleteProjectZone(Long projectId, Long zoneId) {
-        getProject(projectId);
-        requireProjectZone(projectId, zoneId);
-        Long assetCount = assetMapper.selectCount(
-                new LambdaQueryWrapper<Asset>().eq(Asset::getZoneId, zoneId));
-        if (assetCount != null && assetCount > 0) {
-            throw new AppException(ErrorCode.BAD_REQUEST,
-                    "该分区下有 " + assetCount + " 项资产，无法删除");
-        }
-        projectZoneMapper.deleteById(zoneId);
+        ProjectZone zone = requireProjectZone(projectId, zoneId);
+        assertZoneRemovable(zone);
+        projectZoneMapper.update(null, new LambdaUpdateWrapper<ProjectZone>()
+                .setSql("deleted_at = now()")
+                .eq(ProjectZone::getId, zoneId)
+                .apply("deleted_at IS NULL"));
     }
 
-    /** 下一个排序号：当前最大排序 + 1；无分区（或排序全为空）时从 0 开始。 */
+    /**
+     * 分区可删性的唯一判定点：两条删除路径（就地删除 / 项目整体保存）都调它，保证口径一致。
+     *
+     * <p>两个条件都算完再抛，报错优先级固定为「资产 → 记录」：先让使用者知道有资产要调整归属，
+     * 修好之后再暴露记录问题。这样报什么理由只由数据决定，不受查询顺序影响。
+     *
+     * <p>软删过滤一律按列名写：{@code ProjectZone} 实体不映射 {@code deleted_at}。
+     */
+    private void assertZoneRemovable(ProjectZone zone) {
+        Long assetCount = assetMapper.selectCount(new LambdaQueryWrapper<Asset>()
+                .eq(Asset::getZoneId, zone.getId()));
+        boolean hasRecords = recordPresenceChecker.hasRecordsForZone(zone.getId());
+        if (assetCount != null && assetCount > 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "分区「" + zone.getName() + "」下有 " + assetCount + " 项资产，无法删除");
+        }
+        if (hasRecords) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "分区「" + zone.getName() + "」已有后续记录，请先处理后再删除");
+        }
+    }
+
+    /** 下一个排序号：未软删分区的最大排序 + 1；无分区（或排序全为空）时从 0 开始。 */
     private int nextZoneSort(Long projectId) {
-        List<ProjectZone> zones = projectZoneMapper.selectList(
-                new LambdaQueryWrapper<ProjectZone>().eq(ProjectZone::getProjectId, projectId));
+        List<ProjectZone> zones = projectZoneMapper.selectList(activeZoneQuery()
+                .eq(ProjectZone::getProjectId, projectId));
         return zones.stream()
                 .map(ProjectZone::getSort)
                 .filter(Objects::nonNull)
@@ -482,10 +521,22 @@ public class AssetService {
                 .orElse(0);
     }
 
-    /** 分区必须存在且属于该项目；否则按参数错误拒绝（不依赖前端传参正确性）。 */
+    /** 未软删的分区查询条件。{@code ProjectZone} 不映射 {@code deleted_at}，只能按列名过滤。 */
+    private LambdaQueryWrapper<ProjectZone> activeZoneQuery() {
+        return new LambdaQueryWrapper<ProjectZone>().apply("deleted_at IS NULL");
+    }
+
+    /**
+     * 取「属于该项目且未软删」的分区，否则抛「分区不存在」。
+     *
+     * <p>归属与存在性合并成一次查询：它同时承担防跨项目写入的安全职责，
+     * 拆成两步容易出现「判定的行」与「取数的行」不一致。已软删的分区同样视为不存在，
+     * 否则软删后仍能被编辑 / 再次删除。
+     */
     private ProjectZone requireProjectZone(Long projectId, Long zoneId) {
-        ProjectZone zone = projectZoneMapper.selectById(zoneId);
-        if (zone == null || !projectId.equals(zone.getProjectId())) {
+        getProject(projectId);
+        ProjectZone zone = projectZoneMapper.selectActiveInProject(projectId, zoneId);
+        if (zone == null) {
             throw new AppException(ErrorCode.BAD_REQUEST, "分区不存在");
         }
         return zone;
@@ -571,7 +622,8 @@ public class AssetService {
             totalFloors += floors;
         }
 
-        List<ProjectZone> zones = projectZoneMapper.selectList(new LambdaQueryWrapper<ProjectZone>()
+        // 与分区列表接口同口径：已软删的分区不再出现在项目详情页的分区汇总里
+        List<ProjectZone> zones = projectZoneMapper.selectList(activeZoneQuery()
                 .eq(ProjectZone::getProjectId, projectId)
                 .orderByAsc(ProjectZone::getSort)
                 .orderByAsc(ProjectZone::getId));
@@ -956,7 +1008,12 @@ public class AssetService {
         return asset;
     }
 
-    /** 校验分区归属：分区必须存在且属于该资产所在项目。 */
+    /**
+     * 校验分区归属：分区必须**存在且未软删**，并属于该资产所在项目。
+     *
+     * <p>用 {@code selectActiveById} 而不是 {@code selectById}：分区软删后资产不能再指向它，
+     * 否则会留下指向已删分区的 {@code zone_id}（设计 §7.3 第 4 条）。
+     */
     private void validateZone(Long projectId, Long zoneId) {
         if (zoneId == null) {
             return;
@@ -964,7 +1021,7 @@ public class AssetService {
         if (projectId == null) {
             throw new AppException(ErrorCode.BAD_REQUEST, "请先选择所属项目再选择分区");
         }
-        ProjectZone zone = projectZoneMapper.selectById(zoneId);
+        ProjectZone zone = projectZoneMapper.selectActiveById(zoneId);
         if (zone == null || !projectId.equals(zone.getProjectId())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "所选分区不属于该项目");
         }
