@@ -103,6 +103,8 @@ export function useBackNavigate(fallback) {
 
 - **`ResourcePage` 的筛选键用裸名**（不加前缀）：URL 可读、与 API 参数同形，例如 `/assets?page=2&status=leased&keyword=甲`。每个 `ResourcePage` 独占一条路由、无同级参数，不存在冲突；代价是筛选配置里不能出现保留字键名（见 §8 的守卫）。
 - **嵌套在同一 URL 的列表加前缀**：`ProjectZonesPage` 一页里同时有「左栏项目列表」与「右下资产表」两套分页，且左栏还有关键字 —— 不加前缀必然互相覆盖。
+  **前缀按驼峰拼接**：`prefix: 'asset'` 产出 `assetPage` / `assetPageSize` / `assetKeyword` / `asset<筛选键>`（筛选键首字母同样大写），
+  而不是平铺的 `assetpage`。实现见 `listQueryParams.ts` 的 `buildKey`。
 - **非列表的筛选量（项目详情/地图/日历）用语义化短名**，各自独占路由，同样不冲突。
 
 ---
@@ -137,27 +139,31 @@ useListQuery({ prefix = '', defaultPageSize = 10, filterKeys = [] }):
     if !raw || !/^\d+$/.test(raw) || Number(raw) <= 0 → fallback
     else Number(raw)
 
-  page     = readInt(`${prefix}page`, 1)         // 正则而非 Number.isFinite：拒绝 1.5 / 1e3 / 0x10
-  pageSize = readInt(`${prefix}pageSize`, defaultPageSize)
-  keyword  = searchParams.get(`${prefix}keyword`) ?? ''
+  // 键名拼接：无前缀原样（page / status），有前缀驼峰（assetPage / asset<筛选键>）
+  key(k) = prefix ? prefix + k[0].toUpperCase() + k.slice(1) : k
+
+  page     = readInt(key('page'), 1)             // 正则而非 Number.isFinite：拒绝 1.5 / 1e3 / 0x10
+  pageSize = readInt(key('pageSize'), defaultPageSize)
+  keyword  = searchParams.get(key('keyword')) ?? ''
 
   // 只解释 filterKeys 列出的键；其余 URL 参数原样保留、不解释（见 §8）
   filters = useMemo(
-    Object.fromEntries(filterKeys.map(k => [k, searchParams.get(`${prefix}${k}`) ?? '']).filter(([,v]) => v !== '')),
+    Object.fromEntries(filterKeys.map(k => [k, searchParams.get(key(k)) ?? '']).filter(([,v]) => v !== '')),
     [searchParams.toString(), prefix, filterKeys.join(',')]
   )
 
   // 底层写入口：一次内聚写入，其余参数原样保留
-  //   partial.filters 里的每个键 k → 写 `${prefix}${k}`（值空则删除）
-  //   partial.page / pageSize / keyword → 写 `${prefix}page` / `${prefix}pageSize` / `${prefix}keyword`
+  //   partial.filters 里的每个键 k → 写 key(k)（值空则删除）
+  //   partial.page / pageSize / keyword → 写 key('page') / key('pageSize') / key('keyword')
+  //   缺省值不写：page === 1、pageSize === defaultPageSize、空串 → 删除对应键
   patch({ page, pageSize, keyword, filters }, { resetPage = false } = {}):
     setSearchParams(prev =>
       next = new URLSearchParams(prev)
       writes = { ...(page != null && { page }), ...(pageSize != null && { pageSize }),
                  ...(keyword != null && { keyword }), ...(filters ?? {}) }
       for [k, v] of writes:
-        有值 → next.set(`${prefix}${k}`, String(v))；空串/undefined → next.delete(`${prefix}${k}`)
-      if resetPage → next.delete(`${prefix}page`)
+        有值 → next.set(key(k), String(v))；空串/undefined → next.delete(key(k))
+      if resetPage → next.delete(key('page'))
       return next
     , { replace: true })
 
