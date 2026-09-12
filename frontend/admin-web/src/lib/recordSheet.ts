@@ -167,6 +167,22 @@ const normalizeSheet = (raw: RawSheet | undefined): RecordSheet => ({
 export const loadRecordSheet = (path: string): Promise<RecordSheet> =>
   api.get<RawSheet>(path).then(normalizeSheet);
 
+/**
+ * 资产处置单列表（只读，含附件回显）。
+ *
+ * <p>走独立的 `GET /assets/{id}/disposals`，不参与 record-sheet 读写。
+ * **必须经 `toAttachmentValues` 归一**：服务端回显的是 `fileName`/`url`，
+ * 而组件值用的是 `name` —— 直接用会让附件名渲染成 `undefined`、下载链接也拼不出来。
+ */
+export const loadAssetDisposals = (assetId: number): Promise<DisposalOrderView[]> =>
+  api
+    .get<(Omit<DisposalOrderView, 'attachments'> & { attachments?: RecordAttachment[] })[]>(
+      `/assets/${assetId}/disposals`,
+    )
+    .then((rows) =>
+      (rows ?? []).map((row) => ({ ...row, attachments: toAttachmentValues(row.attachments) })),
+    );
+
 /** 全量提交：未出现的记录与附件由服务端软删，因此必须传完整列表。 */
 export const saveRecordSheet = (path: string, sheet: RecordSheetPayload): Promise<RecordSheet> =>
   api
