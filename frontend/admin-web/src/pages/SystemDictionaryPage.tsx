@@ -26,6 +26,7 @@ import {
 import { api } from '@/lib/api';
 import { confirmDelete } from '@/lib/confirm';
 import { TableActions } from '@/components/TableActions';
+import { usePermByPath } from '@/lib/perm';
 
 // ============================================================================
 // 系统字典：左侧模块 → 右侧字典 Tab → 字典项，支持对单个字典单独新增字典项
@@ -107,6 +108,8 @@ const EDITOR_TITLE: Record<EditorKind, { create: string; edit: string }> = {
 };
 
 export function SystemDictionaryPage() {
+  // 路由 /system/dict 在 PATH_TO_CODE 镜像里，故按当前路由派生判定，无需写死 code
+  const canDo = usePermByPath();
   const [tree, setTree] = useState<SysDictModule[]>([]);
   const [activeModuleId, setActiveModuleId] = useState<number | null>(null);
   const [activeTypeId, setActiveTypeId] = useState<number | null>(null);
@@ -405,6 +408,7 @@ export function SystemDictionaryPage() {
               key: 'edit',
               label: '编辑',
               icon: <EditOutlined />,
+              perm: 'system.dict:update',
               onClick: () => openEditor('item', row),
             },
             {
@@ -412,6 +416,7 @@ export function SystemDictionaryPage() {
               label: '删除',
               icon: <DeleteOutlined />,
               danger: true,
+              perm: 'system.dict:delete',
               onClick: () => handleDeleteItem(row),
             },
           ]}
@@ -448,9 +453,11 @@ export function SystemDictionaryPage() {
           <Button icon={<ReloadOutlined />} onClick={() => void loadTree()} loading={loading}>
             刷新
           </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor('module')}>
-            新增模块
-          </Button>
+          {canDo('create') && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor('module')}>
+              新增模块
+            </Button>
+          )}
         </div>
       </div>
 
@@ -507,25 +514,31 @@ export function SystemDictionaryPage() {
                   </div>
                 </div>
                 <Space wrap size={[8, 8]}>
-                  <Button size="small" icon={<EditOutlined />} onClick={() => openEditor('module', activeModule)}>
-                    编辑模块
-                  </Button>
-                  <Button
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleDeleteModule(activeModule)}
-                  >
-                    删除模块
-                  </Button>
-                  <Button
-                    size="small"
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => openEditor('type')}
-                  >
-                    新增字典
-                  </Button>
+                  {canDo('update') && (
+                    <Button size="small" icon={<EditOutlined />} onClick={() => openEditor('module', activeModule)}>
+                      编辑模块
+                    </Button>
+                  )}
+                  {canDo('delete') && (
+                    <Button
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleDeleteModule(activeModule)}
+                    >
+                      删除模块
+                    </Button>
+                  )}
+                  {canDo('create') && (
+                    <Button
+                      size="small"
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => openEditor('type')}
+                    >
+                      新增字典
+                    </Button>
+                  )}
                 </Space>
               </div>
 
@@ -559,31 +572,37 @@ export function SystemDictionaryPage() {
                           )}
                         </div>
                         <Space wrap size={[8, 8]}>
-                          <Tooltip title="编辑当前字典">
+                          {canDo('update') && (
+                            <Tooltip title="编辑当前字典">
+                              <Button
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={() => openEditor('type', activeType)}
+                              >
+                                编辑字典
+                              </Button>
+                            </Tooltip>
+                          )}
+                          {canDo('delete') && (
                             <Button
                               size="small"
-                              icon={<EditOutlined />}
-                              onClick={() => openEditor('type', activeType)}
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => handleDeleteType(activeType)}
                             >
-                              编辑字典
+                              删除字典
                             </Button>
-                          </Tooltip>
-                          <Button
-                            size="small"
-                            danger
-                            icon={<DeleteOutlined />}
-                            onClick={() => handleDeleteType(activeType)}
-                          >
-                            删除字典
-                          </Button>
-                          <Button
-                            size="small"
-                            type="primary"
-                            icon={<PlusOutlined />}
-                            onClick={() => openEditor('item')}
-                          >
-                            新增字典项
-                          </Button>
+                          )}
+                          {canDo('create') && (
+                            <Button
+                              size="small"
+                              type="primary"
+                              icon={<PlusOutlined />}
+                              onClick={() => openEditor('item')}
+                            >
+                              新增字典项
+                            </Button>
+                          )}
                         </Space>
                       </div>
 

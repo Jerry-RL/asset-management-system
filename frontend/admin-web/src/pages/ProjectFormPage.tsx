@@ -41,6 +41,7 @@ import {
   type RegionOption,
 } from '@/lib/regions';
 import { TableActions } from '@/components/TableActions';
+import { PermissionGuard } from '@/lib/perm';
 
 // ============================================================================
 // 项目新增/编辑：分两步走
@@ -616,14 +617,19 @@ export function ProjectFormPage() {
             下一步
           </Button>
         ) : (
-          <Button
-            type="primary"
-            icon={<SaveOutlined />}
-            loading={submitting}
-            onClick={() => void handleSubmit()}
-          >
-            {isEdit ? '保存' : '提交'}
-          </Button>
+          // 提交按钮按模式判定：本页承载新增与编辑两条路径（/projects/create、/projects/:id/edit），
+          // 且两个路由都是钻取路由（不在 PATH_TO_CODE 镜像里），故按 isEdit 显式取码。
+          // 无权时隐藏提交、保留「取消」，避免用户填完一整页才在最后一步吃 403。
+          <PermissionGuard perm={isEdit ? 'asset.project:update' : 'asset.project:create'}>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              loading={submitting}
+              onClick={() => void handleSubmit()}
+            >
+              {isEdit ? '保存' : '提交'}
+            </Button>
+          </PermissionGuard>
         )}
       </div>
     </div>

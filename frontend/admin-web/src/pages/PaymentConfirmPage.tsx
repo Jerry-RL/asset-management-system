@@ -113,6 +113,9 @@ export function PaymentConfirmPage() {
                       key: 'confirm',
                       label: '确认到账',
                       icon: <CheckOutlined />,
+                      // 判定用**接口**的码（finance.payment），不是本页路由码
+                      // （finance.paymentConfirm）—— 后端拦的是 POST /payments/{id}/confirm
+                      perm: 'finance.payment:update',
                       onClick: () => handleConfirm(row.id),
                     },
                   ]}

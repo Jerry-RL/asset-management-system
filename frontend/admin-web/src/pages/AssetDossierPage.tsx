@@ -607,6 +607,10 @@ export function AssetDossierPage() {
                                 key: 'view',
                                 label: '查看',
                                 icon: <EyeOutlined />,
+                                // 该动作会请求 GET /contracts/{id}（受 contract.ledger:view 校验），
+                                // 无权时点开必然 403，故直接隐藏；本页路由是钻取路由，
+                                // 不在 PATH_TO_CODE 镜像里，只能写全码
+                                perm: 'contract.ledger:view',
                                 onClick: () => void handleOpenContract(row),
                               },
                             ]}
