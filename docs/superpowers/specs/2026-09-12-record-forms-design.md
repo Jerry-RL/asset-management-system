@@ -332,9 +332,12 @@ modules/record/
 
 - 全部写接口加 `@Audited`，模块名 `record` / `disposal`。
 - **对象级数据范围**（对齐权限设计 §6.1 第 1/3 条）：
-  1. 每个端点先解析 `ownerType + ownerId` → 归属公司，再 `rbacService.assertCompanyAccess(...)`。
-  2. `OwnershipResolver` 新增 `ofZone(Long zoneId)`：`zone → project → company_id`；推导不到时返回 `null`，由 `assertCompanyAccess` 对受限账号按拒绝处理。
+  1. 每个端点先解析 `ownerType + ownerId` → 归属公司，再校验调用者是否有权访问该公司。
+  2. `OwnershipResolver` 新增 `ofZone(Long zoneId)`：`zone → project → company_id`；推导不到时返回 `null`，对受限账号按拒绝处理。
   3. 子实体（附件、遗留问题）必须先回溯到宿主主体再断言，**不得**用请求体里的公司做校验。
+  4. **宿主必须未软删**：三种主体统一按「未软删才算存在」判定（资产 / 项目 / 分区各自显式过滤 `deleted_at IS NULL`）。已删除的主体的 record-sheet 视为不存在。
+  5. **越权一律收敛为 404，不返回 403**。受限账号访问范围外宿主时，响应与「宿主不存在」**完全一致**（同状态码、同文案），避免用 `403` / `404` 之差把宿主 id 的存在性当探针探测。代价是这里不再有「越权」语义上的区分，排障要看服务端日志与审计。
+     - 注：这与「无权限（菜单 / 动作）→ 403」是两回事。`@RequiresPerm` 拦下的是功能权限，仍返回 403；本条规定的是**对象级数据范围**拦截。
 - 处置的**职责分离**：`approve` 用 `operation.disposal:approve`，与 `asset.ledger:update` 解耦。前端按 `can('operation.disposal','approve')` 显隐审批按钮，避免「能编辑资产就能自提自批」。
 - 新接口使用的是既有菜单码 + 既有动作词表（`view/create/update/delete/approve`），**无需新增菜单**；但需要按权限设计 §7 的「动作级回填」把对应动作授予相关角色，否则注解一生效全部 403。
 
@@ -465,7 +468,7 @@ modules/record/
 5. 来源明细为 1:1：重复保存不产生第二行（唯一索引生效）。
 6. 遗留问题随接收信息保存/删除同步；`receive_id` 由服务端按所属接收记录赋值，客户端传入被忽略。
 7. 两条删除路径一致：有**资产**或**后续记录**的分区，无论走 `DELETE /zones/{id}` 还是走项目 `PUT` 的移除，都被拒绝并给出「哪个分区、什么原因」；不再出现项目 PUT 静默置空资产 `zone_id` 的情形；无资产无记录的分区删除为软删，`deleted_at` 落值且分区列表与资产表单的分区下拉中都不再出现。
-8. 越权访问：用 A 公司账号访问 B 公司的资产/项目/分区 record-sheet，全部 403（含仅凭 id 直取的场景）。
+8. 越权访问不泄露存在性：用 A 公司账号访问 B 公司的资产/项目/分区 record-sheet（含仅凭 id 直取的场景），响应与「该宿主不存在」**完全一致**（同 404 状态码、同文案）；与「无功能权限 → 403」区分开。
 9. 所有新写接口在 `operation_log` / 审计中留有 `@Audited` 记录。
 10. record-sheet 的 PUT 是原子的：请求体中间某条记录非法（如 issue 描述超长）时，**整单不落库**，不出现半成品。
 

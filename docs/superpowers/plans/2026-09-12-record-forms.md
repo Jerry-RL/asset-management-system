@@ -19,10 +19,13 @@
 - 处置流转权限码逐字为 `operation.disposal:create` / `operation.disposal:update` / `operation.disposal:approve`。
 - 审计：所有新写接口一律 `@Audited(module = "record", action = "...")`；处置流转用 `module = "disposal"`。
 - 对象级数据范围：**每个** record-sheet 端点先解析 `ownerType + ownerId` → 归属公司 → `rbacService.assertCompanyAccess(...)`，禁止用请求体里的公司字段做校验。
-- **软删口径**：所有记录表 / 附件表 / 分区一律只写 `deleted_at`，**不得调用 `deleteById` / `deleteBatchIds`**；所有查询一律显式 `.isNull("deleted_at")`。
-  - 例外：`ProjectZone` 实体**不新增** `deletedAt` 字段（它是 `POST/PUT /projects/{id}/zones` 的请求体类型，新增字段会让客户端能用 `deletedAt` 软删分区）。分区用 `ProjectZoneMapper` 上的两个 `@Select` 方法做有效性判定，列表用 `.isNull("deleted_at")` 过滤。
+- **软删口径**：所有记录表 / 附件表 / 分区一律只写 `deleted_at`，**不得调用 `deleteById` / `deleteBatchIds`**；所有查询一律显式过滤 `deleted_at IS NULL`。写法有两条硬规则（写错会编译不过）：
+  - **过滤**：一律用 `.apply("deleted_at IS NULL")`。**不要**写 `.isNull("deleted_at")` —— `LambdaQueryWrapper` / `LambdaUpdateWrapper` 的 `isNull` 参数类型是 `SFunction`，传字符串编译不过。
+  - **写入软删**：一律用 `.setSql("deleted_at = now()")`。
+  - 例外的例外：`ProjectZoneMapper.selectActiveById` / `selectActiveInProject` 两个 `@Select` 里直接写 `deleted_at IS NULL`（Task 5 已建）。
+  - `ProjectZone` 实体**不新增** `deletedAt` 字段（它是 `POST/PUT /projects/{id}/zones` 的请求体类型，新增字段会让客户端能用 `deletedAt` 软删分区），因此分区**只能**按列名写；`Asset` / `Project` 同理（实体上也没有这个字段）。五个记录实体与 `BizAttachment` 虽有 `deletedAt` 字段，但为避免两套写法混用，本计划统一用上面的 `.apply(...)`。
   - `project_zone.deleted_at` 列**已存在**（`V24`），无需迁移。
-- 错误码：参数 / 业务规则错误用 `ErrorCode.BAD_REQUEST`；宿主对象不存在用 `ErrorCode.NOT_FOUND`。
+- 错误码：参数 / 业务规则错误用 `ErrorCode.BAD_REQUEST`；宿主对象不存在**或对象级越权**一律用 `ErrorCode.NOT_FOUND`（两者状态码与文案必须完全一致，不泄露宿主存在性；功能权限不足仍返回 403，由 `@RequiresPerm` 负责）。宿主一律按「未软删才算存在」判定。
 - **不新增菜单码**：`asset.ledger` / `asset.project` / `operation.disposal` 均已在 `V45` 种子中。`PermissionRegistry` 启动时会校验 `@RequiresPerm` 引用的菜单码存在于 `menu` 表，引用不存在的码会让应用启动失败。
 - 权限守卫脚本 `scripts/check-perm-invariants.mjs` 的两条硬约束，本计划全程不得违反：
   1. 前端 `perm:` / `perm="..."` 声明的码必须已存在于后端 `@RequiresPerm` 集合（**先加后端注解，再加前端声明**）；
@@ -437,7 +440,7 @@ import lombok.EqualsAndHashCode;
  * 后者是「上传来源」。两者都不为空，不要合并。
  *
  * <p>软删只写 {@link #deletedAt}：全局 {@code logic-delete-field: deleted} 与实际列
- * {@code deleted_at} 不一致，逻辑删除不会自动生效，查询必须显式 {@code isNull("deleted_at")}。
+ * {@code deleted_at} 不一致，逻辑删除不会自动生效，查询必须显式过滤 {@code deleted_at IS NULL}。
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -551,7 +554,7 @@ import lombok.EqualsAndHashCode;
  * 来源明细（{@code biz_source_info}）—— 设计 §4.1，与宿主 1:1。
  *
  * <p>唯一性由**部分唯一索引**保证（{@code WHERE deleted_at IS NULL}）：软删后允许重新录入，
- * 因此服务层的「取现有行」查询也必须带 {@code isNull("deleted_at")}，否则会读到已删的行。
+ * 因此服务层的「取现有行」查询也必须带 {@code deleted_at IS NULL}，否则会读到已删的行。
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -1358,9 +1361,11 @@ git commit -m "feat(record): record-sheet 聚合读写 DTO"
   - `ProjectZoneMapper.selectActiveById(Long zoneId) → ProjectZone`（软删返回 `null`）
   - `ProjectZoneMapper.selectActiveInProject(Long projectId, Long zoneId) → ProjectZone`
   - `FileService.viewsByIds(Collection<Long> fileIds) → Map<Long, Map<String, Object>>`
-  - `OwnerResolver.assertAccessible(RecordOwnerType type, Long ownerId) → Long`（返回归属公司；不存在抛 `NOT_FOUND`，越权抛 403）
+  - `OwnerResolver.assertAccessible(RecordOwnerType type, Long ownerId) → Long`（返回归属公司；宿主不存在**或越权**均抛 `NOT_FOUND`，两者同码同文案）
 
-**为什么 `assertAccessible` 返回公司 id**：Task 7 的 service 需要它做「同一次请求内一致」的判断（例如新增记录时不额外查一次公司）。返回 `null` 表示归属推导不出来（例如资产没有经营公司），此时 `assertCompanyAccess` 已按「受限账号拒绝」处理。
+**为什么 `assertAccessible` 返回公司 id**：Task 7 的 service 需要它做「同一次请求内一致」的判断（例如新增记录时不额外查一次公司）。返回 `null` 表示归属推导不出来（例如资产没有经营公司），此时按受限账号拒绝处理。
+
+**越权收敛为 404 的实现方式**：`rbacService.assertCompanyAccess(...)` 抛的是 `DATA_SCOPE_FORBIDDEN`（403），那是给别处的调用者用的。record-sheet 这边**不要**直接用它，改用 `RbacService` 上新增的 `boolean canAccessCompany(LoginUser user, Long companyId)`（与 `assertCompanyAccess` 同样的判定，但不抛异常；`user == null` 仍抛 `UNAUTHORIZED`），再由 `OwnerResolver` 在无权时抛 `NOT_FOUND`，且**文案与「宿主不存在」逐字相同**。不要用 try/catch 翻译异常，那会把 `UNAUTHORIZED` 一起吞掉。
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -1399,12 +1404,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 /**
  * 宿主解析与数据范围断言（设计 §5.3）。
  *
- * <p>三条最容易漏的语义：
+ * <p>四条最容易漏的语义：
  * <ol>
- *   <li>宿主不存在 → 404，而不是「归属公司为 null 于是按无权处理」——后者会让
- *       「对象不存在」和「无权限」在响应上无法区分，排查困难且泄露信息；</li>
+ *   <li>宿主不存在 → 404，而不是「归属公司为 null 于是按无权处理」；</li>
+ *   <li><b>越权也返回 404，且与「宿主不存在」的文案完全一致</b> —— 否则受限账号能用
+ *       403/404 之差把宿主 id 的存在性当探针探测（设计 §5.3 第 5 条）；</li>
  *   <li>分区必须经 <b>项目</b> 取公司，而不是自己有一列公司；</li>
- *   <li>软删的分区不算存在（否则删掉的分区还能继续挂记录）。</li>
+ *   <li>三种主体都必须<b>未软删</b>才算存在（否则删掉的资产 / 项目 / 分区还能继续挂记录）。</li>
  * </ol>
  */
 class OwnerResolverTest {
@@ -1583,7 +1589,7 @@ import org.apache.ibatis.annotations.Select;
 /**
  * 分区 Mapper。
  *
- * <p>两个 {@code selectActive*} 用显式 SQL 而不是 {@code LambdaQueryWrapper.isNull("deleted_at")}：
+ * <p>两个 {@code selectActive*} 用显式 SQL 而不是 {@code LambdaQueryWrapper} 过滤：
  * 它们同时承担「存在性判定」职责，写成一句 SQL 才能让「查出来的行」与「判定的行」必然一致，
  * 不会出现「判定用 A 条件、取数用 B 条件」的偏差。{@code ProjectZone} 实体刻意不映射
  * {@code deleted_at}（它是分区写接口的请求体类型），所以过滤只能写在 SQL 里。
@@ -1687,7 +1693,8 @@ public class OwnerResolver {
     /**
      * 断言宿主存在且当前账号有数据范围，返回其归属公司（可能为 null）。
      *
-     * @throws AppException 宿主不存在 → {@code NOT_FOUND}；越权 → {@code 403}
+     * @throws AppException 宿主不存在**或对象级越权** → {@code NOT_FOUND}
+     *                      （两者同状态码同文案，不泄露宿主存在性）
      */
     public Long assertAccessible(RecordOwnerType type, Long ownerId) {
         if (ownerId == null) {
@@ -1762,7 +1769,7 @@ git commit -m "feat(record): 宿主解析与数据范围断言（含分区归属
 
 | 方法 | 现状 | 改成 |
 |------|------|------|
-| `listProjectZones` | 不过滤软删 | 加 `.isNull("deleted_at")` |
+| `listProjectZones` | 不过滤软删 | 加 `.apply("deleted_at IS NULL")` |
 | `createProjectZone` | 排序 = 现有最大 + 1 | 计算最大值时排除软删行 |
 | `updateProjectZone` | `selectById` 判存在 | 改用 `selectActiveInProject` |
 | `deleteProjectZone` | 有资产 → 拒绝；否则 `deleteById` | 有资产**或**有记录 → 拒绝；否则软删 |
@@ -2018,7 +2025,7 @@ public class RecordPresenceChecker {
         if (present(receiveRecordMapper.selectCount(new LambdaQueryWrapper<com.ams.modules.record.entity.ReceiveRecord>()
                 .eq(com.ams.modules.record.entity.ReceiveRecord::getOwnerType, type.code())
                 .eq(com.ams.modules.record.entity.ReceiveRecord::getOwnerId, ownerId)
-                .isNull("deleted_at")))) {
+                .apply("deleted_at IS NULL")))) {
             return true;
         }
         // 遗留问题挂在接收信息下，接收信息被软删时其 issue 也一并软删；
@@ -2027,7 +2034,7 @@ public class RecordPresenceChecker {
         if (present(sourceInfoMapper.selectCount(new LambdaQueryWrapper<com.ams.modules.record.entity.SourceInfo>()
                 .eq(com.ams.modules.record.entity.SourceInfo::getOwnerType, type.code())
                 .eq(com.ams.modules.record.entity.SourceInfo::getOwnerId, ownerId)
-                .isNull("deleted_at")))) {
+                .apply("deleted_at IS NULL")))) {
             return true;
         }
         // 资产的处置在 disposal_order（不属于记录表），因此资产主体不查这张表
@@ -2035,7 +2042,7 @@ public class RecordPresenceChecker {
                 && present(disposalRecordMapper.selectCount(new LambdaQueryWrapper<com.ams.modules.record.entity.DisposalRecord>()
                         .eq(com.ams.modules.record.entity.DisposalRecord::getOwnerType, type.code())
                         .eq(com.ams.modules.record.entity.DisposalRecord::getOwnerId, ownerId)
-                        .isNull("deleted_at")));
+                        .apply("deleted_at IS NULL")));
     }
 
     private boolean present(Long count) {
@@ -2075,7 +2082,7 @@ import java.time.LocalDateTime;
 ```java
     /** 未软删的分区查询条件。ProjectZone 不映射 deleted_at，只能按列名过滤。 */
     private LambdaQueryWrapper<ProjectZone> activeZoneQuery() {
-        return new LambdaQueryWrapper<ProjectZone>().isNull("deleted_at");
+        return new LambdaQueryWrapper<ProjectZone>().apply("deleted_at IS NULL");
     }
 
     /**
@@ -2162,15 +2169,19 @@ import java.time.LocalDateTime;
      *
      * <p>两条拒绝理由分开报，是因为使用者的处理动作不同 —— 有资产要去改资产归属，
      * 有记录要去先处理记录。合并成一句「无法删除」会让使用者无从下手。
+     *
+     * <p>软删用 {@code setSql} 而不是 {@code set(ProjectZone::getDeletedAt, ...)}：
+     * {@code ProjectZone} 实体上**没有** {@code deletedAt} 字段（它是分区接口的请求体类型，
+     * 加了客户端就能自己软删分区），所以只能按列名写。
      */
     @Transactional
     public void deleteProjectZone(Long projectId, Long zoneId) {
         ProjectZone zone = requireProjectZone(projectId, zoneId);
         assertZoneRemovable(zone);
         projectZoneMapper.update(null, new LambdaUpdateWrapper<ProjectZone>()
-                .set(ProjectZone::getDeletedAt, LocalDateTime.now())
+                .setSql("deleted_at = now()")
                 .eq(ProjectZone::getId, zoneId)
-                .isNull("deleted_at"));
+                .apply("deleted_at IS NULL"));
     }
 
     /** 分区可删性的唯一判定点：两条删除路径都调它，保证口径一致。 */
@@ -2188,14 +2199,11 @@ import java.time.LocalDateTime;
     }
 ```
 
-`ProjectZone` 上没有 `deletedAt` 字段，因此第 3 处不能写 `ProjectZone::getDeletedAt`。用列名：
-
-```java
-        projectZoneMapper.update(null, new LambdaUpdateWrapper<ProjectZone>()
-                .setSql("deleted_at = now()")
-                .eq(ProjectZone::getId, zoneId)
-                .isNull("deleted_at"));
-```
+> `ProjectZone` 上没有 `deletedAt` 字段，所以上面这处（以及本任务其余涉及分区的软删过滤）
+> 一律按列名写：**过滤**用 `.apply("deleted_at IS NULL")`，**写入**用
+> `setSql("deleted_at = now()")`。不要写 `.isNull("deleted_at")` ——
+> `LambdaQueryWrapper` / `LambdaUpdateWrapper` 的 `isNull` 参数类型是 `SFunction`，
+> 传字符串**编译不过**。
 
 4. 把 `replaceZones` 中「删除未提交分区 + 置空资产 zone_id」的段落改为：
 
@@ -2219,13 +2227,13 @@ import java.time.LocalDateTime;
             projectZoneMapper.update(null, new LambdaUpdateWrapper<ProjectZone>()
                     .setSql("deleted_at = now()")
                     .in(ProjectZone::getId, removedIds)
-                    .isNull("deleted_at"));
+                    .apply("deleted_at IS NULL"));
         }
 ```
 
 （`keptIds` 是「请求体里出现的分区 id 集合」，在保留/更新的循环里已经可以收集；若现有代码没有这个集合，就在循环里加 `keptIds.add(zone.getId())`。）
 
-同时 `replaceZones` 里读现有分区的 `selectList` 要加 `.isNull("deleted_at")`。
+同时 `replaceZones` 里读现有分区的 `selectList` 要加 `.apply("deleted_at IS NULL")`。
 
 - [ ] **Step 6: 在 CI 执行，确认通过**
 
@@ -2856,7 +2864,7 @@ public class RecordSheetService {
      * 收敛成一个方法，是为了让「漏写」只可能发生在这一处。
      */
     private <T> LambdaQueryWrapper<T> notDeleted(LambdaQueryWrapper<T> wrapper) {
-        return wrapper.isNull("deleted_at");
+        return wrapper.apply("deleted_at IS NULL");
     }
 ```
 
@@ -3124,7 +3132,7 @@ public class RecordSheetService {
         mapper.update(null, new LambdaUpdateWrapper<T>()
                 .setSql("deleted_at = now()")
                 .eq(idGetter, id)
-                .isNull("deleted_at"));
+                .apply("deleted_at IS NULL"));
     }
 
     private static boolean blank(String value) {
@@ -6010,4 +6018,4 @@ git commit -m "docs: 后续记录接口契约、需求条目与 DBML 同步"
   `sourceDesc` / `attachments`，**没有** `ownerType` / `ownerId`（它们由服务端按路径赋值）。
   任何试图给 DTO 加这两个字段的改动都会引入「客户端可指定归属」的越权面。
 - `ProjectZone` **没有** `deletedAt` 字段（Task 6 的设计取舍）。分区的一切软删过滤走
-  `ProjectZoneMapper.selectActiveById` / `selectActiveInProject` 与 `.isNull("deleted_at")`。
+  `ProjectZoneMapper.selectActiveById` / `selectActiveInProject` 与 `.apply("deleted_at IS NULL")`。
