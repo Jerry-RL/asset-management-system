@@ -51,6 +51,7 @@ import {
 } from '@/lib/labels';
 import { getPathIcon } from '@/lib/menuIcons';
 import { currentPath } from '@/lib/navigation';
+import { useListQuery, useUrlParam } from '@/lib/listQuery';
 
 /**
  * 行操作的可见性规则（纯函数）。
@@ -692,10 +693,38 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   const canExport = canDo('export');
   const canImport = canDo('import');
   const [data, setData] = useState<PageResult<Row>>({ list: [], total: 0, page: 1, pageSize: 10 });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [keyword, setKeyword] = useState('');
-  const [filters, setFilters] = useState<Record<string, string>>({});
+
+  /**
+   * 分页 / 关键字 / 筛选以 **URL 为唯一真相**（设计 §5.2）。
+   *
+   * <p>这是「跳详情或编辑再返回能回到跳转前那一页」的前提：那是路由变化，本组件会整页
+   * 卸载，只存在组件 state 里的页码与筛选无法幸存。
+   */
+  const filterKeys = useMemo(
+    () => [...(config.filters ?? []), ...(config.tagFilters ?? [])].map((f) => f.key),
+    [config.filters, config.tagFilters],
+  );
+  const {
+    page,
+    pageSize,
+    keyword,
+    filters,
+    patch: patchListQuery,
+    setPage,
+    setKeyword,
+    setFilters,
+  } = useListQuery({ filterKeys });
+
+  /** 关键字输入框草稿：只有回车/点「查询」才写进 URL，避免每敲一个字都发请求（设计 §8） */
+  const [kwDraft, setKwDraft] = useState(keyword);
+  useEffect(() => setKwDraft(keyword), [keyword]);
+
+  /** 重拉信号：条件没变时（刷新、查询同一个关键字）靠它触发一次请求 */
+  const [reloadToken, setReloadToken] = useState(0);
+
+  /** 请求序号：快速翻页时丢弃过期响应，避免旧响应覆盖新数据（设计 §8） */
+  const seqRef = useRef(0);
+
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<Row | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -714,8 +743,9 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   const [actionFieldOptions, setActionFieldOptions] = useState<
     Record<string, { value: string | number; label: string }[]>
   >({});
-  /** 列表 / 卡片视图；仅在配置了 config.card 时可用 */
-  const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
+  /** 列表 / 卡片视图；仅在配置了 config.card 时可用。进 URL 以便返回后还原，但不参与拉取 */
+  const [viewModeParam, setViewMode] = useUrlParam('view', 'list');
+  const viewMode: 'list' | 'card' = viewModeParam === 'card' ? 'card' : 'list';
   /** 实时统计条（config.statsSource 时生效） */
   const [dynamicStats, setDynamicStats] = useState<StatConfig[]>([]);
 
@@ -750,6 +780,10 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   );
 
   const load = async (p = page, size = pageSize, kw = keyword, flt = filters) => {
+    // 序号守卫：每次请求自增，只有「最后一次」的响应可以写状态。
+    // 快速翻页会并发多个请求，先发后到的旧响应会把新数据覆盖回上一页的内容。
+    const seq = ++seqRef.current;
+    const stale = () => seq !== seqRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), pageSize: String(size) });
@@ -760,15 +794,18 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       Object.entries(config.extraParams ?? {}).forEach(([k, v]) => params.set(k, v));
       const sep = config.listPath.includes('?') ? '&' : '?';
       const raw = await api.get<unknown>(`${config.listPath}${sep}${params.toString()}`);
+      if (stale()) return;
       setData(normalizePage(raw, p, size));
     } catch (e) {
+      if (stale()) return;
       setData({ list: [], total: 0, page: p, pageSize: size });
       message.error(e instanceof Error ? e.message : '加载失败');
     } finally {
-      setLoading(false);
+      // 过期请求不得清掉后发请求的 loading
+      if (!stale()) setLoading(false);
     }
     // 统计条与列表同筛选条件（但不受分页影响），故单独拉取；失败时静默保留上一次结果
-    if (config.statsSource) {
+    if (config.statsSource && !stale()) {
       const statParams = new URLSearchParams();
       if (kw) statParams.set('keyword', kw);
       Object.entries(flt).forEach(([k, v]) => {
@@ -787,13 +824,23 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     }
   };
 
+  /**
+   * 条件变化 → 按 **URL 里的条件** 拉取（设计 §5.3）。
+   *
+   * <p>取代了原来的「改 state + 显式调 load()」：那样在列表内点浏览器后退时 URL 变了、
+   * 组件却没卸载，表格会停在旧数据上。
+   *
+   * <p>原「按 listPath 重置」的 effect 已删除：路由切换后 URL 本身不带 query，
+   * 读出来就是第 1 页 + 无筛选，无需再显式重置。
+   *
+   * <p>`config` 必须留在依赖里 —— 切换资源（`/assets` → `/projects`）时组件是**复用**
+   * 而非重新挂载，而两者 URL 都没有 query，只靠 page/keyword/filters 不会变化，
+   * 漏掉 config 就永远不会重新拉取。
+   */
   useEffect(() => {
-    setPage(1);
-    setFilters({});
-    setKeyword('');
-    load(1, pageSize, '', {});
+    void load(page, pageSize, keyword, filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.listPath]);
+  }, [page, pageSize, keyword, filters, reloadToken, config]);
 
   const openDetail = async (row: Row) => {
     const id = row[idField] as number;
@@ -820,8 +867,9 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       message.success('创建成功');
       setShowCreate(false);
       form.resetFields();
+      // 回到第 1 页 + 重拉：两次 setState 会被 React 批处理，effect 只跑一次
       setPage(1);
-      load(1, pageSize, keyword, filters);
+      setReloadToken((token) => token + 1);
     } catch (e) {
       if (e && typeof e === 'object' && 'errorFields' in e) return;
       message.error(e instanceof Error ? e.message : '创建失败');
@@ -849,7 +897,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       message.success('保存成功');
       setEditRow(null);
       editForm.resetFields();
-      load(page, pageSize, keyword, filters);
+      setReloadToken((token) => token + 1);
     } catch (e) {
       if (e && typeof e === 'object' && 'errorFields' in e) return;
       message.error(e instanceof Error ? e.message : '保存失败');
@@ -910,7 +958,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       setActionCtx(null);
       actionForm.resetFields();
       setActionFieldOptions({});
-      load(page, pageSize, keyword, filters);
+      setReloadToken((token) => token + 1);
     } catch (e) {
       if (e && typeof e === 'object' && 'errorFields' in e) return;
       message.error(e instanceof Error ? e.message : '操作失败');
@@ -934,7 +982,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         try {
           await api.del(`${config.listPath}/${id}`);
           message.success('已删除');
-          load(page, pageSize, keyword, filters);
+          setReloadToken((token) => token + 1);
         } catch (e) {
           message.error(e instanceof Error ? e.message : '删除失败');
           throw e;
@@ -979,6 +1027,12 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     }
   };
 
+  /** 查询：关键字写入 URL（页码自动归 1）；关键字没变时靠重拉信号触发一次请求 */
+  const handleSearch = () => {
+    if (kwDraft === keyword) setReloadToken((token) => token + 1);
+    else setKeyword(kwDraft);
+  };
+
   const setFilterValue = (key: string, value: string) => {
     if (filters[key] === value) return; // 重复点击同一标签不重复请求
     const nf: Record<string, string> = { ...filters, [key]: value };
@@ -986,9 +1040,8 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     (config.tagFilters ?? []).forEach((tf) => {
       if (tf.cascadeParentKey === key) nf[tf.key] = '';
     });
+    // setFilters 内部把页码归 1（设计 §5.2），不需要再显式 setPage(1)
     setFilters(nf);
-    setPage(1);
-    load(1, pageSize, keyword, nf);
   };
 
   const tableColumns: ColumnsType<Row> = useMemo(() => {
@@ -1131,25 +1184,17 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               placeholder="搜索关键字"
               prefix={<SearchOutlined className="text-gray-400" />}
               className="!w-[160px] sm:!w-[200px]"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              onPressEnter={() => {
-                setPage(1);
-                load(1, pageSize, keyword, filters);
-              }}
+              value={kwDraft}
+              onChange={(e) => setKwDraft(e.target.value)}
+              onPressEnter={handleSearch}
             />
-            <Button
-              icon={<SearchOutlined />}
-              onClick={() => {
-                setPage(1);
-                load(1, pageSize, keyword, filters);
-              }}
-            >
+            <Button icon={<SearchOutlined />} onClick={handleSearch}>
               查询
             </Button>
             <Button
               icon={<ReloadOutlined />}
-              onClick={() => load(page, pageSize, keyword, filters)}
+              onClick={() => setReloadToken((token) => token + 1)}
+              aria-label="刷新列表"
             />
             {config.card && (
               <Segmented
@@ -1190,7 +1235,9 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
                       const body = await resp.json();
                       if (body.code !== 0) throw new Error(body.message || '导入失败');
                       message.success(`导入成功 ${body.data?.success ?? 0} 条`);
-                      load(1, pageSize, keyword, filters);
+                      // 回到第 1 页 + 重拉：两次 setState 会被 React 批处理，effect 只跑一次
+                      setPage(1);
+                      setReloadToken((token) => token + 1);
                     } catch (e) {
                       message.error(e instanceof Error ? e.message : '导入失败');
                     }
@@ -1326,11 +1373,8 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
           showSizeChanger
           showTotal={(t) => `共 ${t} 条`}
           responsive
-          onChange={(p, size) => {
-            setPage(p);
-            setPageSize(size);
-            load(p, size, keyword, filters);
-          }}
+          // 一次写入两个参数：分两次 patch 会先按旧 pageSize 拉一次、再补拉一次
+          onChange={(p, size) => patchListQuery({ page: p, pageSize: size })}
         />
       </div>
 
