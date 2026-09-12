@@ -500,6 +500,7 @@ modules/record/
 | 物理删除缺陷被放大 | 全局 `logic-delete-field` 与表范式不一致，新表若不显式处理会重蹈覆辙 | 新实体统一显式 `isNull("deleted_at")`，并在实体 Javadoc 写明；`V46` 后单独提一个修复全局口径的条目 |
 | 权限回填遗漏 | 新增注解 + 未回填动作 → 存量角色全 403 | 按权限设计 §7 与注解同批回填，并纳入上线清单 |
 | **既有的**文件越权读取缺口（不在本期范围） | `FileController` 的 `GET /files/{id}` 与 `GET /files/{id}/download` **既无权限注解、也无归属校验**，而 `file_metadata.id` 是 `BIGSERIAL`、可枚举；`file_metadata` 也没有公司列，无法按公司过滤。任意登录用户可凭 id 直接读取/下载他人的文件 | 本期只堵新增的**关联**路径（§4.3 附件归属口径：新 `fileId` 必须存在且上传者是本人或 `created_by` 为空）。读端点的修复**不在本期范围**，需另立专项（可枚举 id + 无公司列的复合问题，涉及 `file_metadata` 加列与读端点鉴权）。 |
+| **既有的**权限注解覆盖率不足（不在本期范围） | 绝大多数控制器**整类没有任何** `@RequiresPerm`（如 `LeaseController` / `TenderController` / `AdjustmentController` / `ReportController` / `FileController` 等），`GET /api/v1/disposals` 全局列表也在其中 —— 即只做认证不做鉴权。`scripts/check-perm-invariants.mjs` 只校验**已声明**的注解其菜单码存在，`WriteEndpointPermissionTest` 只覆盖**写**端点，因此这类读端点不会被任何守卫拦住 | 本期只按设计 §5.2 端点表给 `DisposalController` 的 5 个写端点与 `RecordSheetController` 补齐注解，**不改变平台现状**；全量读端点鉴权属平台级专项，需按 `WriteEndpointPermissionTest` 的模式逐步铺开 |
 
 ---
 

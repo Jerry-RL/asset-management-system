@@ -3593,8 +3593,12 @@ git commit -m "feat(record): record-sheet 三主体读写接口与权限闭环"
 - Consumes: `RecordSheetService.orderAttachments` / `syncOrderAttachments`（Task 7）、`OwnerResolver`（Task 5）。
 - Produces:
   - `DisposalService.listByAsset(Long assetId) → List<DisposalOrderView>`
-  - `DisposalService.createWithAttachments(DisposalOrder order, List<AttachmentRef> refs) → DisposalOrder`
   - `GET /api/v1/assets/{assetId}/disposals`（权限 `asset.ledger:view`）
+
+> **实际落地**：附件同步不进 `DisposalService`，而是由 `DisposalController.create` 直接调
+> `recordSheetService.syncOrderAttachments(order.getId(), request.getAttachments())`
+> （`DisposalService` 因此不依赖 `RecordSheetService` 的反向调用；计划原文里的
+> `DisposalService.createWithAttachments` **未实现**，避免成为未被覆盖的死代码）。
 
 > 资产处置单列表由本 Task 的 `GET /assets/{assetId}/disposals` 提供；`RecordSheetView` **不**承载该字段（会与 `DisposalService → RecordSheetService` 形成循环依赖，且设计从未定义该字段）。前端资产第 3 步的处置面板单独调这个端点。
 
@@ -3788,7 +3792,9 @@ Expected: FAIL —— 至少 `approveNeedsDedicatedPermission` 失败（当前�
 2. `create` 改为接收附件并同步（保持请求体向后兼容：老客户端不传 `attachments` 即为空列表）：
 
 ```java
-    @PostMapping("/disposals")
+    // 注意：类级已是 @RequestMapping("/api/v1/disposals")，所以这里**不加**路径，
+    // 否则会变成 /api/v1/disposals/disposals（设计 §5.2 第 261 行的端点表也是 /api/v1/disposals）。
+    @PostMapping
     @RequiresPerm("operation.disposal:create")
     @Audited(module = "disposal", action = "create")
     public ApiResponse<DisposalOrder> create(@RequestBody DisposalCreateRequest request) {
@@ -3802,25 +3808,25 @@ Expected: FAIL —— 至少 `approveNeedsDedicatedPermission` 失败（当前�
 3. 给下面五个方法各加一行注解（**逐字照抄**）：
 
 ```java
-    @PostMapping("/disposals/{id}/submit")
+    @PostMapping("/{disposalId}/submit")
     @RequiresPerm("operation.disposal:create")
     @Audited(module = "disposal", action = "submit")
 ```
 
 ```java
-    @PostMapping("/disposals/{id}/approve")
+    @PostMapping("/{disposalId}/approve")
     @RequiresPerm("operation.disposal:approve")
     @Audited(module = "disposal", action = "approve")
 ```
 
 ```java
-    @PostMapping("/disposals/{id}/execute")
+    @PostMapping("/{disposalId}/execute")
     @RequiresPerm("operation.disposal:update")
     @Audited(module = "disposal", action = "execute")
 ```
 
 ```java
-    @PostMapping("/disposals/{id}/complete")
+    @PostMapping("/{disposalId}/complete")
     @RequiresPerm("operation.disposal:update")
     @Audited(module = "disposal", action = "complete")
 ```
