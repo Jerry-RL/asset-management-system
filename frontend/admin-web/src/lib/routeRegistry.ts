@@ -83,8 +83,7 @@ export const ROUTE_REGISTRY: Record<string, RouteMeta> = (() => {
 /** 所有已登记路由（排序后，便于比对）。 */
 export const REGISTERED_ROUTES: string[] = Object.keys(ROUTE_REGISTRY).sort();
 
-export const isRegisteredRoute = (path: string): boolean =>
-  Boolean(path) && path in ROUTE_REGISTRY;
+export const isRegisteredRoute = (path: string): boolean => Boolean(path) && path in ROUTE_REGISTRY;
 
 /** 标题：注册表兜底（DB 的 name 优先，仅在缺失时才用这里）。 */
 export const routeTitle = (path: string): string => ROUTE_REGISTRY[path]?.title ?? path;
@@ -222,8 +221,9 @@ export function checkCodeMappingDrift(apiPairs: Array<[string, string]>): void {
   }
   const extra = Object.keys(PATH_TO_CODE).filter((path) => !apiByPath.has(path));
   if (!missing.length && !mismatched.length && !extra.length) return;
-  console.warn(
-    '[routeRegistry] PATH_TO_CODE 镜像与接口菜单不一致，请同步 V45 种子后重新生成：',
-    { 镜像缺失: missing, 编码不一致: mismatched, 多余条目: extra },
-  );
+  console.warn('[routeRegistry] PATH_TO_CODE 镜像与接口菜单不一致，请同步 V45 种子后重新生成：', {
+    镜像缺失: missing,
+    编码不一致: mismatched,
+    多余条目: extra,
+  });
 }

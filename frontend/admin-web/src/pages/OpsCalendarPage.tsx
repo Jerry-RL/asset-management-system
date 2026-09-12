@@ -16,12 +16,7 @@ import {
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import {
-  CalendarOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  RightOutlined,
-} from '@ant-design/icons';
+import { CalendarOutlined, PlusOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
 
 export interface OpsCalendarEvent {
@@ -272,11 +267,16 @@ export function OpsCalendarPage() {
                             {ev.level >= 3 ? '紧急' : ev.level === 2 ? '重要' : '一般'}
                           </Tag>
                         </div>
-                        <div className="text-sm font-medium text-gray-800 truncate" title={ev.title}>
+                        <div
+                          className="text-sm font-medium text-gray-800 truncate"
+                          title={ev.title}
+                        >
                           {ev.title}
                         </div>
                         {ev.summary && (
-                          <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{ev.summary}</div>
+                          <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                            {ev.summary}
+                          </div>
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
@@ -319,7 +319,11 @@ export function OpsCalendarPage() {
         destroyOnHidden
       >
         <Form form={form} layout="vertical" className="mt-2">
-          <Form.Item name="eventDate" label="日期" rules={[{ required: true, message: '请选择日期' }]}>
+          <Form.Item
+            name="eventDate"
+            label="日期"
+            rules={[{ required: true, message: '请选择日期' }]}
+          >
             <DatePicker className="w-full" />
           </Form.Item>
           <Form.Item name="title" label="标题" rules={[{ required: true, message: '请输入标题' }]}>

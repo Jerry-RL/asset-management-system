@@ -64,7 +64,9 @@ export function LoginPage() {
             资
           </div>
           <div className="min-w-0">
-            <div className="text-lg font-semibold text-[var(--ams-primary)] truncate">资管云平台</div>
+            <div className="text-lg font-semibold text-[var(--ams-primary)] truncate">
+              资管云平台
+            </div>
             <div className="text-xs text-gray-400 truncate">Chenlead Asset Management Cloud</div>
           </div>
         </div>

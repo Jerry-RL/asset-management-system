@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Breadcrumb, Card, Empty, QRCode, Segmented, Space, Spin, Tag, Tooltip, message } from 'antd';
+import {
+  Breadcrumb,
+  Card,
+  Empty,
+  QRCode,
+  Segmented,
+  Space,
+  Spin,
+  Tag,
+  Tooltip,
+  message,
+} from 'antd';
 import {
   ArrowLeftOutlined,
   EnvironmentOutlined,
@@ -200,10 +211,7 @@ const ProjectDetailPage = () => {
   }, [project]);
 
   /** 租控状态分布（环形图 + 图例），颜色按排序固定，保证各分区一致 */
-  const statusSlices = useMemo<Slice[]>(
-    () => metrics?.leaseStatusBreakdown ?? [],
-    [metrics],
-  );
+  const statusSlices = useMemo<Slice[]>(() => metrics?.leaseStatusBreakdown ?? [], [metrics]);
 
   /** 资产类型分布 */
   const typeSlices = useMemo<Slice[]>(() => metrics?.assetTypeBreakdown ?? [], [metrics]);
@@ -221,7 +229,8 @@ const ProjectDetailPage = () => {
 
   /** 当前选中分区（all 表示全部） */
   const activeZone = useMemo(
-    () => (zoneTab === 'all' ? null : overview?.zones.find((z) => String(z.id) === zoneTab) ?? null),
+    () =>
+      zoneTab === 'all' ? null : (overview?.zones.find((z) => String(z.id) === zoneTab) ?? null),
     [overview, zoneTab],
   );
 
@@ -337,7 +346,13 @@ const ProjectDetailPage = () => {
           <Breadcrumb
             items={[
               { title: '资产运营' },
-              { title: <span className="cursor-pointer" onClick={goBack}>资产项目</span> },
+              {
+                title: (
+                  <span className="cursor-pointer" onClick={goBack}>
+                    资产项目
+                  </span>
+                ),
+              },
               { title: '项目详情' },
             ]}
           />
@@ -385,10 +400,14 @@ const ProjectDetailPage = () => {
             </div>
             <div className="text-xs text-gray-400 text-right space-y-1">
               <div>
-                分区 <span className="text-gray-700 font-medium tabular-nums">{project.zoneCount}</span> 个
+                分区{' '}
+                <span className="text-gray-700 font-medium tabular-nums">{project.zoneCount}</span>{' '}
+                个
               </div>
               <div>
-                楼层 <span className="text-gray-700 font-medium tabular-nums">{project.floorCount}</span> 层
+                楼层{' '}
+                <span className="text-gray-700 font-medium tabular-nums">{project.floorCount}</span>{' '}
+                层
               </div>
             </div>
           </div>
@@ -436,10 +455,7 @@ const ProjectDetailPage = () => {
             <MetricTile label="本年实收(万元)" value={toWan(metrics.yearReceived)} />
           </div>
           <div className="text-xs text-gray-500 mb-2">近一年每月实收(万元)</div>
-          <MiniBarChart
-            data={monthlyBars}
-            formatValue={(v) => `${toWan(v)} 万元`}
-          />
+          <MiniBarChart data={monthlyBars} formatValue={(v) => `${toWan(v)} 万元`} />
         </Card>
 
         {/* 租赁概况 */}
@@ -500,31 +516,32 @@ const ProjectDetailPage = () => {
           {/* 分区导航 */}
           <div className="lg:w-[180px] shrink-0 space-y-1">
             <div className="text-xs text-gray-400 mb-2">项目分区</div>
-            {[{ id: null, name: '全部分区', assetCount: metrics.assetCount }, ...overview.zones].map(
-              (zone) => {
-                const key = zone.id == null ? 'all' : String(zone.id);
-                const active = zoneTab === key;
-                return (
-                  <div
-                    key={key}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setZoneTab(key)}
-                    onKeyDown={(e) => e.key === 'Enter' && setZoneTab(key)}
-                    className={`px-3 py-2 rounded cursor-pointer text-sm flex items-center justify-between transition-colors ${
-                      active
-                        ? 'bg-blue-50 text-blue-600 font-medium'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="truncate">{zone.name}</span>
-                    <span className="text-xs text-gray-400 tabular-nums shrink-0 ml-2">
-                      {zone.assetCount}
-                    </span>
-                  </div>
-                );
-              },
-            )}
+            {[
+              { id: null, name: '全部分区', assetCount: metrics.assetCount },
+              ...overview.zones,
+            ].map((zone) => {
+              const key = zone.id == null ? 'all' : String(zone.id);
+              const active = zoneTab === key;
+              return (
+                <div
+                  key={key}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setZoneTab(key)}
+                  onKeyDown={(e) => e.key === 'Enter' && setZoneTab(key)}
+                  className={`px-3 py-2 rounded cursor-pointer text-sm flex items-center justify-between transition-colors ${
+                    active
+                      ? 'bg-blue-50 text-blue-600 font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="truncate">{zone.name}</span>
+                  <span className="text-xs text-gray-400 tabular-nums shrink-0 ml-2">
+                    {zone.assetCount}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           {/* KPI + 图例 + 资产分组 */}

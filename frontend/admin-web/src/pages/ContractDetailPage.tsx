@@ -99,7 +99,9 @@ export function ContractDetailPage() {
     try {
       const [c, tPage] = await Promise.all([
         api.get<Contract>(`/contracts/${id}`),
-        api.get<PageResult<ContractTemplate>>('/contract-templates?page=1&pageSize=50&enabled=true'),
+        api.get<PageResult<ContractTemplate>>(
+          '/contract-templates?page=1&pageSize=50&enabled=true',
+        ),
       ]);
       setContract(c);
       const list = tPage?.list ?? [];

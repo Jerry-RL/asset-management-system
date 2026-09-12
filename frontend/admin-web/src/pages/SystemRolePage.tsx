@@ -305,15 +305,11 @@ export function SystemRolePage() {
 
   // ---- 数据范围草稿 ----
 
-  const companyIndex = useMemo(
-    () => buildCompanyIndex(scope?.companies ?? []),
-    [scope],
-  );
+  const companyIndex = useMemo(() => buildCompanyIndex(scope?.companies ?? []), [scope]);
 
   /** 被显式排除的公司 → 其全部下级（继承排除）。 */
   const inheritedExcluded = useMemo(
-    () =>
-      collectInheritedExcluded(companyIndex.roots, companyIndex.childrenOf, draftExcludes),
+    () => collectInheritedExcluded(companyIndex.roots, companyIndex.childrenOf, draftExcludes),
     [companyIndex, draftExcludes],
   );
 
@@ -468,7 +464,13 @@ export function SystemRolePage() {
   const memberColumns: ColumnsType<MemberUser> = [
     { title: '姓名', dataIndex: 'name', key: 'name', ellipsis: true },
     { title: '用户名', dataIndex: 'username', key: 'username', ellipsis: true },
-    { title: '手机号', dataIndex: 'phone', key: 'phone', width: 130, render: (_, r) => r.phone || '-' },
+    {
+      title: '手机号',
+      dataIndex: 'phone',
+      key: 'phone',
+      width: 130,
+      render: (_, r) => r.phone || '-',
+    },
     {
       title: '所属公司',
       dataIndex: 'companyName',
@@ -512,12 +514,7 @@ export function SystemRolePage() {
           <Button icon={<ReloadOutlined />} onClick={() => void loadRoles()} loading={rolesLoading}>
             刷新
           </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            disabled={!canAssign}
-            onClick={openCreate}
-          >
+          <Button type="primary" icon={<PlusOutlined />} disabled={!canAssign} onClick={openCreate}>
             新建角色
           </Button>
         </div>
@@ -738,10 +735,18 @@ export function SystemRolePage() {
             tooltip="创建后不可修改：编码是权限与配置的锚点"
             rules={[
               { required: !editing, message: '请输入角色编码' },
-              { pattern: /^[a-z][a-z0-9_]*$/, message: '以小写字母开头，仅可含小写字母、数字与下划线' },
+              {
+                pattern: /^[a-z][a-z0-9_]*$/,
+                message: '以小写字母开头，仅可含小写字母、数字与下划线',
+              },
             ]}
           >
-            <Input disabled={!!editing} maxLength={64} placeholder="如 asset_admin" className="font-mono" />
+            <Input
+              disabled={!!editing}
+              maxLength={64}
+              placeholder="如 asset_admin"
+              className="font-mono"
+            />
           </Form.Item>
           <Form.Item
             name="dataScope"
@@ -802,7 +807,11 @@ function PermissionMatrixTab({
   const [expandedKeys, setExpandedKeys] = useState<number[]>([]);
 
   useEffect(() => {
-    setExpandedKeys(flatten(matrix?.menus ?? []).filter((n) => n.menuType === 'dir').map((n) => n.id));
+    setExpandedKeys(
+      flatten(matrix?.menus ?? [])
+        .filter((n) => n.menuType === 'dir')
+        .map((n) => n.id),
+    );
   }, [matrix]);
 
   const enforced = useMemo(() => new Set(matrix?.enforced ?? []), [matrix]);
@@ -1035,18 +1044,19 @@ function DataScopeTab({
 
       <div className="rounded border border-[var(--ams-border)] p-2 text-xs text-gray-600 space-y-1">
         <div>
-          角色数据范围：<span className="font-medium">{DATA_SCOPE_LABEL[scope.dataScope] ?? scope.dataScope}</span>
+          角色数据范围：
+          <span className="font-medium">
+            {DATA_SCOPE_LABEL[scope.dataScope] ?? scope.dataScope}
+          </span>
         </div>
         <div>实际生效范围：{scope.effectiveScope}</div>
         {(scope.degradedScopes ?? []).length > 0 && (
           <div className="text-amber-600">
-            注意：{scope.degradedScopes.map((s) => DATA_SCOPE_LABEL[s] ?? s).join('、')} 本期尚未实现，
-            当前按「所属公司 + 全部下级子树」生效，并未真正收窄范围。
+            注意：{scope.degradedScopes.map((s) => DATA_SCOPE_LABEL[s] ?? s).join('、')}{' '}
+            本期尚未实现， 当前按「所属公司 + 全部下级子树」生效，并未真正收窄范围。
           </div>
         )}
-        <div className="text-gray-400">
-          修改「数据范围」取值请点右上角「编辑角色」。
-        </div>
+        <div className="text-gray-400">修改「数据范围」取值请点右上角「编辑角色」。</div>
       </div>
 
       <div>

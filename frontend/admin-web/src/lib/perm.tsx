@@ -13,15 +13,7 @@ import { ForbiddenNotice } from '@/components/ForbiddenNotice';
  * 表现为按钮消失，排查成本远高于编译报错。
  */
 export type PermAction =
-  | 'view'
-  | 'create'
-  | 'update'
-  | 'delete'
-  | 'export'
-  | 'import'
-  | 'approve'
-  | 'audit'
-  | 'assign';
+  'view' | 'create' | 'update' | 'delete' | 'export' | 'import' | 'approve' | 'audit' | 'assign';
 
 /**
  * 权限判定（设计 4.1 / 6.2）：`menuCode:action` **精确匹配**。

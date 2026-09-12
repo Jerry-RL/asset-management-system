@@ -40,10 +40,7 @@ const loadFieldOptions = async (field: FieldConfig): Promise<Option[]> => {
   });
 };
 
-const renderFormFields = (
-  fields: FieldConfig[],
-  dynamicOptions?: Record<string, Option[]>,
-) =>
+const renderFormFields = (fields: FieldConfig[], dynamicOptions?: Record<string, Option[]>) =>
   fields.map((f) => {
     const options = dynamicOptions?.[f.name] ?? f.options ?? [];
     return (

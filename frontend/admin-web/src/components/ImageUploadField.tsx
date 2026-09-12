@@ -114,7 +114,9 @@ export function ImageUploadField({
         footer={null}
         onCancel={() => setPreviewOpen(false)}
       >
-        {previewImage && <img alt={previewTitle} className="w-full rounded-md" src={previewImage} />}
+        {previewImage && (
+          <img alt={previewTitle} className="w-full rounded-md" src={previewImage} />
+        )}
       </Modal>
     </>
   );

@@ -105,7 +105,11 @@ export function SystemMenuPage() {
       const list = await api.get<ApiMenuNode[]>('/system/menus/all');
       setTree(list);
       // 默认全展开：管理树的价值就是一眼看全，折叠态反而需要逐个点开
-      setExpandedKeys(flatten(list).filter((n) => n.menuType === DIR).map((n) => n.id));
+      setExpandedKeys(
+        flatten(list)
+          .filter((n) => n.menuType === DIR)
+          .map((n) => n.id),
+      );
     } catch (e) {
       setTree([]);
       message.error(e instanceof Error ? e.message : '加载菜单失败');
@@ -189,9 +193,7 @@ export function SystemMenuPage() {
   /** 类型切换时清掉互斥字段，避免「目录带着 path」这类脏提交被后端拒绝。 */
   const handleTypeChange = (next: MenuType) => {
     form.setFieldsValue(
-      next === DIR
-        ? { path: undefined, parentId: undefined }
-        : { parentId: editor.presetParentId },
+      next === DIR ? { path: undefined, parentId: undefined } : { parentId: editor.presetParentId },
     );
   };
 
@@ -396,7 +398,7 @@ export function SystemMenuPage() {
   ];
 
   const isEditingDir = editor.editing?.menuType === DIR;
-  const effectiveType: MenuType = isEditingDir ? DIR : watchedType ?? editor.presetType;
+  const effectiveType: MenuType = isEditingDir ? DIR : (watchedType ?? editor.presetType);
 
   return (
     <div className="space-y-4 min-w-0 max-w-full overflow-hidden">
@@ -491,12 +493,11 @@ export function SystemMenuPage() {
             </Form.Item>
           )}
 
-          <Form.Item
-            name="name"
-            label="名称"
-            rules={[{ required: true, message: '请输入名称' }]}
-          >
-            <Input maxLength={50} placeholder={effectiveType === DIR ? '如 资产台账' : '如 资产台账'} />
+          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>
+            <Input
+              maxLength={50}
+              placeholder={effectiveType === DIR ? '如 资产台账' : '如 资产台账'}
+            />
           </Form.Item>
 
           <Form.Item
@@ -538,7 +539,11 @@ export function SystemMenuPage() {
             </Form.Item>
           )}
 
-          <Form.Item name="icon" label="图标" tooltip="取自具名图标目录；留空时用路由注册表的默认图标">
+          <Form.Item
+            name="icon"
+            label="图标"
+            tooltip="取自具名图标目录；留空时用路由注册表的默认图标"
+          >
             <Select
               allowClear
               showSearch
@@ -562,7 +567,11 @@ export function SystemMenuPage() {
             <Form.Item
               name="status"
               label="状态"
-              tooltip={effectiveType === DIR ? '停用目录 = 隐藏整组及其子菜单' : '停用后该菜单从侧边栏隐藏，权限点保留'}
+              tooltip={
+                effectiveType === DIR
+                  ? '停用目录 = 隐藏整组及其子菜单'
+                  : '停用后该菜单从侧边栏隐藏，权限点保留'
+              }
             >
               <Select options={STATUS_OPTIONS} />
             </Form.Item>

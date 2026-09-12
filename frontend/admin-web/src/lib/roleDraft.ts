@@ -77,9 +77,9 @@ export function collectInheritedExcluded<T extends CompanyLike>(
       if (visited.has(node.id)) continue;
       visited.add(node.id);
       // 只要祖先被排除，整棵子树（除显式项外）都是继承排除
-      const stack: Array<{ node: T; inherited: boolean }> = (
-        childrenOf(node.id) ?? []
-      ).map((child) => ({ node: child, inherited: excludedSet.has(node.id) }));
+      const stack: Array<{ node: T; inherited: boolean }> = (childrenOf(node.id) ?? []).map(
+        (child) => ({ node: child, inherited: excludedSet.has(node.id) }),
+      );
       while (stack.length) {
         const { node: current, inherited } = stack.pop() as { node: T; inherited: boolean };
         if (visited.has(current.id)) continue;

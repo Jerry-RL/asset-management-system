@@ -68,13 +68,7 @@ export const DonutChart = ({
           stroke="#f0f0f0"
           strokeWidth={thickness}
         />
-        <text
-          x={center}
-          y={center + 4}
-          textAnchor="middle"
-          fontSize={12}
-          fill="#bfbfbf"
-        >
+        <text x={center} y={center + 4} textAnchor="middle" fontSize={12} fill="#bfbfbf">
           暂无数据
         </text>
       </svg>
@@ -158,10 +152,7 @@ export const MiniBarChart = ({
 
   if (data.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center text-xs text-gray-400"
-        style={{ height }}
-      >
+      <div className="flex items-center justify-center text-xs text-gray-400" style={{ height }}>
         暂无数据
       </div>
     );
@@ -237,10 +228,7 @@ export const ChartLegend = ({ items }: { items: LegendItem[] }) => (
   <ul className="flex-1 min-w-0 space-y-1.5">
     {items.map((item) => (
       <li key={item.label} className="flex items-center gap-2 text-xs">
-        <span
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: item.color }}
-        />
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
         <span className="text-gray-600 truncate flex-1">{item.label}</span>
         <span className="text-gray-800 tabular-nums">{item.value}</span>
       </li>

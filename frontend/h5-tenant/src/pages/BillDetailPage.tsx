@@ -37,10 +37,13 @@ export function BillDetailPage() {
     setPaying(true);
     setMessage('');
     try {
-      const params = await api.post<{ mock?: boolean; paid?: boolean }>('/billing/payments/wechat', {
-        billIds: [Number(id)],
-        strategy: 'specified',
-      });
+      const params = await api.post<{ mock?: boolean; paid?: boolean }>(
+        '/billing/payments/wechat',
+        {
+          billIds: [Number(id)],
+          strategy: 'specified',
+        },
+      );
       if (params?.mock || params?.paid) {
         setMessage('支付成功');
         reload();

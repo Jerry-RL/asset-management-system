@@ -129,9 +129,13 @@ export function ScanAssetPage() {
           <div className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] tracking-wide mb-3">
             一产一码 · 资产扫码查询
           </div>
-          <h1 className="text-[22px] font-semibold m-0 leading-snug tracking-tight">{asset.name}</h1>
+          <h1 className="text-[22px] font-semibold m-0 leading-snug tracking-tight">
+            {asset.name}
+          </h1>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusTone}`}>
+            <span
+              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusTone}`}
+            >
               {status}
             </span>
             <span className="text-white/75 text-xs">{asset.assetNo}</span>

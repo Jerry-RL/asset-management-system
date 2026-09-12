@@ -40,41 +40,197 @@ interface AppEntry {
 }
 
 const OPERATING: AppEntry[] = [
-  { title: '经营日历', desc: '到期与待办排期', path: '/ops-calendar', icon: <CalendarOutlined />, color: '#fa541c' },
-  { title: '经营看板', desc: '经营指标总览', path: '/dashboard', icon: <DashboardOutlined />, color: '#1677ff' },
-  { title: '合同管理', desc: '合同与退租', path: '/contracts', icon: <FileTextOutlined />, color: '#2f54eb' },
-  { title: '收费大厅', desc: '账单与表计', path: '/billing/bills', icon: <AccountBookOutlined />, color: '#52c41a' },
-  { title: '资产管理', desc: '资产台账与项目', path: '/assets', icon: <BankOutlined />, color: '#13c2c2' },
-  { title: '招租管理', desc: '公开招租与客商', path: '/lease-listings', icon: <ShopOutlined />, color: '#eb2f96' },
-  { title: '履约催缴', desc: '催缴记录', path: '/dunning/auto', icon: <PhoneOutlined />, color: '#f5222d' },
-  { title: '巡检维修', desc: '报修与巡查', path: '/repairs', icon: <ToolOutlined />, color: '#1890ff' },
-  { title: '发票管理', desc: '开票与税率', path: '/invoices', icon: <ReconciliationOutlined />, color: '#fa541c' },
-  { title: '资债权证', desc: '权证抵押评估', path: '/certificates', icon: <FileProtectOutlined />, color: '#722ed1' },
-  { title: '资产运营', desc: '处置占用自用', path: '/disposals', icon: <ShopOutlined />, color: '#fa8c16' },
-  { title: '资产地图', desc: '空间分布', path: '/asset-map', icon: <EnvironmentOutlined />, color: '#36cfc9' },
-  { title: '数据报表', desc: '经营分析', path: '/reports', icon: <BarChartOutlined />, color: '#597ef7' },
+  {
+    title: '经营日历',
+    desc: '到期与待办排期',
+    path: '/ops-calendar',
+    icon: <CalendarOutlined />,
+    color: '#fa541c',
+  },
+  {
+    title: '经营看板',
+    desc: '经营指标总览',
+    path: '/dashboard',
+    icon: <DashboardOutlined />,
+    color: '#1677ff',
+  },
+  {
+    title: '合同管理',
+    desc: '合同与退租',
+    path: '/contracts',
+    icon: <FileTextOutlined />,
+    color: '#2f54eb',
+  },
+  {
+    title: '收费大厅',
+    desc: '账单与表计',
+    path: '/billing/bills',
+    icon: <AccountBookOutlined />,
+    color: '#52c41a',
+  },
+  {
+    title: '资产管理',
+    desc: '资产台账与项目',
+    path: '/assets',
+    icon: <BankOutlined />,
+    color: '#13c2c2',
+  },
+  {
+    title: '招租管理',
+    desc: '公开招租与客商',
+    path: '/lease-listings',
+    icon: <ShopOutlined />,
+    color: '#eb2f96',
+  },
+  {
+    title: '履约催缴',
+    desc: '催缴记录',
+    path: '/dunning/auto',
+    icon: <PhoneOutlined />,
+    color: '#f5222d',
+  },
+  {
+    title: '巡检维修',
+    desc: '报修与巡查',
+    path: '/repairs',
+    icon: <ToolOutlined />,
+    color: '#1890ff',
+  },
+  {
+    title: '发票管理',
+    desc: '开票与税率',
+    path: '/invoices',
+    icon: <ReconciliationOutlined />,
+    color: '#fa541c',
+  },
+  {
+    title: '资债权证',
+    desc: '权证抵押评估',
+    path: '/certificates',
+    icon: <FileProtectOutlined />,
+    color: '#722ed1',
+  },
+  {
+    title: '资产运营',
+    desc: '处置占用自用',
+    path: '/disposals',
+    icon: <ShopOutlined />,
+    color: '#fa8c16',
+  },
+  {
+    title: '资产地图',
+    desc: '空间分布',
+    path: '/asset-map',
+    icon: <EnvironmentOutlined />,
+    color: '#36cfc9',
+  },
+  {
+    title: '数据报表',
+    desc: '经营分析',
+    path: '/reports',
+    icon: <BarChartOutlined />,
+    color: '#597ef7',
+  },
 ];
 
 const FIXED: AppEntry[] = [
-  { title: '固资清单', desc: '固定资产台账', path: '/fixed-assets', icon: <ClusterOutlined />, color: '#1677ff' },
+  {
+    title: '固资清单',
+    desc: '固定资产台账',
+    path: '/fixed-assets',
+    icon: <ClusterOutlined />,
+    color: '#1677ff',
+  },
 ];
 
 const DIGITAL: AppEntry[] = [
-  { title: '任务中心', desc: '待办与超时', path: '/tasks', icon: <ScheduleOutlined />, color: '#fa8c16' },
-  { title: '预警管理', desc: '规则与提醒', path: '/alerts/records', icon: <AlertOutlined />, color: '#f5222d' },
-  { title: '运营管理', desc: '消息与配置', path: '/notifications', icon: <AppstoreOutlined />, color: '#13c2c2' },
-  { title: '组织架构', desc: '组织与人员', path: '/org/companies', icon: <TeamOutlined />, color: '#1677ff' },
-  { title: '系统管理', desc: '用户角色日志', path: '/system/users', icon: <SafetyOutlined />, color: '#595959' },
-  { title: '系统配置', desc: '参数与版本', path: '/config/versions', icon: <SettingOutlined />, color: '#722ed1' },
+  {
+    title: '任务中心',
+    desc: '待办与超时',
+    path: '/tasks',
+    icon: <ScheduleOutlined />,
+    color: '#fa8c16',
+  },
+  {
+    title: '预警管理',
+    desc: '规则与提醒',
+    path: '/alerts/records',
+    icon: <AlertOutlined />,
+    color: '#f5222d',
+  },
+  {
+    title: '运营管理',
+    desc: '消息与配置',
+    path: '/notifications',
+    icon: <AppstoreOutlined />,
+    color: '#13c2c2',
+  },
+  {
+    title: '组织架构',
+    desc: '组织与人员',
+    path: '/org/companies',
+    icon: <TeamOutlined />,
+    color: '#1677ff',
+  },
+  {
+    title: '系统管理',
+    desc: '用户角色日志',
+    path: '/system/users',
+    icon: <SafetyOutlined />,
+    color: '#595959',
+  },
+  {
+    title: '系统配置',
+    desc: '参数与版本',
+    path: '/config/versions',
+    icon: <SettingOutlined />,
+    color: '#722ed1',
+  },
 ];
 
 const WORKBENCH_QUICK: AppEntry[] = [
-  { title: '经营日历', desc: '快速进入', path: '/ops-calendar', icon: <CalendarOutlined />, color: '#fa541c' },
-  { title: '任务中心', desc: '快速进入', path: '/tasks', icon: <CarryOutOutlined />, color: '#13c2c2' },
-  { title: '合同管理', desc: '快速进入', path: '/contracts', icon: <FileTextOutlined />, color: '#2f54eb' },
-  { title: '收费大厅', desc: '快速进入', path: '/billing/bills', icon: <AccountBookOutlined />, color: '#52c41a' },
-  { title: '资产台账', desc: '快速进入', path: '/assets', icon: <BankOutlined />, color: '#1677ff' },
-  { title: '报修工单', desc: '快速进入', path: '/repairs', icon: <ToolOutlined />, color: '#fa8c16' },
+  {
+    title: '经营日历',
+    desc: '快速进入',
+    path: '/ops-calendar',
+    icon: <CalendarOutlined />,
+    color: '#fa541c',
+  },
+  {
+    title: '任务中心',
+    desc: '快速进入',
+    path: '/tasks',
+    icon: <CarryOutOutlined />,
+    color: '#13c2c2',
+  },
+  {
+    title: '合同管理',
+    desc: '快速进入',
+    path: '/contracts',
+    icon: <FileTextOutlined />,
+    color: '#2f54eb',
+  },
+  {
+    title: '收费大厅',
+    desc: '快速进入',
+    path: '/billing/bills',
+    icon: <AccountBookOutlined />,
+    color: '#52c41a',
+  },
+  {
+    title: '资产台账',
+    desc: '快速进入',
+    path: '/assets',
+    icon: <BankOutlined />,
+    color: '#1677ff',
+  },
+  {
+    title: '报修工单',
+    desc: '快速进入',
+    path: '/repairs',
+    icon: <ToolOutlined />,
+    color: '#fa8c16',
+  },
 ];
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
@@ -258,7 +414,9 @@ export function HomePage() {
               >
                 {item.icon}
               </span>
-              <span className="text-xs text-gray-700 truncate max-w-full text-center">{item.title}</span>
+              <span className="text-xs text-gray-700 truncate max-w-full text-center">
+                {item.title}
+              </span>
             </Link>
           ))}
         </div>

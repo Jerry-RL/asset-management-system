@@ -16,13 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { useCompany } from '@/lib/company';
 import { cn } from '@/lib/utils';
 import { getGroupIcon, getPathIcon } from '@/lib/menuIcons';
-import {
-  MenuEmpty,
-  MenuFallbackNotice,
-  MenuSkeleton,
-  useMenu,
-  type MenuState,
-} from '@/lib/menu';
+import { MenuEmpty, MenuFallbackNotice, MenuSkeleton, useMenu, type MenuState } from '@/lib/menu';
 import type { MenuGroup } from '@/pages/modules';
 import { PermissionSnapshotRefresher, RequirePerm } from '@/lib/perm';
 import { PageTabs } from './PageTabs';
@@ -137,7 +131,9 @@ export function AdminLayout() {
           </div>
           {!siderCollapsed && (
             <div className="min-w-0 overflow-hidden">
-              <div className="text-sm font-semibold text-[var(--ams-primary)] truncate">资管云平台</div>
+              <div className="text-sm font-semibold text-[var(--ams-primary)] truncate">
+                资管云平台
+              </div>
               <div className="text-[10px] text-[var(--ams-text-secondary)] truncate">
                 Asset Management
               </div>
@@ -213,7 +209,11 @@ export function AdminLayout() {
                 type="button"
                 className="flex items-center gap-2 text-sm text-gray-600 max-w-[140px] overflow-hidden"
               >
-                <Avatar size="small" icon={<UserOutlined />} className="bg-[var(--ams-primary)] shrink-0" />
+                <Avatar
+                  size="small"
+                  icon={<UserOutlined />}
+                  className="bg-[var(--ams-primary)] shrink-0"
+                />
                 <span className="truncate hidden md:inline">{user?.name ?? '用户'}</span>
                 <DownOutlined className="text-[10px] text-gray-400 shrink-0" />
               </button>

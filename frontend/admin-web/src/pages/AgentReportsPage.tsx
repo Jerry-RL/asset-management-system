@@ -44,7 +44,10 @@ export function AgentReportsPage() {
 
   const handleDownload = async (reportId: number) => {
     try {
-      const data = await api.post<DownloadPayload>(`/intelligence/reports/${reportId}/download`, {});
+      const data = await api.post<DownloadPayload>(
+        `/intelligence/reports/${reportId}/download`,
+        {},
+      );
       const html = data?.contentHtml ?? '';
       const blob = new Blob(
         [

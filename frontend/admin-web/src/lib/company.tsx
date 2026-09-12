@@ -67,9 +67,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
   const [options, setOptions] = useState<CompanyOption[]>([]);
   const [unrestricted, setUnrestricted] = useState(false);
-  const [activeCompanyId, setActiveCompanyId] = useState<number | null>(() =>
-    getActiveCompanyId(),
-  );
+  const [activeCompanyId, setActiveCompanyId] = useState<number | null>(() => getActiveCompanyId());
   const [loading, setLoading] = useState(false);
   const [scopeVersion, setScopeVersion] = useState(0);
 
@@ -91,8 +89,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       setOptions(data.companies ?? []);
       setUnrestricted(!!data.unrestricted);
       const stored = getActiveCompanyId();
-      const valid =
-        stored != null && (data.companies ?? []).some((c) => c.id === stored);
+      const valid = stored != null && (data.companies ?? []).some((c) => c.id === stored);
       const resolved = valid ? stored : (data.activeCompanyId ?? null);
       setActiveCompanyId(resolved);
       persist(resolved, data.companies ?? []);

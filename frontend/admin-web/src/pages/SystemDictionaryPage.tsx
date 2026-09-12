@@ -246,7 +246,7 @@ export function SystemDictionaryPage() {
   };
 
   const itemsOfType = (targetTypeId?: number) =>
-    targetTypeId ? allTypes.find((t) => t.id === targetTypeId)?.items ?? [] : [];
+    targetTypeId ? (allTypes.find((t) => t.id === targetTypeId)?.items ?? []) : [];
 
   // ---- 编辑弹窗 ----
 
@@ -515,7 +515,11 @@ export function SystemDictionaryPage() {
                 </div>
                 <Space wrap size={[8, 8]}>
                   {canDo('update') && (
-                    <Button size="small" icon={<EditOutlined />} onClick={() => openEditor('module', activeModule)}>
+                    <Button
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => openEditor('module', activeModule)}
+                    >
                       编辑模块
                     </Button>
                   )}
@@ -679,7 +683,13 @@ export function SystemDictionaryPage() {
           )}
           <Form.Item
             name="name"
-            label={editorKind === 'item' ? '字典项名称' : editorKind === 'module' ? '模块名称' : '字典名称'}
+            label={
+              editorKind === 'item'
+                ? '字典项名称'
+                : editorKind === 'module'
+                  ? '模块名称'
+                  : '字典名称'
+            }
             rules={[{ required: true, message: '请输入名称' }]}
           >
             <Input maxLength={100} placeholder="请输入名称" />

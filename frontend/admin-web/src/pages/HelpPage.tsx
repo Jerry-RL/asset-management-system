@@ -92,7 +92,11 @@ export function HelpPage() {
           </div>
           <nav className="flex-1 min-h-0 overflow-y-auto ams-scroll p-2" aria-label="手册目录">
             {grouped.length === 0 ? (
-              <Empty className="py-10" description="无匹配模块" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty
+                className="py-10"
+                description="无匹配模块"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
             ) : (
               grouped.map(([group, items]) => (
                 <div key={group} className="mb-3">
@@ -113,7 +117,9 @@ export function HelpPage() {
                             )}
                             aria-current={active ? 'page' : undefined}
                           >
-                            <span className="shrink-0 text-base leading-none">{getPathIcon(item.path)}</span>
+                            <span className="shrink-0 text-base leading-none">
+                              {getPathIcon(item.path)}
+                            </span>
                             <span className="truncate">{item.title}</span>
                           </button>
                         </li>
@@ -138,8 +144,12 @@ export function HelpPage() {
                   </span>
                   <div className="min-w-0">
                     <div className="text-xs text-gray-400 mb-0.5">{selected.group}</div>
-                    <h2 className="text-xl font-semibold text-gray-900 m-0 truncate">{selected.title}</h2>
-                    <div className="text-xs text-gray-400 mt-1 font-mono truncate">{selected.path}</div>
+                    <h2 className="text-xl font-semibold text-gray-900 m-0 truncate">
+                      {selected.title}
+                    </h2>
+                    <div className="text-xs text-gray-400 mt-1 font-mono truncate">
+                      {selected.path}
+                    </div>
                   </div>
                 </div>
                 <Button type="primary" icon={<ArrowRightOutlined />} onClick={handleGoModule}>

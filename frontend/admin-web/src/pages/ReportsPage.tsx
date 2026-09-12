@@ -102,9 +102,7 @@ export function ReportsPage() {
         api.get<PageResult<ProjectOption> | ProjectOption[]>('/projects?page=1&pageSize=200'),
       ]);
       setCompanies(companyList ?? []);
-      const projectList = Array.isArray(projectPage)
-        ? projectPage
-        : (projectPage?.list ?? []);
+      const projectList = Array.isArray(projectPage) ? projectPage : (projectPage?.list ?? []);
       setProjects(projectList);
     } catch {
       // 下拉选项失败不阻断报表主流程

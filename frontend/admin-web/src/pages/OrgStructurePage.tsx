@@ -153,9 +153,7 @@ const fetchOptions = async (
 ): Promise<Option[]> => {
   try {
     const raw = await api.get<unknown>(path);
-    const list = Array.isArray(raw)
-      ? raw
-      : ((raw as { list?: unknown[] } | null)?.list ?? []);
+    const list = Array.isArray(raw) ? raw : ((raw as { list?: unknown[] } | null)?.list ?? []);
     return (list as Record<string, unknown>[]).map((item) => {
       const value = item[valueKey] as string | number;
       const base = String(item[labelKey] ?? value);
@@ -702,7 +700,9 @@ export function OrgStructurePage() {
 
   /** 按节点类型拼出「维护」动作 */
   const actionsFor = useCallback(
-    (node: OrgGraphNode): { key: string; label: string; icon: ReactNode; onClick: () => void }[] => {
+    (
+      node: OrgGraphNode,
+    ): { key: string; label: string; icon: ReactNode; onClick: () => void }[] => {
       if (node.nodeType === 'company') {
         return [
           {
@@ -833,10 +833,12 @@ export function OrgStructurePage() {
    */
   const menuItemsFor = useCallback(
     (node: OrgGraphNode): MenuProps['items'] => {
-      const close = <T,>(fn: () => T) => () => {
-        setMenu(null);
-        fn();
-      };
+      const close =
+        <T,>(fn: () => T) =>
+        () => {
+          setMenu(null);
+          fn();
+        };
       const items: MenuProps['items'] = actionsFor(node).map((a) => ({
         key: a.key,
         label: a.label,
@@ -883,9 +885,7 @@ export function OrgStructurePage() {
         >
           {node.name}
         </span>
-        {node.subtitle && (
-          <span className="text-xs text-gray-400 truncate">{node.subtitle}</span>
-        )}
+        {node.subtitle && <span className="text-xs text-gray-400 truncate">{node.subtitle}</span>}
         {node.status === 0 && (
           <Tag color="default" className="m-0 shrink-0">
             已停用
@@ -1081,10 +1081,7 @@ export function OrgStructurePage() {
                     }}
                   />
                 ) : (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="暂无可展示的组织节点"
-                  />
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可展示的组织节点" />
                 )}
               </div>
             )}
@@ -1154,7 +1151,10 @@ export function OrgStructurePage() {
                           : '否'
                         : String(value);
                   return (
-                    <div key={key} className="flex gap-2 border-b border-[var(--ams-border)] py-1.5">
+                    <div
+                      key={key}
+                      className="flex gap-2 border-b border-[var(--ams-border)] py-1.5"
+                    >
                       <dt className="w-20 text-gray-500 shrink-0 truncate" title={label}>
                         {label}
                       </dt>
@@ -1177,7 +1177,10 @@ export function OrgStructurePage() {
                           key={`${nb.edgeId}-${nb.direction}`}
                           className="flex items-center gap-2 text-xs min-w-0"
                         >
-                          <Tag className="m-0 shrink-0" color={nb.direction === 'in' ? 'default' : 'blue'}>
+                          <Tag
+                            className="m-0 shrink-0"
+                            color={nb.direction === 'in' ? 'default' : 'blue'}
+                          >
                             {nb.direction === 'in' ? '← ' : '→ '}
                             {nb.label}
                           </Tag>
@@ -1220,9 +1223,7 @@ export function OrgStructurePage() {
                   <div className="flex items-center gap-2 pt-2 border-t border-dashed border-[var(--ams-border)]">
                     <Button
                       size="small"
-                      icon={
-                        selected.status === 0 ? <CheckCircleOutlined /> : <StopOutlined />
-                      }
+                      icon={selected.status === 0 ? <CheckCircleOutlined /> : <StopOutlined />}
                       onClick={() => void toggleStatus(selected)}
                     >
                       {selected.status === 0 ? '启用' : '停用'}

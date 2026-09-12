@@ -83,9 +83,7 @@ export function PageTabs() {
       const normalized = ensureHome(next);
       persist(normalized);
       if (!normalized.some((t) => t.path === location.pathname)) {
-        const preferred = preferPath
-          ? normalized.find((t) => t.path === preferPath)
-          : undefined;
+        const preferred = preferPath ? normalized.find((t) => t.path === preferPath) : undefined;
         navigate((preferred ?? normalized[normalized.length - 1] ?? HOME).path);
       }
     },
@@ -238,7 +236,9 @@ export function PageTabs() {
           onClick={() => handleScrollBy(-1)}
           className={cn(
             'w-8 shrink-0 flex items-center justify-center border-r border-[var(--ams-border)] text-gray-500 z-10 bg-white',
-            canLeft ? 'hover:text-[var(--ams-primary)] hover:bg-blue-50' : 'opacity-30 cursor-not-allowed',
+            canLeft
+              ? 'hover:text-[var(--ams-primary)] hover:bg-blue-50'
+              : 'opacity-30 cursor-not-allowed',
           )}
         >
           <LeftOutlined className="text-xs" />
@@ -278,7 +278,9 @@ export function PageTabs() {
                   <span className="text-xs leading-none opacity-80 shrink-0">
                     {getPathIcon(tab.path)}
                   </span>
-                  <span className="truncate min-w-0 flex-1 text-left leading-none">{tab.title}</span>
+                  <span className="truncate min-w-0 flex-1 text-left leading-none">
+                    {tab.title}
+                  </span>
                   {tab.path !== '/' ? (
                     <span
                       role="button"
@@ -320,7 +322,9 @@ export function PageTabs() {
           onClick={() => handleScrollBy(1)}
           className={cn(
             'w-8 shrink-0 flex items-center justify-center border-l border-[var(--ams-border)] text-gray-500 z-10 bg-white',
-            canRight ? 'hover:text-[var(--ams-primary)] hover:bg-blue-50' : 'opacity-30 cursor-not-allowed',
+            canRight
+              ? 'hover:text-[var(--ams-primary)] hover:bg-blue-50'
+              : 'opacity-30 cursor-not-allowed',
           )}
         >
           <RightOutlined className="text-xs" />

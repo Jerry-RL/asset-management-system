@@ -174,7 +174,10 @@ export function ContractTemplatesPage() {
         sample: true,
       });
       if (data?.docFileId) {
-        await api.download(`/files/${data.docFileId}/download`, data.fileName ?? `${row.templateCode}.docx`);
+        await api.download(
+          `/files/${data.docFileId}/download`,
+          data.fileName ?? `${row.templateCode}.docx`,
+        );
         message.success('已导出 Word');
       } else {
         message.warning('未返回文件');
@@ -267,7 +270,8 @@ export function ContractTemplatesPage() {
               title: '状态',
               dataIndex: 'enabled',
               width: 90,
-              render: (v: boolean) => (v === false ? <Tag>停用</Tag> : <Tag color="green">启用</Tag>),
+              render: (v: boolean) =>
+                v === false ? <Tag>停用</Tag> : <Tag color="green">启用</Tag>,
             },
             {
               title: '操作',

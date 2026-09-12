@@ -87,7 +87,9 @@ function StatCard({
 
 export function ConsolidatePage() {
   const [data, setData] = useState<Consolidate & { byCompany?: CompanyRow[] }>({});
-  const [drill, setDrill] = useState<{ level?: string; items?: Record<string, unknown>[] } | null>(null);
+  const [drill, setDrill] = useState<{ level?: string; items?: Record<string, unknown>[] } | null>(
+    null,
+  );
   const [companyId, setCompanyId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -264,7 +266,9 @@ export function ConsolidatePage() {
                       <td className="py-2">{String(row.assetNo ?? '-')}</td>
                       <td className="py-2">{String(row.name ?? '-')}</td>
                       <td className="py-2">{String(row.area ?? '-')}</td>
-                      <td className="py-2">{enumLabel(LEASE_CONTROL_STATUS, row.leaseControlStatus)}</td>
+                      <td className="py-2">
+                        {enumLabel(LEASE_CONTROL_STATUS, row.leaseControlStatus)}
+                      </td>
                     </>
                   )}
                 </tr>

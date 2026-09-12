@@ -21,16 +21,8 @@ interface AssetQrLabelProps {
 }
 
 /** 一产一码展示标签：二维码 + 资产摘要，台账弹窗与档案页共用 */
-export function AssetQrLabel({
-  asset,
-  variant = 'modal',
-  loading,
-  onDownload,
-}: AssetQrLabelProps) {
-  const address =
-    asset.address ||
-    [asset.assetNo, asset.name].filter(Boolean).join(' · ') ||
-    '—';
+export function AssetQrLabel({ asset, variant = 'modal', loading, onDownload }: AssetQrLabelProps) {
+  const address = asset.address || [asset.assetNo, asset.name].filter(Boolean).join(' · ') || '—';
   const statusLabel = enumLabel(LEASE_CONTROL_STATUS, asset.leaseControlStatus);
   const typeLabel = enumLabel(ASSET_TYPE, asset.assetType);
   const qrSize = variant === 'dossier' ? 72 : 200;
@@ -103,9 +95,7 @@ export function AssetQrLabel({
           <QrcodeOutlined />
           一产一码
         </span>
-        {asset.leaseControlStatus ? (
-          <Tag className="!m-0">{statusLabel}</Tag>
-        ) : null}
+        {asset.leaseControlStatus ? <Tag className="!m-0">{statusLabel}</Tag> : null}
         {asset.assetType ? <Tag className="!m-0">{typeLabel}</Tag> : null}
       </div>
 
@@ -144,7 +134,12 @@ export function AssetQrLabel({
       </div>
 
       {onDownload ? (
-        <Button type="primary" icon={<DownloadOutlined />} onClick={onDownload} aria-label="下载二维码">
+        <Button
+          type="primary"
+          icon={<DownloadOutlined />}
+          onClick={onDownload}
+          aria-label="下载二维码"
+        >
           下载 PNG
         </Button>
       ) : null}

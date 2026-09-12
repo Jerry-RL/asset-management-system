@@ -63,17 +63,18 @@ const menuItemsOf = (actions: TableActionItem[]): MenuProps['items'] => {
 };
 
 const linkClassOf = (action: TableActionItem) =>
-  cn(
-    'ams-action-link',
-    action.danger && 'is-danger',
-    action.disabled && 'is-disabled',
-  );
+  cn('ams-action-link', action.danger && 'is-danger', action.disabled && 'is-disabled');
 
 /**
  * 统一「操作」列：内联文字链接（含图标），超出部分与次要操作收进「更多」下拉。
  * 点击默认阻止冒泡，避免触发行点击（如打开详情抽屉）。
  */
-export const TableActions = ({ actions = [], more = [], max = 2, className }: TableActionsProps) => {
+export const TableActions = ({
+  actions = [],
+  more = [],
+  max = 2,
+  className,
+}: TableActionsProps) => {
   const { user } = useAuth();
   // 声明了 perm 的项在此处统一剔除（设计 6.2）：调用点只需声明，不必各自算 hidden
   const permitted = (a: TableActionItem) => !a.perm || hasPerm(user, a.perm);
