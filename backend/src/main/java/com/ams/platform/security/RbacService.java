@@ -93,7 +93,10 @@ public class RbacService {
             for (Role role : roles) {
                 if (role.getStatus() != null && role.getStatus() == 1) {
                     roleCodes.add(role.getCode());
-                    dataScope = widen(dataScope, role.getDataScope());
+                    // 取最宽；未知 / null 取值按最窄处理（收敛方向朝安全侧）
+                    if (DataScope.isWiderThan(role.getDataScope(), dataScope)) {
+                        dataScope = role.getDataScope();
+                    }
                 }
             }
             if (!enabledRoleIds.isEmpty()) {
@@ -296,25 +299,5 @@ public class RbacService {
         return companyTreeService.listCompanies().stream()
                 .map(Company::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    private String widen(String current, String candidate) {
-        if (candidate == null) {
-            return current;
-        }
-        int cur = rank(current);
-        int cand = rank(candidate);
-        return cand > cur ? candidate : current;
-    }
-
-    private int rank(String scope) {
-        return switch (scope) {
-            case "all" -> 5;
-            case "company" -> 4;
-            case "dept" -> 3;
-            case "project" -> 2;
-            case "self" -> 1;
-            default -> 0;
-        };
     }
 }

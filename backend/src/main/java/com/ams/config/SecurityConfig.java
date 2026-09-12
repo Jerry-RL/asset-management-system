@@ -59,23 +59,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         auth ->
                                 auth.requestMatchers(
-                                                "/api/v1/auth/login",
-                                                "/api/v1/auth/captcha",
-                                                "/api/v1/auth/refresh",
-                                                "/api/v1/auth/wechat/login",
-                                                "/api/v1/auth/wechat/bind",
-                                                "/api/v1/callbacks/**",
-                                                "/api/v1/health/**",
-                                                "/api/v1/public/**",
-                                                // 附件「公开对象」读取：<img> 无法携带 Authorization，
-                                                // 安全性由对象键内嵌的随机 UUID（不可枚举）保证
-                                                "/api/v1/files/object/**",
-                                                "/actuator/health",
-                                                "/actuator/info",
-                                                "/swagger-ui/**",
-                                                "/swagger-ui.html",
-                                                "/api-docs/**",
-                                                "/v3/api-docs/**")
+                                                SecurityWhitelist.PATTERNS.toArray(String[]::new))
                                         .permitAll()
                                         .anyRequest()
                                         .authenticated());

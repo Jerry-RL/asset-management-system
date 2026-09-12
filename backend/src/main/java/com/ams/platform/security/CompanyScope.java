@@ -54,11 +54,16 @@ public final class CompanyScope {
     /**
      * 从基线中扣除排除集合（调用方需已把被排除公司展开为整棵子树）。
      *
-     * <p><strong>只对受限范围有意义</strong>：不受限范围没有基线，调用方必须先
-     * {@code CompanyScope.of(allCompanyIds())} 物化出全部公司再扣除。
-     * 误对不受限范围调用只会把结果收窄成拒绝态（收敛方向是安全侧，不会放大权限）。
+     * <p><strong>只对受限范围有意义</strong>：不受限范围没有基线，减去任何东西都只会得到
+     * 「什么都不允许」，那不是调用方想要的结果，而是一个会静默锁死全系统的编程错误。
+     * 因此这里直接抛错，而不是返回一个看似合理的空范围。
+     * 需要扣除排除清单时，调用方必须先 {@code CompanyScope.of(allCompanyIds())} 物化基线。
      */
     public CompanyScope minus(Collection<Long> excluded) {
+        if (unrestricted) {
+            throw new IllegalStateException(
+                    "不受限范围没有基线，不能做减法；请先用 CompanyScope.of(全部公司) 物化基线");
+        }
         if (excluded == null || excluded.isEmpty()) {
             return this;
         }

@@ -19,6 +19,8 @@ public class MenuNode {
     private String icon;
     private Integer sort;
     private String menuType;
+    /** 状态（1 启用 / 0 停用）。管理树需要它来决定是否显示「随目录停用」标记。 */
+    private Integer status;
     private List<MenuNode> children = new ArrayList<>();
 
     public static MenuNode from(Menu menu) {
@@ -31,6 +33,7 @@ public class MenuNode {
         node.setIcon(menu.getIcon());
         node.setSort(menu.getSort());
         node.setMenuType(menu.getMenuType());
+        node.setStatus(menu.getStatus());
         return node;
     }
 }

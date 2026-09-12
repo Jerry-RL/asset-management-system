@@ -211,6 +211,11 @@ CREATE INDEX idx_role_data_exclude_role ON role_data_exclude (role_id);
 
 -- 5.1 导航类菜单：向所有非超管角色回填 view。
 --     今天静态侧边栏对所有人全量可见，回填 view 是为了保持这一导航可见性不变。
+--
+--     敏感菜单必须排除在外（设计 7.1 的「不回填」清单）。除 system.* 之外还要显式排除
+--     org.user：modules.tsx 把「人员维护」(/system/users) 归在「组织架构」目录下，
+--     其 code 因此是 org.user 而不是设计示例里的 system.user —— 只按 system.% 前缀排除
+--     会让这个页面连同 org.user:view 一起回填给全部业务角色，等于对所有人敞开人员管理。
 INSERT INTO role_permission (role_id, menu_id, menu_code, action)
 SELECT r.id, m.id, m.code, 'view'
 FROM role r
@@ -218,9 +223,10 @@ CROSS JOIN menu m
 WHERE r.code <> 'super_admin'
   AND m.menu_type = 'menu'
   AND m.code NOT LIKE 'system.%'
+  AND m.code <> 'org.user'
 ON CONFLICT DO NOTHING;
 
--- 5.2 系统管理菜单：只授予原有运维/管理员角色（operator），不向业务角色敞开。
+-- 5.2 系统管理菜单 + 人员维护：只授予原有运维/管理员角色（operator），不向业务角色敞开。
 --     super_admin 走 isSuperAdmin() 旁路，无需数据行；system.role:assign 等提权能力
 --     同样不在迁移里授予，由 super_admin 在角色权限页显式下发（见设计 4.5）。
 INSERT INTO role_permission (role_id, menu_id, menu_code, action)
@@ -229,5 +235,5 @@ FROM role r
 CROSS JOIN menu m
 WHERE r.code = 'operator'
   AND m.menu_type = 'menu'
-  AND m.code LIKE 'system.%'
+  AND (m.code LIKE 'system.%' OR m.code = 'org.user')
 ON CONFLICT DO NOTHING;

@@ -355,7 +355,10 @@ public class AuthService {
         if (user == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
-        boolean unrestricted = user.isSuperAdmin() || "all".equals(user.getDataScope());
+        // 必须带 !companyScoped：super_admin 仅在**未切换公司**时不受限；
+        // 一旦切入某公司，可见集合与「全部公司」选项都要收窄（设计 5.3）。
+        boolean unrestricted = !user.isCompanyScoped()
+                && (user.isSuperAdmin() || "all".equals(user.getDataScope()));
         CompanyScope allowed = rbacService.switchableCompanyScope(user);
         // 按公司树顺序返回，前端缩进展示时层级才连贯（父在上、子在下）
         List<CompanyScopeOptions.Item> companies =
@@ -388,7 +391,7 @@ public class AuthService {
      *         其余情况返回生效公司，未切换时即所属公司
      */
     private Long effectiveSelectedCompanyId(LoginUser user, boolean unrestricted) {
-        if (unrestricted && !user.isCompanyScoped()) {
+        if (unrestricted) {
             return null;
         }
         return user.getCompanyId();

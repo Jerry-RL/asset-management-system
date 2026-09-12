@@ -65,6 +65,12 @@ ams:
     refresh-secret: ${JWT_REFRESH_SECRET:dev-refresh-secret-change-me-min-32-chars!}
     access-expiration-minutes: 120
     refresh-expiration-days: 7
+  security:
+    # 操作级权限过渡开关（设计 6.1）。
+    # false（默认/本期交付）：已加 @RequiresPerm 的接口照常判定，未加注解的接口仅校验登录。
+    # true（后续交付，前置条件是全部变更类接口完成注解，见设计 6.3 DoD）：
+    #   未加注解的变更类接口（POST/PUT/PATCH/DELETE）一律拒绝；GET 读接口与 permitAll 白名单不受影响。
+    strict-perm: ${AMS_STRICT_PERM:false}
   wechat:
     miniapp:
       app-id: ${WECHAT_APP_ID:}

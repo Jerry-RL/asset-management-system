@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.ams.platform.security.RbacService;
 import com.ams.platform.security.SecurityUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,7 @@ public class UserService {
     private final CompanyMapper companyMapper;
     private final DepartmentMapper departmentMapper;
     private final PasswordEncoder passwordEncoder;
+    private final RbacService rbacService;
 
     public UserService(
             UserMapper userMapper,
@@ -45,27 +47,49 @@ public class UserService {
             UserRoleMapper userRoleMapper,
             CompanyMapper companyMapper,
             DepartmentMapper departmentMapper,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            RbacService rbacService) {
         this.userMapper = userMapper;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
         this.companyMapper = companyMapper;
         this.departmentMapper = departmentMapper;
         this.passwordEncoder = passwordEncoder;
+        this.rbacService = rbacService;
     }
 
+    /**
+     * 人员列表。
+     *
+     * @param roleId 角色成员列表场景（角色权限页的「成员」Tab）传入；此时只返回绑定该角色的用户。
+     *     未命中任何用户时返回空页，而不是退化成全量 —— 后者会把「该角色没人」显示成「全部人员」。
+     */
     public PageResult<User> page(long page, long pageSize, String keyword, Long companyId,
-            Long departmentId) {
-        Page<User> result = userMapper.selectPage(
-                new Page<>(page, pageSize),
-                new LambdaQueryWrapper<User>()
-                        .and(keyword != null && !keyword.isBlank(),
-                                w -> w.like(User::getUsername, keyword)
-                                        .or().like(User::getName, keyword)
-                                        .or().like(User::getPhone, keyword))
-                        .eq(companyId != null, User::getCompanyId, companyId)
-                        .eq(departmentId != null, User::getDepartmentId, departmentId)
-                        .orderByDesc(User::getId));
+            Long departmentId, Long roleId) {
+        List<Long> memberIds = null;
+        if (roleId != null) {
+            memberIds = userRoleMapper.selectList(
+                            new LambdaQueryWrapper<UserRole>().eq(UserRole::getRoleId, roleId))
+                    .stream()
+                    .map(UserRole::getUserId)
+                    .distinct()
+                    .toList();
+            if (memberIds.isEmpty()) {
+                return PageResult.of(List.of(), 0, page, pageSize);
+            }
+        }
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
+                .and(keyword != null && !keyword.isBlank(),
+                        w -> w.like(User::getUsername, keyword)
+                                .or().like(User::getName, keyword)
+                                .or().like(User::getPhone, keyword))
+                .eq(companyId != null, User::getCompanyId, companyId)
+                .eq(departmentId != null, User::getDepartmentId, departmentId)
+                .in(memberIds != null, User::getId, memberIds)
+                .orderByDesc(User::getId);
+        // 数据隔离：人员同属组织数据，受限账号不得看到范围外（含被排除公司）的员工
+        rbacService.applyCompanyScope(wrapper, SecurityUtils.current(), User::getCompanyId);
+        Page<User> result = userMapper.selectPage(new Page<>(page, pageSize), wrapper);
         // 不返回密码哈希
         result.getRecords().forEach(u -> u.setPasswordHash(null));
         enrich(result.getRecords());

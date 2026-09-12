@@ -37,6 +37,26 @@ public enum PermissionAction {
         return code;
     }
 
+    /**
+     * 是否为变更类动作（会改变系统状态）。
+     *
+     * <p>{@code strict-perm=true} 时，未加注解的变更类接口一律拒绝、读接口放行，
+     * 因此这份划分同时决定了「没有注解也算已强制」的动作集合 —— 与本枚举的声明顺序无关，
+     * 只与动作语义有关，不能靠 ordinal 推断。
+     */
+    public boolean isMutating() {
+        return switch (this) {
+            case VIEW, EXPORT -> false;
+            case CREATE, UPDATE, DELETE, IMPORT, APPROVE, AUDIT, ASSIGN -> true;
+        };
+    }
+
+    /** 全部变更类动作码。 */
+    public static List<String> mutatingCodes() {
+        return Arrays.stream(values()).filter(PermissionAction::isMutating)
+                .map(PermissionAction::code).toList();
+    }
+
     public static Optional<PermissionAction> of(String code) {
         return Arrays.stream(values()).filter(a -> a.code.equals(code)).findFirst();
     }
