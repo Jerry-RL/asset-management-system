@@ -466,7 +466,7 @@ export function AssetFormPage() {
                     placeholder="请选择资产公司（可输入名称搜索）"
                     treeData={companyTree}
                     listHeight={320}
-                    disabled={(lockScope && lockedCompanyId != null) || undefined}
+                    disabled={(lockScope && (isEdit || lockedCompanyId != null)) || undefined}
                   />
                 </Form.Item>
               </Col>
