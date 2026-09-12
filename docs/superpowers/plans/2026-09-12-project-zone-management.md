@@ -1329,7 +1329,16 @@ git commit -m "feat(admin): 项目分区管理左栏项目列表（搜索 + 分�
   - `usePerm()`、`currentPath(location)`（`@/lib/navigation`）、`confirmDelete`、`TableActions`
 - Produces: `interface ZoneAssetPaneProps { projectId: number | null; zoneId: number | null; onZoneChange: (zoneId: number | null) => void }` 与 `function ZoneAssetPane(props): JSX.Element`
 
-> **联动契约（spec §5.2）**：切换项目/Tab/点刷新 → 资产归第 1 页并重拉；分区增删改 → 重拉 Tab（`useProjectZones` 内部已做）；**资产删除后必须同时 `reloadZones()`** —— Tab 上的资产数与面积由后端按分区汇总，只刷资产表会让 Tab 数字与表内行数对不上。资产的**新增/编辑**发生在独立表单页，返回时整个 `ProjectZonesPage` 重新挂载，因此天然重拉，无需额外回调。
+> **联动契约（spec §5.2，逐行对照）**：
+> - 第 1 条（左栏切换项目）：分页归 1、重拉资产；「选中 Tab 重置为全部分区」由上层（Task 6）把 `zoneId` 置 null 实现。
+> - 第 2 条（切换分区 Tab）：不请求分区，分页归 1、重拉资产。
+> - 第 3 条（**新增 / 编辑分区**）：重拉 Tab（`useProjectZones` 内部已做）**且**分页归 1、重拉资产。
+> - 第 4 条（删除分区）：重拉 Tab；删的是当前 Tab 时回到「全部分区」（`onZoneChange(null)`，其 `zoneId` 变动会连带触发资产重拉）。
+> - 第 5 条（资产增删改）：新增/编辑发生在独立表单页，返回时整个 `ProjectZonesPage` 重新挂载 → 天然重拉，**不需要额外回调**；
+>   但**资产删除**就发生在本页，必须 `await reloadZones()` + `reloadAssets()` —— Tab 上的资产数与面积由后端按分区实时汇总，
+>   只刷资产表会让「Tab 里的 12 宗」和「表里的 12 行」逐渐对不上。
+> - 第 6 条（左栏搜索/翻页）：两边都不请求。
+> - 第 7 条（点「刷新」）：**Tab 栏与资产区都要重拉**，资产归第 1 页。这是最容易漏的一条。
 
 - [ ] **Step 1: 创建组件**
 
@@ -1482,6 +1491,17 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
 
   const reloadAssets = () => setAssetsReloadToken((token) => token + 1);
 
+  /**
+   * spec §5.2 第 7 条：「刷新」必须**同时**重拉 Tab 栏与资产区（资产归第 1 页）。
+   *
+   * <p>只刷资产表会让 Tab 上的汇总数字（`assetCount` / `assetArea`，后端按分区实时汇总）
+   * 与表内行数逐渐对不上 —— 这正是本页最容易漏的一处联动。
+   */
+  const handleRefresh = () => {
+    void reloadZones();
+    reloadAssets();
+  };
+
   const handleSubmitZone = async (values: ProjectZone) => {
     if (!editingZone) return;
     try {
@@ -1489,6 +1509,9 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
       await saveZone(editingZone.id != null ? { ...values, id: editingZone.id } : values);
       message.success(editingZone.id != null ? '保存成功' : '新增成功');
       setEditingZone(null);
+      // spec §5.2 第 3 条：分区**新增/编辑**同样要重拉资产区并归第 1 页。
+      // （分区删除走 handleDeleteZone，那条路径靠 onZoneChange(null) 改动 zoneId 间接触发）
+      reloadAssets();
     } catch (e) {
       message.error(e instanceof Error ? e.message : '保存失败');
     }
@@ -1724,8 +1747,8 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
           <Button
             size="small"
             icon={<ReloadOutlined />}
-            onClick={reloadAssets}
-            aria-label="刷新资产列表"
+            onClick={handleRefresh}
+            aria-label="刷新分区与资产列表"
           />
           {canCreateLedger && (
             <Button size="small" type="primary" icon={<PlusOutlined />} onClick={handleAddAsset}>
