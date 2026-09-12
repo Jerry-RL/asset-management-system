@@ -34,7 +34,18 @@ public class CompanyTreeService {
         this.companyMapper = companyMapper;
     }
 
-    /** 全部启用公司（按 sort、id 排序）。 */
+    /**
+     * 全部公司（**含已停用**），按 sort、id 排序。
+     *
+     * <p>刻意不按 {@code status} 过滤，因为本方法同时是数据范围的取值来源
+     * （{@code descendantIds} / 数据范围基线都经由它）：<strong>停用公司仍留在其上级公司的
+     * 子树内，其名下数据对范围内用户依然可读</strong>。这是刻意的口径 —— 「停用」表示不再
+     * 新增业务，不等于抹掉历史数据；把停用公司一并剔除会让历史记录凭空消失。
+     *
+     * <p>需要「不可选择」语义的地方必须自行按 {@code status} 过滤，例如公司切换器
+     * （{@code AuthService} 过滤 {@code status == 1}）与 {@link #isActiveCompany(Long)}。
+     * 这两处管的是「能不能切进去」，与「能不能看到数据」是两件事。
+     */
     public List<Company> listCompanies() {
         return companyMapper.selectList(new LambdaQueryWrapper<Company>()
                 .orderByAsc(Company::getSort)

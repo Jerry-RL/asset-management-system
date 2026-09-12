@@ -146,9 +146,9 @@ public class BillingController {
                 .map(v -> Long.valueOf(v.toString()))
                 .toList();
         String strategy = body.get("strategy") == null ? "specified" : body.get("strategy").toString();
-        return ApiResponse.ok(wechatPayService.createJsapiPayment(billIds, strategy), TraceIdUtil.get());
         // 一笔支付可能覆盖多张账单，必须逐张确认都在范围内
         billIds.forEach(this::assertBill);
+        return ApiResponse.ok(wechatPayService.createJsapiPayment(billIds, strategy), TraceIdUtil.get());
     }
 
     /** 工作端现场收款登记（待确认）。 */

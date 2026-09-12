@@ -3,6 +3,7 @@ package com.ams.platform.security;
 import com.ams.modules.system.entity.Menu;
 import com.ams.modules.system.mapper.MenuMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -11,7 +12,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.aop.support.AopUtils;
+import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
@@ -58,11 +59,11 @@ public class PermissionRegistry implements SmartInitializingSingleton {
     @Override
     public void afterSingletonsInstantiated() {
         Set<String> found = new TreeSet<>();
-        for (String beanName : applicationContext.getBeanNamesForAnnotation(RestController.class)) {
-            collect(applicationContext.getType(beanName), found);
+        for (Object bean : applicationContext.getBeansWithAnnotation(RestController.class).values()) {
+            collect(bean, found);
         }
-        for (String beanName : applicationContext.getBeanNamesForAnnotation(Controller.class)) {
-            collect(applicationContext.getType(beanName), found);
+        for (Object bean : applicationContext.getBeansWithAnnotation(Controller.class).values()) {
+            collect(bean, found);
         }
         assertMenuCodesExist(found);
         // 保持排序：该清单会直接进入接口响应，顺序不稳定会让前端缓存与快照对比失真
@@ -119,23 +120,34 @@ public class PermissionRegistry implements SmartInitializingSingleton {
         }
     }
 
-    private void collect(Class<?> beanType, Set<String> found) {
-        if (beanType == null) {
-            return;
-        }
-        Class<?> target = AopUtils.getTargetClass(beanType);
+    /**
+     * 收集单个控制器上的声明。
+     *
+     * <p><strong>必须从「bean 实例」取目标类，不能用 {@code AopUtils.getTargetClass(Class)}。</strong>
+     * 控制器一旦被 CGLIB 代理，{@code getBeanNamesForAnnotation} 拿到的类型是
+     * {@code XxxController$$SpringCGLIB$$0}；而 {@code AopUtils.getTargetClass(Class)} 在
+     * Spring 6.1 上对它返回 {@code java.lang.Class}（实测），于是遍历到的是 CGLIB 生成的
+     * 覆盖方法 —— 那些方法不带注解，扫描结果恒为空集。
+     *
+     * <p>空集不会报任何错，只会让本类的启动校验与前端「已强制」标记一起静默失效：
+     * 校验变成「对空集合校验」，矩阵则把所有动作标成未生效。因此这里用
+     * {@link AopProxyUtils#ultimateTargetClass(Object)} 取真实控制器类。
+     */
+    private void collect(Object bean, Set<String> found) {
+        Class<?> target = AopProxyUtils.ultimateTargetClass(bean);
         // 类级声明：方法级未标注时生效
         RequiresPerm classLevel = AnnotatedElementUtils.findMergedAnnotation(target, RequiresPerm.class);
         if (classLevel != null) {
             found.add(validate(classLevel.value(), target.getName()));
         }
-        // getAllDeclaredMethods：包含父类声明的方法，避免注解落在继承来的接口上被漏扫
-        ReflectionUtils.getAllDeclaredMethods(target).forEach(method -> {
+        // getAllDeclaredMethods：包含父类声明的方法，避免注解落在继承来的接口上被漏扫。
+        // 它返回的是 Method[]（数组没有 forEach），必须显式遍历。
+        for (Method method : ReflectionUtils.getAllDeclaredMethods(target)) {
             RequiresPerm methodLevel = AnnotatedElementUtils.findMergedAnnotation(method, RequiresPerm.class);
             if (methodLevel != null) {
                 found.add(validate(methodLevel.value(), target.getName() + "#" + method.getName()));
             }
-        });
+        }
     }
 
     /** 校验并规范化注解值；非法直接抛异常终止启动。 */

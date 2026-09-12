@@ -128,8 +128,8 @@ public class AssetController {
     @RequiresPerm("asset.project:update")
     @Audited(module = "asset", action = "update_project")
     public ApiResponse<Project> updateProject(@PathVariable Long id,
-        assertProject(id);
             @RequestBody ProjectSaveRequest request) {
+        assertProject(id);
         return ApiResponse.ok(assetService.updateProject(id, request), TraceIdUtil.get());
     }
 

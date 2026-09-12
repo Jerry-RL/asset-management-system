@@ -32,9 +32,17 @@ public enum DataScope {
         return code;
     }
 
-    /** 宽度序号，越大越宽。 */
+    /**
+     * 宽度序号，越大越宽。
+     *
+     * <p>枚举按「由宽到窄」声明（{@code ALL → SELF}），ordinal 因此与宽度**反向**，
+     * 这里必须反转，否则 {@link #isWiderThan} 会整体反向：{@code all} 会被判成比
+     * {@code self} 还窄。两个后果都很难在运行期看出来 ——
+     * 登录装配会静默忽略角色的 {@code dataScope=all}，而提权约束会因为
+     * 「{@code all} 不比 {@code company} 宽」而放行把角色改到 all。
+     */
     public int rank() {
-        return ordinal() + 1;
+        return values().length - ordinal();
     }
 
     public static Optional<DataScope> of(String code) {

@@ -4,13 +4,16 @@
  *
  * 运行：node scripts/check-perm-invariants.mjs
  *
- * 四道检查，**前两道失败即退出码 1**（会静默破坏功能的类型），后两道只告警：
+ * 四道检查，**前三道失败即退出码 1**（会静默破坏功能的类型），第四道只告警：
  *
  *  1. `perm` 声明格式：每个声明必须形如 `menuCode:action`。
  *  2. 跨仓不变量：前端声明 ⊆ 后端 `@RequiresPerm` 集合。
  *     违反的两种表现都是「按钮静默消失」或「点了 403」，且都不会在编译期报错：
  *       - 声明了后端未强制的码 → 若该接口没接入拦截，按钮对所有人消失（功能损失）；
  *       - 码写错 / 后端改了注解 → 按钮消失或点了 403。
+ *  2b. 后端测试夹具里的权限码 ⊆ 后端 `@RequiresPerm` 集合（同源的第 2 条）。
+ *     夹具断言「角色装配结果包含 X」，X 却由夹具自己写死，编造一个不存在的码照样全绿，
+ *     还会给出「该角色确实有这个权限」的错误印象（实测曾编出 21 个）。
  *  3. 镜像完整性：`RESOURCES` / `STANDALONE_ROUTES` 里的路由必须都在 `PATH_TO_CODE` 内。
  *     缺一条 → `canByPath` 判定恒真，**那一页的按钮门槛静默失效**（不报错、不越权，
  *     只是「本该隐藏的按钮仍然显示」，最难发现）。
@@ -94,6 +97,26 @@ for (const d of declared) {
       `${d.file} 声明的 ${d.code} 在后端 @RequiresPerm 中不存在 —— ` +
         `若该接口未接入拦截，声明会让按钮对除超管外所有人消失（功能损失）`,
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 后端测试夹具里的权限码：同样必须 ⊆ @RequiresPerm
+// ---------------------------------------------------------------------------
+// 夹具断言「角色装配出的权限码包含 X」，而 X 是夹具自己写死的 —— 一旦编造一个后端
+// 并不强制的码，用例照样全绿，却给出「该角色确实有这个权限」的错误印象（实测曾
+// 编出 21 个不存在的码）。与第 2 条同源，故一并硬失败。
+const fixtureSrc = read(join(ROOT, 'backend/src/test/java/com/ams/support/RbacFixtures.java'));
+const fixtureBlock = fixtureSrc.slice(
+  fixtureSrc.indexOf('// ---- 写权限授予'),
+  fixtureSrc.indexOf('// ---- 数据范围排除'),
+);
+if (fixtureBlock === '') fail('RbacFixtures 里未找到「写权限授予」区块（结构已变？）');
+const fixtureCodes = new Set([...fixtureBlock.matchAll(/"([a-z][A-Za-z0-9_.]*:[a-z_]+)"/g)].map((m) => m[1]));
+expectAtLeast('测试夹具权限码', fixtureCodes.size, 20);
+for (const code of fixtureCodes) {
+  if (!enforced.has(code)) {
+    fail(`测试夹具 RbacFixtures 里的 ${code} 在后端 @RequiresPerm 中不存在 —— 编造的码会让用例静默失效`);
   }
 }
 
@@ -228,6 +251,7 @@ const line = (label, list) => {
 console.log('权限与路由一致性检查');
 console.log(`  后端 @RequiresPerm : ${enforced.size} 个`);
 console.log(`  前端 perm 声明     : ${declared.length} 处（去重 ${new Set(declared.map((d) => d.code)).size} 个码）`);
+console.log(`  测试夹具权限码     : ${fixtureCodes.size} 个`);
 console.log(`  PATH_TO_CODE       : ${pathToCode.size} 条`);
 console.log(`  RESOURCES          : ${resourceKeys.length} 个`);
 console.log(`  STANDALONE_ROUTES  : ${standalone.length} 条`);

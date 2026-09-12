@@ -29,9 +29,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final RbacService rbacService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, RbacService rbacService) {
         this.userService = userService;
+        this.rbacService = rbacService;
     }
 
     /**
