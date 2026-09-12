@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button, Card, Space, Table, Tag, message } from 'antd';
 import {
   ArrowRightOutlined,
@@ -8,6 +8,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { api } from '@/lib/api';
+import { currentPath } from '@/lib/navigation';
 import { TableActions, actionsColumnWidth } from '@/components/TableActions';
 
 interface DunningQueueItem {
@@ -60,6 +61,8 @@ const TASK_TYPE_LABEL: Record<string, string> = {
 };
 
 export function DunningAutoPage() {
+  // 记录进入合同详情前的完整路径（含 query），返回时才能回到当时的队列状态
+  const location = useLocation();
   const [queue, setQueue] = useState<DunningQueueItem[]>([]);
   const [tasks, setTasks] = useState<DunningTask[]>([]);
   const [loading, setLoading] = useState(false);
@@ -201,7 +204,11 @@ export function DunningAutoPage() {
               width: 100,
               render: (v) =>
                 v ? (
-                  <Link to={`/contracts/${v}`} className="text-[var(--ams-primary)]">
+                  <Link
+                    to={`/contracts/${v}`}
+                    state={{ from: currentPath(location) }}
+                    className="text-[var(--ams-primary)]"
+                  >
                     #{v}
                   </Link>
                 ) : (

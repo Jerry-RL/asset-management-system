@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { MoreOutlined } from '@ant-design/icons';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import { hasPerm } from '@/lib/perm';
+import { currentPath } from '@/lib/navigation';
 
 /** 操作列中的单个操作 */
 export interface TableActionItem {
@@ -116,6 +117,8 @@ export const TableActions = ({
   className,
 }: TableActionsProps) => {
   const { user } = useAuth();
+  // 必须在下面的提前 return 之前调用：Hook 调用顺序不能因分支而改变
+  const location = useLocation();
   // 声明了 perm 的项在此处统一剔除（设计 6.2）：调用点只需声明，不必各自算 hidden
   const permitted = (a: TableActionItem) => !a.perm || hasPerm(user, a.perm);
   const visible = actions.filter((a) => !a.hidden && permitted(a));
@@ -134,6 +137,8 @@ export const TableActions = ({
           <Link
             key={action.key}
             to={action.to}
+            // 统一记录来源：调用点不必逐个传 state，返回时才能回到跳转前那一次的分页与筛选
+            state={{ from: currentPath(location) }}
             className={linkClassOf(action)}
             aria-label={action.label}
             tabIndex={0}
