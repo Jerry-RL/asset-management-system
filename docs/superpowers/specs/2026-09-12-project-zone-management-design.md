@@ -362,15 +362,21 @@ const selectZone = (id: number | null) =>
 - 新增：并入 `Form` 的 `initialValues`（`{ assetType: 'property', projectId, zoneId }`）。
 - 编辑：不预填归属（避免与后端返回值竞争），只按 `lockScope` 禁用下拉。
 - **`lockScope=1` 时必须一并推导并锁定「资产公司」**（值由 `GET /projects/{projectId}` 取得，
-  与 `projectId` / `zoneId` 一次 `setFieldsValue` 写入）。这**不是可选的美化，而是锁定能否成立的前提**：
+  反查到位后**只写 `assetCompanyId` 一项** `setFieldsValue`）。这**不是可选的美化，而是锁定能否成立的前提**：
   - 「项目」下拉的选项来自 `assetCompanyId`（`/projects?companyId=`）。不预填公司 ⇒ 下拉无匹配项，
     只会显示原始 id（如 `1`）而不是项目名，用户无从确认自己锁在哪个项目上；
   - 「资产公司」是**必填**项。靠用户手选会触发既有 `useCascadeReset`（资产公司变更 → 清空
     项目/分区），把刚锁住的两项清成空且因为 `disabled` 再也改不回来 —— 表单卡死，只能刷新重来；
   - 预填公司**不会**被这条级联清空：`useCascadeReset` 在 `previous === undefined` 时提前返回，
     首次写入不算「变更」（这一点已在实现中核对过）。
+  - `projectId` / `zoneId` 仍由 §6.7 的 `initialValues` 在挂载时写好，反查只补公司这一项 ——
+    少写两项就少两处竞态；
+  - 锁定与否由 `lockScope && (isEdit || lockedCompanyId != null)` 决定，四个场景（非锁定 / 锁定编辑 /
+    锁定新增反查成功 / 锁定新增反查失败）分别对应「可编辑 / 灰化 / 灰化 / 可编辑」，
+    既不会漏锁编辑态，也不会在反查失败时把必填的公司变成「空白且灰化」的死锁。
   - 查询契约因此**不变**（仍只有 `projectId` / `zoneId` / `lockScope`），多出的那次
     `GET /projects/{projectId}` 由资产表单页自己承担，调用方（§6.5）无需改动。
+  - 反查失败属**降级**而非错误：不弹提示、不阻断提交，由用户手选公司（见 §8）。
 - 保存成功后：由硬编码的 `navigate('/assets')` 改为按 `location.state.from` 返回，fallback `/assets`。
   - 从资产台账进入时 `state.from = '/assets'` → 行为与现状**完全一致**；
   - 从本页进入时 `state.from = '/project-zones?projectId=..&zoneId=..'` → 精确回原页；
