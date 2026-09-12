@@ -69,11 +69,7 @@ export function ProjectZonesPage() {
       </h2>
 
       <div className="flex flex-col lg:flex-row gap-3 min-w-0 items-stretch">
-        <ProjectListPane
-          selectedId={projectId}
-          onSelect={selectProject}
-          canView={canViewProject}
-        />
+        <ProjectListPane selectedId={projectId} onSelect={selectProject} canView={canViewProject} />
         <ZoneAssetPane projectId={projectId} zoneId={zoneId} onZoneChange={selectZone} />
       </div>
     </div>
