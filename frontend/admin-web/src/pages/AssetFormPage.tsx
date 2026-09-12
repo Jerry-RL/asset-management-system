@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  Alert,
   Button,
   Card,
   Col,
@@ -13,6 +14,7 @@ import {
   Select,
   Space,
   Spin,
+  Steps,
   TreeSelect,
   message,
 } from 'antd';
@@ -22,10 +24,17 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { api } from '@/lib/api';
 import { ImageUploadField, type ImageValue } from '@/components/ImageUploadField';
+import { RecordSheetSections } from '@/components/RecordSheetSections';
 import { useDictOptions, useRemoteOptions, type SelectOption } from '@/lib/dict';
 import * as L from '@/lib/labels';
 import { buildCompanyTree, loadCompanies, type CompanyOption } from '@/lib/org';
 import { useBackNavigate } from '@/lib/navigation';
+import {
+  loadRecordSheet,
+  recordSheetPath,
+  saveRecordSheet,
+  type RecordSheetPayload,
+} from '@/lib/recordSheet';
 
 // ============================================================================
 // 资产新增/修改：按业务分组表单
@@ -77,6 +86,9 @@ export function AssetFormPage() {
   const [loading, setLoading] = useState(isEdit);
   const [notFound, setNotFound] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [step, setStep] = useState(0);
+  const [recordSheet, setRecordSheet] = useState<RecordSheetPayload | null>(null);
+  const [sheetLoading, setSheetLoading] = useState(false);
 
   const companyTree = useMemo(() => buildCompanyTree(companies), [companies]);
 
@@ -207,6 +219,59 @@ export function AssetFormPage() {
     };
   }, [id, form]);
 
+  // 后续记录只在编辑态加载：新增态还没有 assetId，记录无处可挂（设计 §6.1）。
+  // 注意它**不**进 antd Form：record-sheet 有自己的全量 diff 语义，塞进表单会让
+  // validateFields 把它当普通字段校验一遍（见 handleSubmit 的注释）。
+  useEffect(() => {
+    if (!isEdit || !id) {
+      setRecordSheet(null);
+      return;
+    }
+    let cancelled = false;
+    setSheetLoading(true);
+    loadRecordSheet(recordSheetPath('asset', Number(id)))
+      .then((sheet) => {
+        if (cancelled) return;
+        setRecordSheet({
+          receives: sheet.receives,
+          sourceInfo: sheet.sourceInfo,
+          disposalRecords: sheet.disposalRecords,
+        });
+      })
+      .catch((e) => {
+        if (!cancelled) message.error(e instanceof Error ? e.message : '加载后续记录失败');
+      })
+      .finally(() => {
+        if (!cancelled) setSheetLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, id]);
+
+  /**
+   * 校验失败时把用户送回第一个出错的步骤。
+   *
+   * <p>本页用 hidden（而非条件渲染）保持字段挂载，所以**所有**步骤的必填项都会参与
+   * 校验，错误可能落在当前看不到的步骤上。用 `data-step` 反查而不是维护一张
+   * 「字段 → 步骤」的静态表：资产属性那一步的字段由 {@link DICT_FIELDS} 循环生成，
+   * 静态表必然会漂移。antd 会把 Form.Item 的 name 设为控件的 DOM id。
+   */
+  const jumpToErrorStep = (errorFields: { name: (string | number)[] }[]) => {
+    const first = errorFields[0]?.name?.[0];
+    if (typeof first !== 'string') return;
+    const raw = document.getElementById(first)?.closest('[data-step]')?.getAttribute('data-step');
+    const target = raw == null ? null : Number(raw);
+    if (target == null || Number.isNaN(target)) {
+      message.warning('有必填项未完成，请检查前面的步骤');
+      return;
+    }
+    if (target !== step) {
+      setStep(target);
+      message.warning('有必填项未完成，已切换到对应步骤');
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       const values = (await form.validateFields()) as Record<string, unknown> & {
@@ -223,15 +288,31 @@ export function AssetFormPage() {
       };
       setSubmitting(true);
       if (isEdit) {
+        // 顺序不能反：后续记录依赖主体已存在（设计 §5.4）
         await api.put(`/assets/${id}`, payload);
-        message.success('保存成功');
+        try {
+          if (recordSheet) {
+            await saveRecordSheet(recordSheetPath('asset', Number(id)), recordSheet);
+          }
+          message.success('保存成功');
+        } catch (e) {
+          // 「主体已保存、记录失败」的半成品状态必须让使用者知道，
+          // 否则会以为整单回滚、重新编辑一遍（设计 §6.1）
+          message.warning(
+            `资产已保存，但后续记录保存失败：${e instanceof Error ? e.message : '未知错误'}，请重试`,
+          );
+          return;
+        }
       } else {
         await api.post('/assets', payload);
         message.success('创建成功');
       }
       navigate('/assets');
     } catch (e) {
-      if (e && typeof e === 'object' && 'errorFields' in e) return;
+      if (e && typeof e === 'object' && 'errorFields' in e) {
+        jumpToErrorStep((e as { errorFields?: { name: (string | number)[] }[] }).errorFields ?? []);
+        return;
+      }
       message.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setSubmitting(false);
@@ -268,239 +349,298 @@ export function AssetFormPage() {
           <InputNumber />
         </Form.Item>
 
-        <Card title="归属信息" className="border border-[var(--ams-border)] mb-4">
-          <Row gutter={16}>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="propertyCompanyId" label="产权公司">
-                <TreeSelect
-                  allowClear
-                  showSearch
-                  treeDefaultExpandAll
-                  treeNodeFilterProp="key"
-                  placeholder="请选择产权公司（可输入名称搜索）"
-                  treeData={companyTree}
-                  listHeight={320}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item
-                name="assetCompanyId"
-                label="资产公司"
-                rules={[{ required: true, message: '请选择资产公司' }]}
-                extra="项目、责任部门均按资产公司级联"
-              >
-                <TreeSelect
-                  allowClear
-                  showSearch
-                  treeDefaultExpandAll
-                  treeNodeFilterProp="key"
-                  placeholder="请选择资产公司（可输入名称搜索）"
-                  treeData={companyTree}
-                  listHeight={320}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item
-                name="projectId"
-                label="项目"
-                rules={[{ required: true, message: '请选择项目' }]}
-              >
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  loading={projectOptions.loading}
-                  disabled={!assetCompanyId}
-                  placeholder={assetCompanyId ? '请选择项目（可搜索）' : '请先选择资产公司'}
-                  options={projectOptions.options}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="zoneId" label="分区">
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  loading={zoneOptions.loading}
-                  disabled={!watchProjectId}
-                  placeholder={watchProjectId ? '请选择分区' : '请先选择项目'}
-                  options={zoneOptions.options}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+        {/* 步骤条：独立卡片，内容区按步骤分组为多个卡片（与 ProjectFormPage 同款） */}
+        <Card className="border border-[var(--ams-border)] mb-4">
+          <Steps
+            current={step}
+            items={[
+              { title: '归属与基本信息', description: '公司 / 项目 / 分区 / 名称 / 编号 / 面积' },
+              {
+                title: '资产属性与管理信息',
+                description: '属性字典 / 登记入库 / 责任部门 / 计量与图片',
+              },
+              { title: '后续记录', description: '处置 / 接收 / 来源' },
+            ]}
+          />
         </Card>
 
-        <Card title="基本信息" className="border border-[var(--ams-border)] mb-4">
-          <Row gutter={16}>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item
-                name="name"
-                label="资产名称"
-                rules={[{ required: true, message: '请填写资产名称' }]}
-              >
-                <Input placeholder="请输入资产名称" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item
-                name="assetNo"
-                label="资产编号"
-                rules={[{ required: true, message: '请填写资产编号' }]}
-              >
-                <Input placeholder="请输入资产编号" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="floorNo" label="分区楼层">
-                <InputNumber className="w-full" placeholder="请输入楼层数字" precision={0} />
-              </Form.Item>
-            </Col>
-            <Col xs={24}>
-              <Form.Item name="address" label="资产坐落">
-                <Input placeholder="请输入具体地址" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="area" label="资产面积">
-                <InputNumber
-                  className="w-full"
-                  min={0}
-                  addonAfter="㎡"
-                  placeholder="请输入资产面积"
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="leaseArea" label="租赁面积">
-                <InputNumber
-                  className="w-full"
-                  min={0}
-                  addonAfter="㎡"
-                  placeholder="请输入租赁面积"
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Card>
+        {/*
+          分步用 hidden 而不是条件渲染：条件渲染会**卸载**非当前步的 Form.Item，
+          而 validateFields() 只返回已注册字段 —— payload 会因此缺失其余两步的字段，
+          编辑态的全量 PUT 会把它们清空。data-step 供校验失败时定位出错步骤。
+        */}
+        <div data-step={0} hidden={step !== 0}>
+          <Card title="归属信息" className="border border-[var(--ams-border)] mb-4">
+            <Row gutter={16}>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="propertyCompanyId" label="产权公司">
+                  <TreeSelect
+                    allowClear
+                    showSearch
+                    treeDefaultExpandAll
+                    treeNodeFilterProp="key"
+                    placeholder="请选择产权公司（可输入名称搜索）"
+                    treeData={companyTree}
+                    listHeight={320}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item
+                  name="assetCompanyId"
+                  label="资产公司"
+                  rules={[{ required: true, message: '请选择资产公司' }]}
+                  extra="项目、责任部门均按资产公司级联"
+                >
+                  <TreeSelect
+                    allowClear
+                    showSearch
+                    treeDefaultExpandAll
+                    treeNodeFilterProp="key"
+                    placeholder="请选择资产公司（可输入名称搜索）"
+                    treeData={companyTree}
+                    listHeight={320}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item
+                  name="projectId"
+                  label="项目"
+                  rules={[{ required: true, message: '请选择项目' }]}
+                >
+                  <Select
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    loading={projectOptions.loading}
+                    disabled={!assetCompanyId}
+                    placeholder={assetCompanyId ? '请选择项目（可搜索）' : '请先选择资产公司'}
+                    options={projectOptions.options}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="zoneId" label="分区">
+                  <Select
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    loading={zoneOptions.loading}
+                    disabled={!watchProjectId}
+                    placeholder={watchProjectId ? '请选择分区' : '请先选择项目'}
+                    options={zoneOptions.options}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Card>
 
-        <Card
-          title="资产属性"
-          className="border border-[var(--ams-border)] mb-4"
-          extra={
-            <Button size="small" onClick={() => navigate('/system/dict')}>
-              维护字典
-            </Button>
-          }
-        >
-          <div className="text-xs text-gray-500 mb-3">
-            选项取自「系统管理 → 系统字典 → 资产管理字典」，字典项不足时可前往补充，表单会自动同步。
-          </div>
-          <Row gutter={16}>
-            {DICT_FIELDS.map((field) => {
-              const dict = dictOptionMap[field.name];
-              return (
-                <Col key={field.name} xs={24} md={12} lg={8}>
-                  <Form.Item name={field.name} label={field.label}>
-                    <Select
-                      allowClear
-                      showSearch
-                      optionFilterProp="label"
-                      loading={dict?.loading}
-                      placeholder={`请选择${field.label}`}
-                      options={dict?.options ?? []}
-                    />
-                  </Form.Item>
-                </Col>
-              );
-            })}
-          </Row>
-        </Card>
+          <Card title="基本信息" className="border border-[var(--ams-border)] mb-4">
+            <Row gutter={16}>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item
+                  name="name"
+                  label="资产名称"
+                  rules={[{ required: true, message: '请填写资产名称' }]}
+                >
+                  <Input placeholder="请输入资产名称" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item
+                  name="assetNo"
+                  label="资产编号"
+                  rules={[{ required: true, message: '请填写资产编号' }]}
+                >
+                  <Input placeholder="请输入资产编号" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="floorNo" label="分区楼层">
+                  <InputNumber className="w-full" placeholder="请输入楼层数字" precision={0} />
+                </Form.Item>
+              </Col>
+              <Col xs={24}>
+                <Form.Item name="address" label="资产坐落">
+                  <Input placeholder="请输入具体地址" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="area" label="资产面积">
+                  <InputNumber
+                    className="w-full"
+                    min={0}
+                    addonAfter="㎡"
+                    placeholder="请输入资产面积"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="leaseArea" label="租赁面积">
+                  <InputNumber
+                    className="w-full"
+                    min={0}
+                    addonAfter="㎡"
+                    placeholder="请输入租赁面积"
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Card>
+        </div>
 
-        <Card title="管理信息" className="border border-[var(--ams-border)] mb-4">
-          <Row gutter={16}>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="registeredAt" label="登记入库时间">
-                <DatePicker className="w-full" placeholder="请选择登记入库时间" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="originalValue" label="原值">
-                <InputNumber
-                  className="w-full"
-                  min={0}
-                  addonAfter="万元"
-                  placeholder="请输入原值"
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="responsibleDepartmentId" label="责任部门">
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  loading={departmentOptions.loading}
-                  disabled={!assetCompanyId}
-                  placeholder={assetCompanyId ? '请选择责任部门' : '请先选择资产公司'}
-                  options={departmentOptions.options}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="responsibleUserId" label="责任人">
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  loading={userOptions.loading}
-                  disabled={!watchDepartmentId}
-                  placeholder={watchDepartmentId ? '请选择责任人' : '请先选择责任部门'}
-                  options={userOptions.options}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Card>
+        <div data-step={1} hidden={step !== 1}>
+          <Card
+            title="资产属性"
+            className="border border-[var(--ams-border)] mb-4"
+            extra={
+              <Button size="small" onClick={() => navigate('/system/dict')}>
+                维护字典
+              </Button>
+            }
+          >
+            <div className="text-xs text-gray-500 mb-3">
+              选项取自「系统管理 → 系统字典 →
+              资产管理字典」，字典项不足时可前往补充，表单会自动同步。
+            </div>
+            <Row gutter={16}>
+              {DICT_FIELDS.map((field) => {
+                const dict = dictOptionMap[field.name];
+                return (
+                  <Col key={field.name} xs={24} md={12} lg={8}>
+                    <Form.Item name={field.name} label={field.label}>
+                      <Select
+                        allowClear
+                        showSearch
+                        optionFilterProp="label"
+                        loading={dict?.loading}
+                        placeholder={`请选择${field.label}`}
+                        options={dict?.options ?? []}
+                      />
+                    </Form.Item>
+                  </Col>
+                );
+              })}
+            </Row>
+          </Card>
 
-        <Card title="计量与图片" className="border border-[var(--ams-border)] mb-4">
-          <Row gutter={16}>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="waterMeterNo" label="水表号">
-                <Input placeholder="请输入水表号" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="electricMeterNo" label="电表号">
-                <Input placeholder="请输入电表号" />
-              </Form.Item>
-            </Col>
-            <Col xs={24}>
-              <Form.Item
-                name="image"
-                label="资产图片"
-                extra="支持 jpg/png，单张不超过 5MB，点击缩略图可预览"
-              >
-                <ImageUploadField bizType="asset" previewTitle="资产图片" />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Card>
+          <Card title="管理信息" className="border border-[var(--ams-border)] mb-4">
+            <Row gutter={16}>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="registeredAt" label="登记入库时间">
+                  <DatePicker className="w-full" placeholder="请选择登记入库时间" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="originalValue" label="原值">
+                  <InputNumber
+                    className="w-full"
+                    min={0}
+                    addonAfter="万元"
+                    placeholder="请输入原值"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="responsibleDepartmentId" label="责任部门">
+                  <Select
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    loading={departmentOptions.loading}
+                    disabled={!assetCompanyId}
+                    placeholder={assetCompanyId ? '请选择责任部门' : '请先选择资产公司'}
+                    options={departmentOptions.options}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="responsibleUserId" label="责任人">
+                  <Select
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    loading={userOptions.loading}
+                    disabled={!watchDepartmentId}
+                    placeholder={watchDepartmentId ? '请选择责任人' : '请先选择责任部门'}
+                    options={userOptions.options}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Card>
+
+          <Card title="计量与图片" className="border border-[var(--ams-border)] mb-4">
+            <Row gutter={16}>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="waterMeterNo" label="水表号">
+                  <Input placeholder="请输入水表号" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} lg={8}>
+                <Form.Item name="electricMeterNo" label="电表号">
+                  <Input placeholder="请输入电表号" />
+                </Form.Item>
+              </Col>
+              <Col xs={24}>
+                <Form.Item
+                  name="image"
+                  label="资产图片"
+                  extra="支持 jpg/png，单张不超过 5MB，点击缩略图可预览"
+                >
+                  <ImageUploadField bizType="asset" previewTitle="资产图片" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Card>
+        </div>
+
+        <div data-step={2} hidden={step !== 2}>
+          <Card
+            title="后续记录"
+            className="border border-[var(--ams-border)] mb-4"
+            loading={sheetLoading}
+          >
+            {isEdit ? (
+              <RecordSheetSections
+                ownerType="asset"
+                ownerId={Number(id)}
+                companyId={assetCompanyId}
+                disabled={false}
+                value={recordSheet}
+                onChange={setRecordSheet}
+              />
+            ) : (
+              <Alert
+                type="info"
+                showIcon
+                message="保存资产后可录入后续记录"
+                description="处置、接收与来源信息都需要先有一个已保存的资产作为归属对象。请先提交本表单建好资产，再回到本步录入。"
+              />
+            )}
+          </Card>
+        </div>
       </Form>
 
       <div className="flex justify-end gap-2">
         <Button onClick={goBack}>取消</Button>
-        <Button
-          type="primary"
-          icon={<SaveOutlined />}
-          loading={submitting}
-          onClick={() => void handleSubmit()}
-        >
-          {isEdit ? '保存' : '提交'}
-        </Button>
+        {step > 0 && <Button onClick={() => setStep(step - 1)}>上一步</Button>}
+        {step < 2 && (
+          <Button type="primary" onClick={() => setStep(step + 1)}>
+            下一步
+          </Button>
+        )}
+        {step === 2 && (
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            loading={submitting}
+            onClick={() => void handleSubmit()}
+          >
+            {isEdit ? '保存' : '提交'}
+          </Button>
+        )}
       </div>
     </div>
   );
