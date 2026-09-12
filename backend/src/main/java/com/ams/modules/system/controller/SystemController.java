@@ -174,22 +174,26 @@ public class SystemController {
 
     /** 完整字典树：左侧模块、右侧字典 Tab 及字典项一次性返回。 */
     @GetMapping("/dict/tree")
+    @RequiresPerm("system.dict:view")
     public ApiResponse<List<SysDictModule>> dictTree() {
         return ApiResponse.ok(systemDictService.tree(), TraceIdUtil.get());
     }
 
     @GetMapping("/dict/modules")
+    @RequiresPerm("system.dict:view")
     public ApiResponse<List<SysDictModule>> dictModules() {
         return ApiResponse.ok(systemDictService.listModules(), TraceIdUtil.get());
     }
 
     @PostMapping("/dict/modules")
+    @RequiresPerm("system.dict:create")
     @Audited(module = "system", action = "dict_module_create")
     public ApiResponse<SysDictModule> createDictModule(@RequestBody SysDictModule module) {
         return ApiResponse.ok(systemDictService.createModule(module), TraceIdUtil.get());
     }
 
     @PutMapping("/dict/modules/{id}")
+    @RequiresPerm("system.dict:update")
     @Audited(module = "system", action = "dict_module_update")
     public ApiResponse<SysDictModule> updateDictModule(
             @PathVariable Long id, @RequestBody SysDictModule module) {
@@ -197,6 +201,7 @@ public class SystemController {
     }
 
     @DeleteMapping("/dict/modules/{id}")
+    @RequiresPerm("system.dict:delete")
     @Audited(module = "system", action = "dict_module_delete")
     public ApiResponse<Void> deleteDictModule(@PathVariable Long id) {
         systemDictService.deleteModule(id);
@@ -204,17 +209,20 @@ public class SystemController {
     }
 
     @GetMapping("/dict/types")
+    @RequiresPerm("system.dict:view")
     public ApiResponse<List<SysDictType>> dictTypes(@RequestParam(required = false) Long moduleId) {
         return ApiResponse.ok(systemDictService.listTypes(moduleId), TraceIdUtil.get());
     }
 
     @PostMapping("/dict/types")
+    @RequiresPerm("system.dict:create")
     @Audited(module = "system", action = "dict_type_create")
     public ApiResponse<SysDictType> createDictType(@RequestBody SysDictType type) {
         return ApiResponse.ok(systemDictService.createType(type), TraceIdUtil.get());
     }
 
     @PutMapping("/dict/types/{id}")
+    @RequiresPerm("system.dict:update")
     @Audited(module = "system", action = "dict_type_update")
     public ApiResponse<SysDictType> updateDictType(
             @PathVariable Long id, @RequestBody SysDictType type) {
@@ -222,6 +230,7 @@ public class SystemController {
     }
 
     @DeleteMapping("/dict/types/{id}")
+    @RequiresPerm("system.dict:delete")
     @Audited(module = "system", action = "dict_type_delete")
     public ApiResponse<Void> deleteDictType(@PathVariable Long id) {
         systemDictService.deleteType(id);
@@ -235,6 +244,7 @@ public class SystemController {
      * 父字典该取值下配置了级联规则，则只返回规则内的字典项；未配置则不限制。
      */
     @GetMapping("/dict/items")
+    @RequiresPerm("system.dict:view")
     public ApiResponse<List<SysDictItem>> dictItems(
             @RequestParam(required = false) Long typeId,
             @RequestParam(required = false) String code,
@@ -245,12 +255,14 @@ public class SystemController {
     }
 
     @PostMapping("/dict/items")
+    @RequiresPerm("system.dict:create")
     @Audited(module = "system", action = "dict_item_create")
     public ApiResponse<SysDictItem> createDictItem(@RequestBody SysDictItem item) {
         return ApiResponse.ok(systemDictService.createItem(item), TraceIdUtil.get());
     }
 
     @PutMapping("/dict/items/{id}")
+    @RequiresPerm("system.dict:update")
     @Audited(module = "system", action = "dict_item_update")
     public ApiResponse<SysDictItem> updateDictItem(
             @PathVariable Long id, @RequestBody SysDictItem item) {
@@ -258,6 +270,7 @@ public class SystemController {
     }
 
     @DeleteMapping("/dict/items/{id}")
+    @RequiresPerm("system.dict:delete")
     @Audited(module = "system", action = "dict_item_delete")
     public ApiResponse<Void> deleteDictItem(@PathVariable Long id) {
         systemDictService.deleteItem(id);
@@ -267,6 +280,7 @@ public class SystemController {
     // ---- 字典关联（字典 / 字典项 → 另一字典的若干个字典值） ----
 
     @GetMapping("/dict/relations")
+    @RequiresPerm("system.dict:view")
     public ApiResponse<List<SysDictRelation>> dictRelations(
             @RequestParam(required = false) Long sourceTypeId,
             @RequestParam(required = false) Long targetTypeId) {
@@ -275,18 +289,21 @@ public class SystemController {
 
     /** 关联查询：按「父字典项 + 目标字典」分组返回该字典挂接的全部关联值。 */
     @GetMapping("/dict/relations/grouped")
+    @RequiresPerm("system.dict:view")
     public ApiResponse<Map<String, Object>> dictRelationsGrouped(@RequestParam Long sourceTypeId) {
         return ApiResponse.ok(systemDictService.relationsOfType(sourceTypeId), TraceIdUtil.get());
     }
 
     /** 批量替换某字典的全部关联；未出现的目标字典表示不建立关联。 */
     @PutMapping("/dict/relations")
+    @RequiresPerm("system.dict:update")
     @Audited(module = "system", action = "dict_relation_save")
     public ApiResponse<List<SysDictRelation>> saveDictRelations(@RequestBody SysDictRelationBatch batch) {
         return ApiResponse.ok(systemDictService.replaceRelations(batch), TraceIdUtil.get());
     }
 
     @DeleteMapping("/dict/relations/{id}")
+    @RequiresPerm("system.dict:delete")
     @Audited(module = "system", action = "dict_relation_delete")
     public ApiResponse<Void> deleteDictRelation(@PathVariable Long id) {
         systemDictService.deleteRelation(id);

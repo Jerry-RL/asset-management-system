@@ -10,6 +10,7 @@ import com.ams.modules.finance.service.ReconcileService;
 import com.ams.platform.security.Audited;
 import java.util.List;
 import java.util.Map;
+import com.ams.platform.security.RequiresPerm;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,33 +33,39 @@ public class FinanceController {
     }
 
     @PostMapping("/bank-flows")
+    @RequiresPerm("finance.bankFlow:create")
     @Audited(module = "finance", action = "import_flow")
     public ApiResponse<BankFlow> importFlow(@RequestBody BankFlow flow) {
         return ApiResponse.ok(reconcileService.importFlow(flow), TraceIdUtil.get());
     }
 
     @GetMapping("/bank-flows/unmatched")
+    @RequiresPerm("finance.bankFlow:view")
     public ApiResponse<List<BankFlow>> unmatched() {
         return ApiResponse.ok(reconcileService.unmatchedFlows(), TraceIdUtil.get());
     }
 
     @GetMapping("/payments/unmatched")
+    @RequiresPerm("finance.bankFlow:view")
     public ApiResponse<List<Payment>> unmatchedPayments() {
         return ApiResponse.ok(reconcileService.unmatchedPayments(), TraceIdUtil.get());
     }
 
     @GetMapping("/reconcile/summary")
+    @RequiresPerm("finance.bankFlow:view")
     public ApiResponse<Map<String, Object>> reconcileSummary() {
         return ApiResponse.ok(reconcileService.reconcileSummary(), TraceIdUtil.get());
     }
 
     @PostMapping("/bank-flows/rematch")
+    @RequiresPerm("finance.bankFlow:update")
     @Audited(module = "finance", action = "rematch")
     public ApiResponse<Integer> rematch() {
         return ApiResponse.ok(reconcileService.rematchUnmatched(), TraceIdUtil.get());
     }
 
     @PostMapping("/bank-flows/{flowId}/match")
+    @RequiresPerm("finance.bankFlow:update")
     @Audited(module = "finance", action = "manual_match")
     public ApiResponse<BankFlow> match(
             @PathVariable Long flowId,
@@ -68,6 +75,7 @@ public class FinanceController {
     }
 
     @PostMapping("/vouchers")
+    @RequiresPerm("finance.voucher:create")
     @Audited(module = "finance", action = "create_voucher")
     public ApiResponse<FinanceVoucher> createVoucher(@RequestBody Map<String, Object> body) {
         return ApiResponse.ok(reconcileService.createVoucher(
@@ -77,22 +85,26 @@ public class FinanceController {
     }
 
     @PostMapping("/vouchers/{id}/push")
+    @RequiresPerm("finance.voucher:update")
     @Audited(module = "finance", action = "push_voucher")
     public ApiResponse<FinanceVoucher> pushVoucher(@PathVariable Long id) {
         return ApiResponse.ok(reconcileService.pushVoucher(id), TraceIdUtil.get());
     }
 
     @GetMapping("/vouchers")
+    @RequiresPerm("finance.voucher:view")
     public ApiResponse<List<FinanceVoucher>> vouchers(@RequestParam(required = false) String status) {
         return ApiResponse.ok(reconcileService.listVouchers(status), TraceIdUtil.get());
     }
 
     @GetMapping("/month-closes")
+    @RequiresPerm("finance.voucher:view")
     public ApiResponse<List<FinanceMonthClose>> monthCloses() {
         return ApiResponse.ok(reconcileService.listMonthCloses(), TraceIdUtil.get());
     }
 
     @PostMapping("/month-closes/{period}/lock")
+    @RequiresPerm("finance.voucher:update")
     @Audited(module = "finance", action = "month_lock")
     public ApiResponse<FinanceMonthClose> lockMonth(
             @PathVariable String period, @RequestBody(required = false) Map<String, String> body) {
@@ -101,6 +113,7 @@ public class FinanceController {
     }
 
     @PostMapping("/month-closes/{period}/unlock")
+    @RequiresPerm("finance.voucher:update")
     @Audited(module = "finance", action = "month_unlock")
     public ApiResponse<FinanceMonthClose> unlockMonth(
             @PathVariable String period, @RequestBody(required = false) Map<String, String> body) {

@@ -21,6 +21,10 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import com.ams.platform.security.RequiresPerm;
+import com.ams.platform.security.OwnershipResolver;
+import com.ams.platform.security.RbacService;
+import com.ams.platform.security.SecurityUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -45,20 +49,27 @@ public class AssetController {
     private final AssetStructureService structureService;
     private final AssetDossierService dossierService;
     private final AssetQrService assetQrService;
+    private final OwnershipResolver ownershipResolver;
+    private final RbacService rbacService;
 
     public AssetController(
             AssetService assetService,
             AssetStructureService structureService,
             AssetDossierService dossierService,
-            AssetQrService assetQrService) {
+            AssetQrService assetQrService,
+            OwnershipResolver ownershipResolver,
+            RbacService rbacService) {
         this.assetService = assetService;
         this.structureService = structureService;
         this.dossierService = dossierService;
         this.assetQrService = assetQrService;
+        this.ownershipResolver = ownershipResolver;
+        this.rbacService = rbacService;
     }
 
     // ---- 项目 ----
     @GetMapping("/projects")
+    @RequiresPerm("asset.project:view")
     public ApiResponse<PageResult<Project>> projects(
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long pageSize,
@@ -74,6 +85,7 @@ public class AssetController {
      * 路径为字面量，Spring 会优先于 {@code /projects/{id}} 匹配，不会误入详情。
      */
     @GetMapping("/projects/summary")
+    @RequiresPerm("asset.project:view")
     public ApiResponse<ProjectStats> projectSummary(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long companyId) {
@@ -81,38 +93,51 @@ public class AssetController {
     }
 
     @GetMapping("/projects/{id}")
+    @RequiresPerm("asset.project:view")
     public ApiResponse<Project> project(@PathVariable Long id) {
+        assertProject(id);
         return ApiResponse.ok(assetService.getProject(id), TraceIdUtil.get());
     }
 
     /** 项目详情页聚合视图：主体 + 资产基本信息 / 资产创收 / 租赁概况 + 分区汇总 */
     @GetMapping("/projects/{id}/overview")
+    @RequiresPerm("asset.project:view")
     public ApiResponse<ProjectOverview> projectOverview(@PathVariable Long id) {
+        assertProject(id);
         return ApiResponse.ok(assetService.projectOverview(id), TraceIdUtil.get());
     }
 
     /** 项目分区列表（第二步配置内容） */
     @GetMapping("/projects/{id}/zones")
+    @RequiresPerm("asset.project:view")
     public ApiResponse<List<ProjectZone>> projectZones(@PathVariable Long id) {
+        assertProject(id);
         return ApiResponse.ok(assetService.listProjectZones(id), TraceIdUtil.get());
     }
 
     @PostMapping("/projects")
+    @RequiresPerm("asset.project:create")
     @Audited(module = "asset", action = "create_project")
     public ApiResponse<Project> createProject(@RequestBody ProjectSaveRequest request) {
+        // 新建：请求体给出的公司是唯一归属来源
+        rbacService.assertCompanyAccess(SecurityUtils.current(), request.getCompanyId());
         return ApiResponse.ok(assetService.createProject(request), TraceIdUtil.get());
     }
 
     @PutMapping("/projects/{id}")
+    @RequiresPerm("asset.project:update")
     @Audited(module = "asset", action = "update_project")
     public ApiResponse<Project> updateProject(@PathVariable Long id,
+        assertProject(id);
             @RequestBody ProjectSaveRequest request) {
         return ApiResponse.ok(assetService.updateProject(id, request), TraceIdUtil.get());
     }
 
     @DeleteMapping("/projects/{id}")
+    @RequiresPerm("asset.project:delete")
     @Audited(module = "asset", action = "delete_project")
     public ApiResponse<Void> deleteProject(@PathVariable Long id) {
+        assertProject(id);
         assetService.deleteProject(id);
         return ApiResponse.ok(null, TraceIdUtil.get());
     }
@@ -126,6 +151,7 @@ public class AssetController {
      *                    sys_dict_type.code = project_property），与「资产来源」级联筛选配合
      */
     @GetMapping("/assets")
+    @RequiresPerm("asset.ledger:view")
     public ApiResponse<PageResult<Asset>> assets(
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long pageSize,
@@ -144,18 +170,23 @@ public class AssetController {
     }
 
     @GetMapping("/assets/{assetId}")
+    @RequiresPerm("asset.ledger:view")
     public ApiResponse<Asset> asset(@PathVariable Long assetId) {
+        assertAsset(assetId);
         return ApiResponse.ok(assetService.getAsset(assetId), TraceIdUtil.get());
     }
 
     /** 一物一档：某一资产当前状态与全链路历史（FR-AST-003）。 */
     @GetMapping("/assets/{assetId}/dossier")
+    @RequiresPerm("asset.ledger:view")
     public ApiResponse<AssetDossier> dossier(@PathVariable Long assetId) {
+        assertAsset(assetId);
         return ApiResponse.ok(dossierService.getDossier(assetId), TraceIdUtil.get());
     }
 
     /** 一产一码：下载资产二维码 PNG（扫码打开用户端招租/资产页）。 */
     @GetMapping("/assets/{assetId}/qrcode")
+    @RequiresPerm("asset.ledger:view")
     public ResponseEntity<byte[]> qrcode(
             @PathVariable Long assetId,
             @RequestParam(defaultValue = "512") int size) {
@@ -170,6 +201,7 @@ public class AssetController {
 
     /** 返回扫码链接（便于前端预览二维码内容）。 */
     @GetMapping("/assets/{assetId}/qrcode-url")
+    @RequiresPerm("asset.ledger:view")
     public ApiResponse<Map<String, String>> qrcodeUrl(@PathVariable Long assetId) {
         Asset asset = assetQrService.ensureQrCode(assetId);
         return ApiResponse.ok(Map.of(
@@ -178,31 +210,43 @@ public class AssetController {
     }
 
     @PostMapping("/assets")
+    @RequiresPerm("asset.ledger:create")
     @Audited(module = "asset", action = "create_asset")
     public ApiResponse<Asset> createAsset(@RequestBody Asset asset) {
+        // 新建：经营公司优先，缺失时回落到项目所属公司；两者都没有则受限账号被拒
+        rbacService.assertCompanyAccess(SecurityUtils.current(),
+                asset.getOperatingCompanyId() != null
+                        ? asset.getOperatingCompanyId()
+                        : ownershipResolver.ofProject(asset.getProjectId()));
         return ApiResponse.ok(assetService.createAsset(asset), TraceIdUtil.get());
     }
 
     @PutMapping("/assets/{assetId}")
+    @RequiresPerm("asset.ledger:update")
     @Audited(module = "asset", action = "update_asset")
     public ApiResponse<Asset> updateAsset(@PathVariable Long assetId, @RequestBody Asset asset) {
+        assertAsset(assetId);
         return ApiResponse.ok(assetService.updateAsset(assetId, asset), TraceIdUtil.get());
     }
 
     @DeleteMapping("/assets/{assetId}")
+    @RequiresPerm("asset.ledger:delete")
     @Audited(module = "asset", action = "delete_asset")
     public ApiResponse<Void> deleteAsset(@PathVariable Long assetId) {
+        assertAsset(assetId);
         assetService.deleteAsset(assetId);
         return ApiResponse.ok(null, TraceIdUtil.get());
     }
 
     // ---- 主数据拆分合并 ----
     @PostMapping("/assets/{assetId}/split")
+    @RequiresPerm("asset.ledger:update")
     @Audited(module = "asset", action = "split")
     public ApiResponse<Map<String, Object>> split(
             @PathVariable Long assetId, @RequestBody Map<String, Object> body) {
         @SuppressWarnings("unchecked")
         List<Object> rawAreas = (List<Object>) body.get("childAreas");
+        assertAsset(assetId);
         List<BigDecimal> areas = new ArrayList<>();
         if (rawAreas != null) {
             for (Object o : rawAreas) {
@@ -215,6 +259,7 @@ public class AssetController {
     }
 
     @PostMapping("/assets/merge")
+    @RequiresPerm("asset.ledger:update")
     @Audited(module = "asset", action = "merge")
     public ApiResponse<Map<String, Object>> merge(@RequestBody Map<String, Object> body) {
         @SuppressWarnings("unchecked")
@@ -225,22 +270,36 @@ public class AssetController {
                 ids.add(Long.valueOf(o.toString()));
             }
         }
+        // 合并会改写每一条源资产，必须逐条确认都在范围内
+        ids.forEach(this::assertAsset);
         return ApiResponse.ok(structureService.merge(ids, (String) body.get("name"), (String) body.get("remark")),
                 TraceIdUtil.get());
     }
 
     @GetMapping("/assets/{assetId}/structure-tree")
+    @RequiresPerm("asset.ledger:view")
     public ApiResponse<Map<String, Object>> structureTree(@PathVariable Long assetId) {
+        assertAsset(assetId);
         return ApiResponse.ok(structureService.structureTree(assetId), TraceIdUtil.get());
     }
 
     @GetMapping("/assets/code-mappings")
+    @RequiresPerm("asset.ledger:view")
     public ApiResponse<List<AssetCodeMapping>> codeMappings(@RequestParam(required = false) String oldAssetNo) {
         return ApiResponse.ok(structureService.codeMappings(oldAssetNo), TraceIdUtil.get());
     }
 
     @GetMapping("/assets/structure-logs")
+    @RequiresPerm("asset.structureLog:view")
     public ApiResponse<List<AssetStructureLog>> structureLogs(@RequestParam(defaultValue = "50") int limit) {
         return ApiResponse.ok(structureService.listLogs(limit), TraceIdUtil.get());
+    }
+
+    private void assertProject(Long id) {
+        rbacService.assertCompanyAccess(SecurityUtils.current(), ownershipResolver.ofProject(id));
+    }
+
+    private void assertAsset(Long assetId) {
+        rbacService.assertCompanyAccess(SecurityUtils.current(), ownershipResolver.ofAsset(assetId));
     }
 }
