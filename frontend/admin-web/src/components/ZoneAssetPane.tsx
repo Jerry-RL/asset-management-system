@@ -144,6 +144,17 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
 
   const reloadAssets = () => setAssetsReloadToken((token) => token + 1);
 
+  /**
+   * spec §5.2 第 7 条：「刷新」必须**同时**重拉 Tab 栏与资产区（资产归第 1 页）。
+   *
+   * <p>只刷资产表会让 Tab 上的汇总数字（`assetCount` / `assetArea`，后端按分区实时汇总）
+   * 与表内行数逐渐对不上 —— 这正是本页最容易漏的一处联动。
+   */
+  const handleRefresh = () => {
+    void reloadZones();
+    reloadAssets();
+  };
+
   const handleSubmitZone = async (values: ProjectZone) => {
     if (!editingZone) return;
     try {
@@ -151,6 +162,9 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
       await saveZone(editingZone.id != null ? { ...values, id: editingZone.id } : values);
       message.success(editingZone.id != null ? '保存成功' : '新增成功');
       setEditingZone(null);
+      // spec §5.2 第 3 条：分区**新增/编辑**同样要重拉资产区并归第 1 页。
+      // （分区删除走 handleDeleteZone，那条路径靠 onZoneChange(null) 改动 zoneId 间接触发）
+      reloadAssets();
     } catch (e) {
       message.error(e instanceof Error ? e.message : '保存失败');
     }
@@ -386,8 +400,8 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
           <Button
             size="small"
             icon={<ReloadOutlined />}
-            onClick={reloadAssets}
-            aria-label="刷新资产列表"
+            onClick={handleRefresh}
+            aria-label="刷新分区与资产列表"
           />
           {canCreateLedger && (
             <Button size="small" type="primary" icon={<PlusOutlined />} onClick={handleAddAsset}>
