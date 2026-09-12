@@ -2161,3 +2161,66 @@ Expected:
 - `onZoneChange` 签名 `(zoneId: number | null) => void`：Task 6 的 `selectZone` 与之逐字匹配，`null` 表示「全部分区」。
 - 菜单码/路径：`asset.projectZone` 与 `/project-zones` 在 Task 1 的迁移、Task 6 的镜像、`MENU`、`PATH_ICONS`、`App.tsx` 路由中逐字一致。
 - 权限码：Task 2 / 4 / 5 / 6 使用的 6 个码全部来自 Global Constraints 白名单，与后端既有 `@RequiresPerm` 一致。
+
+---
+
+### Task 7 验证记录（2026-09-12）
+
+**执行者**：Task 7 子代理；**HEAD**：`7b22423`；**BASE（Task 1）**：`be2a59c`。本任务**无代码改动**，仅追加本记录。
+
+#### Step 1 后端全量（Run（CI），未本地执行）
+
+本机无 JDK / Maven：`java -version` → `Unable to locate a Java Runtime`，`command -v mvn` → `NOT_FOUND`。
+
+因此 `cd backend && mvn -B verify` **未在本地执行，交由 CI**，本记录不推测其输出。待 CI 重点确认：
+`V47MigrationContractTest` 3 用例通过；`PermissionRegistryTest` 的 `enforced` 集合为 60 个；`AssetServiceZoneTest` 通过。
+
+#### Step 2 前端全量校验（已本地执行）
+
+`cd frontend && pnpm --filter admin-web build && pnpm lint`：
+
+- `build`（`tsc -b && vite build`）**通过**（退出码 0）：`✓ 4459 modules transformed`，`✓ built in 37.42s`。
+- `lint`（`eslint .`）**通过**（退出码 0）：`✖ 4 problems (0 errors, 4 warnings)`；4 条均为既有 `react-hooks/exhaustive-deps` 警告，非本计划引入。
+
+`node scripts/check-perm-invariants.mjs` 真实输出：
+
+```
+权限与路由一致性检查
+  后端 @RequiresPerm : 60 个
+  前端 perm 声明     : 13 处（去重 9 个码）
+  测试夹具权限码     : 42 个
+  PATH_TO_CODE       : 65 条
+  RESOURCES          : 49 个
+  STANDALONE_ROUTES  : 17 条
+  App.tsx 静态路由   : 27 条
+
+告警
+  - /help（HelpPage）不在 PATH_TO_CODE 镜像里（该组件未用 by-path 判定，仅提示）
+
+检查通过（1 条告警需人工确认）
+```
+
+逐项结论：`后端 @RequiresPerm 60` ✅ / `前端 perm 声明 13 处（去重 9）` ✅ / `PATH_TO_CODE 65` ✅ / `RESOURCES 49` ✅ / `STANDALONE_ROUTES 17` ✅。
+`App.tsx 静态路由 27`（基线 26，+1 为新增 `/project-zones` 路由，符合预期）；告警「/help 不在 PATH_TO_CODE」为本计划前既有提示。
+
+#### Step 3 后端零业务改动（已本地执行）
+
+```
+$ git diff --stat be2a59c..HEAD -- backend/src/main/java backend/src/main/resources/db/migration
+ .../db/migration/V47__project_zone_menu.sql        | 42 ++++++++++++++++++++++
+ 1 file changed, 42 insertions(+)
+
+$ git diff --stat be2a59c..HEAD -- backend/src/test
+ .../modules/asset/V47MigrationContractTest.java    | 114 +++++++++++++++++++++
+ 1 file changed, 114 insertions(+)
+```
+
+结论：`backend/src/main/java` **零改动** ✅；迁移仅 `V47__project_zone_menu.sql` ✅；测试仅 `V47MigrationContractTest.java` ✅。
+
+#### 验收第 17-20 条逐条结论
+
+- **17 ✅（回归）**：`git diff be2a59c..HEAD -- frontend/admin-web/src/pages/AssetFormPage.tsx` 为 +75/-7。新增逻辑中 `presetProjectId` / `presetZoneId` / `lockScope` 全部取自 `searchParams`；锁定反查 effect 以 `if (!lockScope || isEdit || presetProjectId == null) return;` 早退；公司回写 effect 受 `lockedCompanyId` 保护（无 `lockScope` 时恒为 `undefined`）；`Form` 的 `disabled` / `extra` 均以 `lockScope` 三元或短路包裹，无 `lockScope` 时求值回落为改动前的 `!assetCompanyId` / `!watchProjectId` / 原 extra 文案 / `undefined`（等价于未设置）。`initialValues` 无参数时 `projectId`/`zoneId` 为 `undefined`，编辑态退回 `{ assetType: 'property' }`，与改动前等价。唯一未被 `lockScope` 包裹的行为改动是保存成功后 `navigate('/assets')` → `goBack()`（`useBackNavigate('/assets')`）：常规 `/assets` 入口无 `state.from`，落点为 `navigate(-1)` 或回退 `/assets`，即资产台账列表，与改动前一致。
+- **18 ✅**：屏障脚本 `检查通过`；`前端 perm 声明的去重码数` 为 **9**，未扩大。
+- **19 ✅**：`build`（含 `tsc -b`）与 `lint` 本地通过；后端 `mvn test` 属 CI（见 Step 1）。
+- **20 ✅**：`AssetService` / `AssetController` 零改动，由 Step 3 第一条 diff 证明（`backend/src/main/java` 无任何 diff）。静态核查：`AssetController.java` 中既有 `GET /projects/{id}/zones`、`POST /projects/{id}/zones`、`PUT /projects/{id}/zones/{zoneId}`、`DELETE /projects/{id}/zones/{zoneId}`（第 116/128/138/148 行）与 `/assets` 系列接口（第 192 行起）均未被触碰。
+- **工作区状态**：`frontend/admin-web/src/lib/routeRegistry.ts`（` M`）与 `frontend/admin-web/src/lib/pathToCode.ts`（`??`）保持未提交，未做任何 commit / stash / checkout / add，符合 Pre-Flight 第四节约定。
