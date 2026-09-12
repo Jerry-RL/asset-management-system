@@ -42,7 +42,7 @@
 
 按当前 CSS 逐项算（单个文字链接 = 左右内边距 12 + 图标 12 + 图标间距 4 + 字数 × 汉字宽 13；「更多」= 2 字 + `MoreOutlined`）。
 
-下表「内容所需」= **不含缓冲**的原始内容宽度（`26 + Σ链接 + 项间 4px 间隙`）；§4.1 的「新宽度」= 再加上 8px 缓冲后的 helper 返回值。两者相差 8px，不要混用。
+下表「内容所需」= **不含缓冲**的原始内容宽度（`26 + Σ链接 + 项间 4px 间隙`）；§4.1 的「新宽度」= 再加上 108px 缓冲（8px 基础 + 100px 统一加宽）后的 helper 返回值。两者相差 108px，不要混用。
 
 | 位置 | 现有 `width` | 内容所需 | 差值 | 表现 |
 |------|--------------|----------|------|------|
@@ -109,6 +109,9 @@ const actionLinkWidth = (label: string) => 28 + label.length * 13;
 /** 「更多」按钮：2 字 + MoreOutlined 图标 */
 const MORE_WIDTH = actionLinkWidth('更多');
 
+/** 用户要求的统一额外加宽（px）：在内容所需宽度之上再留 100px */
+const ACTION_COLUMN_EXTRA_WIDTH = 100;
+
 /**
  * 操作列宽度（px）。
  *
@@ -117,7 +120,7 @@ const MORE_WIDTH = actionLinkWidth('更多');
  * —— 与渲染顺序无关，因此同一份配置在不同权限账号下宽度一致。
  *
  * <p>构成：单元格内边距 32 − `.ams-actions` 负左边距 6 = 26；加上各项宽度；
- * 加上项间 4px 间隙；再加 8px 缓冲。
+ * 加上项间 4px 间隙；再加 8px 基础缓冲；最后加 `ACTION_COLUMN_EXTRA_WIDTH`（100px）统一加宽。
  */
 export const actionsColumnWidth = (
   labels: string[],
@@ -126,9 +129,17 @@ export const actionsColumnWidth = (
   const inline = [...labels].sort((a, b) => b.length - a.length).slice(0, max);
   const items = inline.map(actionLinkWidth);
   if (hasMore) items.push(MORE_WIDTH);
-  return 26 + items.reduce((sum, w) => sum + w, 0) + Math.max(0, items.length - 1) * 4 + 8;
+  return (
+    26 +
+    items.reduce((sum, w) => sum + w, 0) +
+    Math.max(0, items.length - 1) * 4 +
+    8 +
+    ACTION_COLUMN_EXTRA_WIDTH
+  );
 };
 ```
+
+> **实现更新（2026-09-12）**：用户要求操作列统一再加宽 100px，故 §4.1 「新宽度」= 下表原值 + 100。
 
 ### 3.3 为什么用「最长的 max 个」而不是「前 max 个」
 
@@ -146,36 +157,22 @@ export const actionsColumnWidth = (
 |---|------|---------------------|-----------|--------|-----------|
 | 1 | `src/index.css` | — | — | — | `flex-wrap: wrap` → `nowrap`，删 `max-width: 100%` |
 | 2 | `src/components/TableActions.tsx` | — | — | — | 新增 `actionLinkWidth` / `MORE_WIDTH` / `actionsColumnWidth` |
-| 3 | `src/components/ResourcePage.tsx` | `[详情 \| 档案, 编辑]` | 复用 §4.2 的 `hasMore`（同源于 `resolveRowActions`） | **204** | 180 / 150 / 110 |
-| 4 | `src/components/ZoneAssetPane.tsx` | `['编辑', '一物一档']` | `true`（删除在 `more`） | **230** | 170 |
-| 5 | `src/pages/SystemMenuPage.tsx` | `['编辑', '删除']` | `true`（DIR 行「新增子菜单」） | **204** | 140 |
-| 6 | `src/pages/SystemDictionaryPage.tsx` | `['编辑', '删除']` | `false` | **146** | 150 |
-| 7 | `src/pages/ProjectFormPage.tsx` | `['详情', '删除']` | `false` | **146** | 140 |
-| 8 | `src/pages/DunningAutoPage.tsx` | `['去处理']` | `false` | **101** | 110 |
-| 9 | `src/pages/ApprovalPage.tsx` | `['通过', '驳回']` | `false` | **146** | 160 |
-| 10 | `src/pages/AssetDossierPage.tsx`（合同表） | `['查看']` | `false` | **88** | 100 |
-| 11 | `src/pages/PaymentConfirmPage.tsx` | `['确认到账']` | `false` | **114** | 130 |
-| 12 | `src/pages/AgentReportsPage.tsx` | `['下载 HTML']` | `false` | **153** | 140 |
-| 13 | `src/components/ProjectZonesPanel.tsx` | `['编辑', '删除']` | `false` | **146** | 140 |
-| 14 | `src/pages/ContractTemplatesPage.tsx` | `['预览', '编辑']` | `true`（导出 Word） | **204** | 220 |
+| 3 | `src/components/ResourcePage.tsx` | `[详情 \| 档案, 编辑]` | 复用 §4.2 的 `hasMore`（同源于 `resolveRowActions`） | **304** | 180 / 150 / 110 |
+| 4 | `src/components/ZoneAssetPane.tsx` | `['编辑', '一物一档']` | `true`（删除在 `more`） | **330** | 170 |
+| 5 | `src/pages/SystemMenuPage.tsx` | `['编辑', '删除']` | `true`（DIR 行「新增子菜单」） | **304** | 140 |
+| 6 | `src/pages/SystemDictionaryPage.tsx` | `['编辑', '删除']` | `false` | **246** | 150 |
+| 7 | `src/pages/ProjectFormPage.tsx` | `['详情', '删除']` | `false` | **246** | 140 |
+| 8 | `src/pages/DunningAutoPage.tsx` | `['去处理']` | `false` | **201** | 110 |
+| 9 | `src/pages/ApprovalPage.tsx` | `['通过', '驳回']` | `false` | **246** | 160 |
+| 10 | `src/pages/AssetDossierPage.tsx`（合同表） | `['查看']` | `false` | **188** | 100 |
+| 11 | `src/pages/PaymentConfirmPage.tsx` | `['确认到账']` | `false` | **214** | 130 |
+| 12 | `src/pages/AgentReportsPage.tsx` | `['下载 HTML']` | `false` | **253** | 140 |
+| 13 | `src/components/ProjectZonesPanel.tsx` | `['编辑', '删除']` | `false` | **246** | 140 |
+| 14 | `src/pages/ContractTemplatesPage.tsx` | `['预览', '编辑']` | `true`（导出 Word） | **304** | 220 |
 
 ### 4.2 `ResourcePage` 的 `hasMore` 必须复用既有判定
 
-`ResourcePage` 的操作列已经在 `tableColumns` 的 `useMemo` 里算过：
-
-```1011:1018:frontend/admin-web/src/components/ResourcePage.tsx
-    // 操作列的存在性也要按权限算：无权时整列消失，而不是留一个只有「详情」的空操作列
-    const { showEdit, showDelete, rowActions, hasColumn } = resolveRowActions(config, canDo);
-    if (hasColumn) {
-      const hasMore = !!config.qrcodePath || showDelete || rowActions.length > 0;
-      cols.push({
-        title: '操作',
-        key: '_actions',
-        fixed: 'right',
-        width: hasMore ? 180 : showEdit ? 150 : 110,
-```
-
-改造后**必须**继续用同一个 `hasMore` 与 `showEdit`，不得另写一套判定 —— 否则会出现「算宽度时认为没有更多、渲染时却有」的不一致：
+`ResourcePage` 的操作列的 `hasMore` 已在 `tableColumns` 的 `useMemo` 里算过（`resolveRowActions` 的结果）。**必须**继续用同一个 `hasMore` 与 `showEdit`，不得另写一套判定 —— 否则会出现「算宽度时认为没有更多、渲染时却有」的不一致。实现（`src/components/ResourcePage.tsx`）：
 
 ```
 width: actionsColumnWidth(
@@ -207,8 +204,7 @@ width: actionsColumnWidth(
 | 项 | 说明 |
 |----|------|
 | 估算偏差方向 | 每个字符都按 13px（汉字宽）计。ASCII 实际约 7px ⇒ 估算**偏大**，安全；偏小才会裁切 |
-| 部分列会变窄 | #6 `SystemDictionaryPage` 150→146、#8 `DunningAutoPage` 110→101、#9 `ApprovalPage` 160→146、#10 `AssetDossierPage` 100→88、#11 `PaymentConfirmPage` 130→114、#14 `ContractTemplatesPage` 220→204。宽度精确贴合内容，省下的横向空间让给数据列 |
-| 部分列会变宽 | #3 `ResourcePage`（180/150/110 → 204）、#4 `ZoneAssetPane` 170→230、#5 `SystemMenuPage` 140→204、#7 `ProjectFormPage` 140→146、#12 `AgentReportsPage` 140→153、#13 `ProjectZonesPanel` 140→146 —— 这些正是今天折行的位置 |
+| 与旧宽度对比 | 因统一 +100，本次**所有**列都比旧 `width` 更宽（如 #6 `SystemDictionaryPage` 150→246、#9 `ApprovalPage` 160→246、#14 `ContractTemplatesPage` 220→304），不存在变窄的列 |
 | 列宽随权限变化 | `ResourcePage` / `ZoneAssetPane` / `SystemMenuPage` 的 `labels`/`hasMore` 由权限过滤后的结果推导 ⇒ 无权账号的列更窄。这是正确行为，不是 bug |
 | 文案变更 | 改文案时宽度自动跟随（`label.length` 参与计算），不需要同步改数字 |
 | `max` 不一致 | helper 的默认 `max = 2` 必须与 `TableActions` 的 `max` 默认值一致；调用方显式传 `max={2}` 的地方（`ResourcePage`、`ZoneAssetPane`、`SystemDictionaryPage`、`PaymentConfirmPage`、`AgentReportsPage`）与默认值相同，无需额外传参 |
