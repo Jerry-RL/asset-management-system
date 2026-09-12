@@ -189,6 +189,22 @@ export interface CardViewConfig {
   metrics: CardMetricConfig[];
 }
 
+/**
+ * 列表模式下的可展开行（设计 §5.1）。
+ *
+ * <p>只在**列表模式**透传给 antd Table：卡片模式没有「行」的概念，展开入口无处安放，
+ * 因此配置了本项也不会让卡片模式出现展开按钮。
+ *
+ * <p>`render` 由调用方提供，`ResourcePage` 不认识被展开内容的语义 —— 分区、明细、日志
+ * 都可以挂上来，组件本身不引入任何业务耦合。
+ */
+export interface ExpandableConfig {
+  /** 展开行内容；`row` 为当前列表行 */
+  render: (row: Row) => React.ReactNode;
+  /** 可选：某行是否可展开（不配置则所有行可展开） */
+  rowExpandable?: (row: Row) => boolean;
+}
+
 export interface TagFilterConfig {
   key: string;
   label: string;
@@ -273,6 +289,8 @@ export interface ResourceConfig {
   statsSource?: StatSourceConfig;
   /** 卡片视图配置（配置后出现「列表 / 卡片」切换） */
   card?: CardViewConfig;
+  /** 列表模式下的可展开行（仅列表模式生效；卡片模式忽略） */
+  expandable?: ExpandableConfig;
   /** 标签式筛选（含「不限」） */
   tagFilters?: TagFilterConfig[];
   /** CSV 导入导出 */
@@ -308,9 +326,7 @@ function TagFilterRow({
   filters: Record<string, string>;
   onSelect: (key: string, value: string) => void;
 }) {
-  const cascadeParentValue = config.cascadeParentKey
-    ? filters[config.cascadeParentKey]
-    : undefined;
+  const cascadeParentValue = config.cascadeParentKey ? filters[config.cascadeParentKey] : undefined;
   const dict = useDictOptions(
     config.dictCode,
     config.cascadeParentKey
@@ -610,9 +626,7 @@ function ResourceCardGrid({
                   const raw = row[m.key];
                   const num = raw == null || raw === '' ? null : Number(raw);
                   const display =
-                    num != null && Number.isFinite(num)
-                      ? num.toFixed(m.fractionDigits ?? 0)
-                      : '0';
+                    num != null && Number.isFinite(num) ? num.toFixed(m.fractionDigits ?? 0) : '0';
                   return (
                     <div key={m.key} className="flex flex-col min-w-0">
                       <span className="text-[11px] text-gray-500 truncate" title={m.label}>
@@ -1145,35 +1159,35 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
                 icon={<UploadOutlined />}
                 disabled={!config.importPath}
                 title={config.importPath ? '导入 CSV' : '后续开放'}
-              onClick={() => {
-                if (!config.importPath) return;
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.csv,text/csv';
-                input.onchange = async () => {
-                  const file = input.files?.[0];
-                  if (!file || !config.importPath) return;
-                  const formData = new FormData();
-                  formData.append('file', file);
-                  try {
-                    const token = localStorage.getItem('ams.accessToken');
-                    const resp = await fetch(`/api/v1${config.importPath}`, {
-                      method: 'POST',
-                      headers: token ? { Authorization: `Bearer ${token}` } : {},
-                      body: formData,
-                    });
-                    const body = await resp.json();
-                    if (body.code !== 0) throw new Error(body.message || '导入失败');
-                    message.success(`导入成功 ${body.data?.success ?? 0} 条`);
-                    load(1, pageSize, keyword, filters);
-                  } catch (e) {
-                    message.error(e instanceof Error ? e.message : '导入失败');
-                  }
-                };
-                input.click();
-              }}
-            >
-              导入
+                onClick={() => {
+                  if (!config.importPath) return;
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.csv,text/csv';
+                  input.onchange = async () => {
+                    const file = input.files?.[0];
+                    if (!file || !config.importPath) return;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    try {
+                      const token = localStorage.getItem('ams.accessToken');
+                      const resp = await fetch(`/api/v1${config.importPath}`, {
+                        method: 'POST',
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        body: formData,
+                      });
+                      const body = await resp.json();
+                      if (body.code !== 0) throw new Error(body.message || '导入失败');
+                      message.success(`导入成功 ${body.data?.success ?? 0} 条`);
+                      load(1, pageSize, keyword, filters);
+                    } catch (e) {
+                      message.error(e instanceof Error ? e.message : '导入失败');
+                    }
+                  };
+                  input.click();
+                }}
+              >
+                导入
               </Button>
             )}
             {(!config.exportPath || canExport) && (
@@ -1181,25 +1195,25 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
                 icon={<DownloadOutlined />}
                 disabled={!config.exportPath}
                 title={config.exportPath ? '导出 CSV' : '后续开放'}
-              onClick={() => {
-                if (!config.exportPath) return;
-                const token = localStorage.getItem('ams.accessToken');
-                fetch(`/api/v1${config.exportPath}`, {
-                  headers: token ? { Authorization: `Bearer ${token}` } : {},
-                })
-                  .then((r) => r.blob())
-                  .then((blob) => {
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${config.title}.csv`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                onClick={() => {
+                  if (!config.exportPath) return;
+                  const token = localStorage.getItem('ams.accessToken');
+                  fetch(`/api/v1${config.exportPath}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
                   })
-                  .catch(() => message.error('导出失败'));
-              }}
-            >
-              导出
+                    .then((r) => r.blob())
+                    .then((blob) => {
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${config.title}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    })
+                    .catch(() => message.error('导出失败'));
+                }}
+              >
+                导出
               </Button>
             )}
             {config.create && canCreate && (
@@ -1222,9 +1236,9 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
         </div>
       </div>
 
-      {(config.statsSource ? dynamicStats : config.stats ?? []).length > 0 && (
+      {(config.statsSource ? dynamicStats : (config.stats ?? [])).length > 0 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 pb-3 border-b border-[var(--ams-border)] text-sm overflow-hidden">
-          {(config.statsSource ? dynamicStats : config.stats ?? []).map((s, i) => (
+          {(config.statsSource ? dynamicStats : (config.stats ?? [])).map((s, i) => (
             <div key={s.label} className="flex items-baseline gap-2 min-w-0">
               {i > 0 && <span className="text-[var(--ams-primary)]/40 hidden sm:inline">|</span>}
               <span className="text-gray-500 shrink-0">{s.label}</span>
@@ -1240,9 +1254,7 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
 
       {config.card && viewMode === 'card' ? (
         <>
-          {loading && (
-            <div className="py-6 text-center text-sm text-gray-500">加载中…</div>
-          )}
+          {loading && <div className="py-6 text-center text-sm text-gray-500">加载中…</div>}
           {!loading && rows.length === 0 && (
             <div className="py-16 text-center text-sm text-gray-400">暂无数据</div>
           )}
@@ -1278,6 +1290,15 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
             pagination={false}
             size="middle"
             scroll={{ x: tableScrollX }}
+            // 展开行仅列表模式支持；未配置 expandable 时保持原行为（不渲染展开列）
+            expandable={
+              config.expandable
+                ? {
+                    expandedRowRender: (row) => config.expandable!.render(row),
+                    rowExpandable: config.expandable!.rowExpandable,
+                  }
+                : undefined
+            }
             onRow={(row) => ({
               onClick: () => openDetail(row),
               className: 'cursor-pointer',
