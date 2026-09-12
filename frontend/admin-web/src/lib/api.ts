@@ -18,6 +18,12 @@ export interface LoginUser {
   name: string;
   roles: string[];
   permissions: string[];
+  /**
+   * 是否超级管理员（由后端 `LoginUser.isSuperAdmin()` 序列化而来）。
+   *
+   * <p>可选：老会话的 `localStorage` 快照里没有这个字段，缺失时按 `false` 处理（安全侧）。
+   */
+  superAdmin?: boolean;
 }
 
 export interface Asset {

@@ -397,6 +397,10 @@ scope(user):
 | D8 | 3.4：图标「`menu.icon` 为权威，注册表图标兜底」 | 图标优先级判定只放在**渲染处**一处（`AdminLayout` 的 `item.icon ?? getPathIcon(...)`），`MenuProvider` 只负责把 `menu.icon` 的名字解析成节点、不做兜底 | 若 provider 也兜底，同一个优先级规则会有两份实现，改一处漏一处就会出现「侧栏与页签图标不一致」。`getIconByName` 对未登记名字返回 `undefined`（而非默认图标），以区分「DB 明确指定但拼错」与「DB 没配、该走兜底」 |
 | D9 | 3.4 未提及静态兜底菜单的分组图标 | 降级态不填 `icon`，同样落回 `getGroupIcon(title)` | 与 D8 同一原则；静态 `MENU` 本就没有 DB 图标 |
 | D10 | 3.4 只要求「侧边栏改读 API」 | `PageTabs`（页签标题）与 `helpManual`（用户手册条目）一并改为消费同一份 `groups` | 两者原先都从静态 `MENU` 取 `title`。菜单在 DB 改名后，若它们仍读静态表，会出现「侧栏叫 A、页签叫 B、手册叫 C」。`HELP_MANUAL` / `HELP_GROUPS` 因此由常量改为 `buildHelpManual(groups)` / `helpGroups(manual)` 两个纯函数 |
+| D11 | 3.3 列清单：名称 / 编码 / 路由 / **图标** / 类型 / 排序 / 状态 / 操作 | 不单开「图标」列，图标渲染在「名称」前（即侧边栏的真实样子） | 两列并排会把同一个图标显示两遍；按侧边栏的样子展示才能一眼看出「配错图标」。校验能力不减（未登记的图标名会渲染成灰色占位，选择器也带实时预览） |
+| D12 | 3.3：「图标字段取自具名图标目录 `ICON_BY_NAME`」 | `getIconByName` 对未登记的名字返回 `undefined`，调用方据此渲染占位图标并可用 `console` 定位 | 若返回默认图标，「DB 里写了 `ledgerr`」与「DB 里没配、该走兜底」在界面上完全一样，配错图标将无法被发现。选择器只提供已登记名字，因此该分支只可能由手工改库/迁移脚本触发 |
+| D13 | 未指定（3.3 的删除保护只说明「只能停用不能删除」） | 删除按钮不按「有无下级」提前置灰，一律提交后端判定并原样透出原因 | 两条保护里「已被 `role_permission` 引用」前端无从判断（需查授权表），只能靠后端；两条都靠后端才能给出一致的可读原因（「存在下级菜单，只能停用不能删除」），比为一半情况置灰一个说不出原因的按钮更好 |
+| D14 | 6.1：`super_admin` 在前端判定口径未明 | 新增 `lib/perm.ts`（`hasPerm` / `usePerm`），超管恒真，其余按 `menuCode:action` **精确匹配**；`LoginUser` 增补可选字段 `superAdmin` | 与后端 `LoginUser.hasPermission` 口径对齐（旧实现是 `code + ':'` 前缀匹配，会放行「只有 create 却判 view」）。字段可选是因为老会话的 `localStorage` 快照里没有它，缺失时按 `false` 处理（安全侧）。U9 在其上补 `PermissionGuard` 与路由守卫 |
 
 ### 11.2 已登记的缺口（未接入，仍需跟踪）
 

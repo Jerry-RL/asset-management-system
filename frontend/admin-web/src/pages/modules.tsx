@@ -1429,36 +1429,6 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       },
     ],
   },
-  'system/menus': {
-    title: '菜单管理',
-    listPath: '/system/menus/all',
-    create: true,
-    columns: [
-      { key: 'id', label: 'ID' },
-      { key: 'name', label: '菜单名称' },
-      { key: 'code', label: '编码' },
-      { key: 'path', label: '路由' },
-      { key: 'menuType', label: '类型', map: { dir: '目录', menu: '菜单', button: '按钮' } },
-      { key: 'sort', label: '排序' },
-    ],
-    fields: [
-      { name: 'name', label: '菜单名称', required: true },
-      { name: 'code', label: '编码' },
-      { name: 'path', label: '路由' },
-      { name: 'icon', label: '图标' },
-      {
-        name: 'menuType',
-        label: '类型',
-        type: 'select',
-        options: [
-          { value: 'dir', label: '目录' },
-          { value: 'menu', label: '菜单' },
-          { value: 'button', label: '按钮' },
-        ],
-      },
-      { name: 'sort', label: '排序', type: 'number' },
-    ],
-  },
   'config/versions': {
     title: '参数版本留痕',
     listPath: '/config/versions',
