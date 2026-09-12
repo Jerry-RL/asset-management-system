@@ -24,6 +24,7 @@ import com.ams.modules.org.mapper.CompanyMapper;
 import com.ams.modules.org.mapper.DepartmentMapper;
 import com.ams.modules.org.mapper.UserMapper;
 import com.ams.modules.org.service.CompanyTreeService;
+import com.ams.modules.record.RecordOwnerType;
 import com.ams.modules.record.service.RecordPresenceChecker;
 import com.ams.platform.security.CompanyScope;
 import com.ams.platform.security.LoginUser;
@@ -320,7 +321,23 @@ public class AssetService {
         return value instanceof BigDecimal decimal ? decimal : new BigDecimal(value.toString());
     }
 
-    /** 删除项目：项目下存在资产时禁止删除，否则一并清除分区配置。 */
+    /**
+     * 删除项目：项目自身或项目下任一分区只要「有资产」或「有后续记录」，一律整单拒绝；
+     * 确认整棵子树都是空壳后，才硬删分区与项目。
+     *
+     * <p>这是分区删除的**第三条路径**（另两条是 {@code DELETE /projects/{pid}/zones/{zoneId}}
+     * 与项目 PUT 的分区全量保存），所以同样必须过 {@link #assertZoneRemovable}：
+     * 否则可以靠「删项目」绕过守卫，把分区连同其后续记录一起硬删成孤儿行（设计 §7.3）。
+     *
+     * <p>报错优先级固定为「项目资产 → 项目记录 → 逐分区（资产、记录）」：先看项目自身的资产
+     * （按 {@code project_id} 计数，已覆盖分区内资产），再看项目自身挂的记录，
+     * 最后逐分区报出具体是哪个分区出的问题。
+     *
+     * <p>与另两条路径不同，这里的分区与项目**保持物理删除**：守卫已证明它们既无资产也无记录，
+     * 是空壳，硬删不可能遗留孤儿行。反过来把项目改成软删要牵动全部项目读路径
+     * （项目列表 / {@link #getProject} / 地图 / 看板 / {@code OwnershipResolver} 的数据范围判定），
+     * 属于「项目软删」独立专项 —— 设计 §7.3 为此保留了显式例外。
+     */
     @Transactional
     public void deleteProject(Long id) {
         getProject(id);
@@ -328,6 +345,16 @@ public class AssetService {
                 new LambdaQueryWrapper<Asset>().eq(Asset::getProjectId, id));
         if (assetCount != null && assetCount > 0) {
             throw new AppException(ErrorCode.BAD_REQUEST, "项目下存在资产，无法删除");
+        }
+        if (recordPresenceChecker.hasRecords(RecordOwnerType.PROJECT, id)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "项目下已有后续记录，请先处理后再删除");
+        }
+        // 逐分区过同一个守卫。此路径上项目级资产检查已排除资产，
+        // 所以这里实际只会命中「记录」分支 —— 但不因此另写一份检查：
+        // 三条路径共用一个判定点，才不会再次出现口径漂移。
+        for (ProjectZone zone : projectZoneMapper.selectList(activeZoneQuery()
+                .eq(ProjectZone::getProjectId, id))) {
+            assertZoneRemovable(zone);
         }
         projectZoneMapper.delete(
                 new LambdaQueryWrapper<ProjectZone>().eq(ProjectZone::getProjectId, id));

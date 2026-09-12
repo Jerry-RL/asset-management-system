@@ -418,20 +418,21 @@ modules/record/
 
 ### 7.3 分区删除的级联（必须改造 `replaceZones`）
 
-现状：分区有**两条写入路径**，删除语义不一致，且删除都是物理删除。分区一旦挂了记录，两条路径都会绕过保护。
+现状：分区有**三条删除路径**，删除语义不一致，且删除都是物理删除。分区一旦挂了记录，三条路径都会绕过保护。
 
 | 路径 | 现状 | 问题 |
 |------|------|------|
 | `DELETE /projects/{pid}/zones/{zoneId}` → `AssetService.deleteProjectZone` | 分区下有资产时**拒绝**（400「该分区下有 N 项资产，无法删除」），否则 `deleteById` | 方向正确，但**不感知后续记录** |
 | `PUT /projects/{pid}` → `AssetService.replaceZones` | 未提交的分区 `deleteBatchIds`，并把区下资产 `zone_id` **静默置空** | 绕过上面的守卫，静默丢失资产归属，也会丢掉/悬空后续记录 |
+| `DELETE /projects/{id}` → `AssetService.deleteProject` | 只拦「项目下有资产」，随即 `projectZoneMapper.delete` 硬删全部分区 + 硬删项目 | 绕过分区守卫，且**不感知后续记录** → 硬删出孤儿记录 |
 
-两条路径的删除都是**物理删除**：全局 `logic-delete-field: deleted` 与表范式 `deleted_at` 不一致、实体未映射，逻辑删除实际不生效（见 §4.1）。
+三条路径的删除都是**物理删除**：全局 `logic-delete-field: deleted` 与表范式 `deleted_at` 不一致、实体未映射，逻辑删除实际不生效（见 §4.1）。
 
 改造要求：
 
-1. 抽一个共享的「分区可删性」校验，两条路径都调用：存在有效的 `biz_receive_record` / `biz_receive_issue` / `biz_source_info` / `biz_disposal_record` 记录（**只看记录，不看附件** —— 附件总是挂在某条记录或主体的某个字段上，没有脱离记录的孤立附件）→ **拒绝删除**，返回明确错误（如「分区 X 已有后续记录，请先处理后再删除」）。
+1. 抽一个共享的「分区可删性」校验，**三处**都调用：存在有效的 `biz_receive_record` / `biz_receive_issue` / `biz_source_info` / `biz_disposal_record` 记录（**只看记录，不看附件** —— 附件总是挂在某条记录或主体的某个字段上，没有脱离记录的孤立附件）→ **拒绝删除**，返回明确错误（如「分区 X 已有后续记录，请先处理后再删除」）。项目删除路径（`deleteProject`）还需先查**项目自身**挂的后续记录（`RecordOwnerType.PROJECT`），因为记录可以直接挂在项目上、而不是只挂在分区上。
 2. `replaceZones` 不得再静默置空：未提交的分区**只要满足「有资产」或「有后续记录」任一条件就整单拒绝**并指出是哪个分区、什么原因，由使用者先显式处理。两个条件与 `deleteProjectZone` 的守卫**完全对齐**（后者今日只查资产），从而彻底消除「同一个分区在一条路径上删不掉、在另一条路径上被静默抹掉」的不一致。
-3. 两条路径的删除统一改为**软删**（写 `deleted_at`），与 §4.1 口径一致；业务代码里不再保留 `deleteById` / `deleteBatchIds` 的硬删调用。
+3. 分区**自身**的两条删除路径（`deleteProjectZone` / `replaceZones`）统一改为**软删**（写 `deleted_at`），与 §4.1 口径一致；分区业务代码里不再保留 `deleteBatchIds` 硬删调用。**显式例外**：`DELETE /projects/{id}` → `deleteProject` 保留物理删除（分区 + 项目都硬删）—— 守卫通过即证明整棵子树既无资产也无记录，是空壳，硬删不可能遗留孤儿行；而把项目改成软删要牵动项目列表 / `getProject` / 地图 / 看板 / `OwnershipResolver` 五处读路径，属于「项目软删」独立专项，本期不并入。
 4. 分区存在性查询（`requireProjectZone` / `selectById`）显式带 `deleted_at IS NULL`，否则软删后仍会被判为存在。
 5. 前端在分区表格与项目提交失败时给出可读提示（哪个分区、什么原因）。
 
@@ -467,7 +468,7 @@ modules/record/
 4. 项目/分区处置只落 `biz_disposal_record`，不产生 `disposal_order`，不改 `lifecycle_status`；资产的 record-sheet 提交 `disposalRecords` 段**不产生任何行**（该段对 asset 被忽略）。
 5. 来源明细为 1:1：重复保存不产生第二行（唯一索引生效）。
 6. 遗留问题随接收信息保存/删除同步；`receive_id` 由服务端按所属接收记录赋值，客户端传入被忽略。
-7. 两条删除路径一致：有**资产**或**后续记录**的分区，无论走 `DELETE /zones/{id}` 还是走项目 `PUT` 的移除，都被拒绝并给出「哪个分区、什么原因」；不再出现项目 PUT 静默置空资产 `zone_id` 的情形；无资产无记录的分区删除为软删，`deleted_at` 落值且分区列表与资产表单的分区下拉中都不再出现。
+7. 三条删除路径一致：有**资产**或**后续记录**的分区，无论走 `DELETE /zones/{id}`、项目 `PUT` 的移除，还是走 `DELETE /projects/{id}`，都被拒绝并给出「哪个分区、什么原因」；`DELETE /projects/{id}` 在**项目自身**有资产或后续记录时同样整单拒绝；不再出现项目 PUT 静默置空资产 `zone_id` 的情形；无资产无记录的分区删除为软删，`deleted_at` 落值且分区列表与资产表单的分区下拉中都不再出现（`DELETE /projects/{id}` 保留硬删的例外见 §7.3 第 3 条）。
 8. 越权访问不泄露存在性：用 A 公司账号访问 B 公司的资产/项目/分区 record-sheet（含仅凭 id 直取的场景），响应与「该宿主不存在」**完全一致**（同 404 状态码、同文案）；与「无功能权限 → 403」区分开。
 9. 所有新写接口在 `operation_log` / 审计中留有 `@Audited` 记录。
 10. record-sheet 的 PUT 是原子的：请求体中间某条记录非法（如 issue 描述超长）时，**整单不落库**，不出现半成品。

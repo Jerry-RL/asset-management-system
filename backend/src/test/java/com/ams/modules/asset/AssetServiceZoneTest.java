@@ -25,6 +25,7 @@ import com.ams.modules.org.mapper.CompanyMapper;
 import com.ams.modules.org.mapper.DepartmentMapper;
 import com.ams.modules.org.mapper.UserMapper;
 import com.ams.modules.org.service.CompanyTreeService;
+import com.ams.modules.record.RecordOwnerType;
 import com.ams.modules.record.service.RecordPresenceChecker;
 import com.ams.platform.security.RbacService;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -265,6 +266,8 @@ class AssetServiceZoneTest {
                 .isInstanceOf(AppException.class)
                 .hasMessageContaining("2 项资产");
         verify(projectZoneMapper, never()).deleteBatchIds(any());
+        verify(assetMapper, never()).update(any(), any());
+        verify(projectZoneMapper, never()).update(any(), any());
     }
 
     @Test
@@ -279,6 +282,58 @@ class AssetServiceZoneTest {
                 .isInstanceOf(AppException.class)
                 .hasMessageContaining("后续记录");
         verify(projectZoneMapper, never()).deleteBatchIds(any());
+        verify(assetMapper, never()).update(any(), any());
+        verify(projectZoneMapper, never()).update(any(), any());
+    }
+
+    @Test
+    @DisplayName("删除项目：分区有后续记录时整单拒绝，且不删分区也不删项目")
+    void deleteProjectRejectsWhenZoneHasRecords() {
+        when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
+        when(assetMapper.selectCount(any())).thenReturn(0L);
+        when(recordPresenceChecker.hasRecords(RecordOwnerType.PROJECT, PROJECT_ID)).thenReturn(false);
+        when(projectZoneMapper.selectList(any())).thenReturn(List.of(zone(ZONE_ID, 1)));
+        when(recordPresenceChecker.hasRecordsForZone(ZONE_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteProject(PROJECT_ID))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("后续记录")
+                .hasMessageContaining("分区9");
+
+        verify(projectZoneMapper, never()).delete(any());
+        verify(projectMapper, never()).deleteById(anyLong());
+    }
+
+    @Test
+    @DisplayName("删除项目：项目自身有后续记录时整单拒绝")
+    void deleteProjectRejectsWhenProjectHasRecords() {
+        when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
+        when(assetMapper.selectCount(any())).thenReturn(0L);
+        when(recordPresenceChecker.hasRecords(RecordOwnerType.PROJECT, PROJECT_ID)).thenReturn(true);
+        // 刻意不桩 projectZoneMapper.selectList：项目级记录先于分区守卫抛错，这行不会被查到；
+        // 桩了反而会因为 STRICT_STUBS 报「多余桩」而变红。
+
+        assertThatThrownBy(() -> service.deleteProject(PROJECT_ID))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("项目下已有后续记录");
+
+        verify(projectZoneMapper, never()).delete(any());
+        verify(projectMapper, never()).deleteById(anyLong());
+    }
+
+    @Test
+    @DisplayName("删除项目：无资产无记录时硬删分区与项目")
+    void deleteProjectRemovesZonesAndProjectWhenEmpty() {
+        when(projectMapper.selectById(PROJECT_ID)).thenReturn(project(PROJECT_ID));
+        when(assetMapper.selectCount(any())).thenReturn(0L);
+        when(recordPresenceChecker.hasRecords(RecordOwnerType.PROJECT, PROJECT_ID)).thenReturn(false);
+        when(projectZoneMapper.selectList(any())).thenReturn(List.of(zone(ZONE_ID, 1)));
+        when(recordPresenceChecker.hasRecordsForZone(ZONE_ID)).thenReturn(false);
+
+        service.deleteProject(PROJECT_ID);
+
+        verify(projectZoneMapper).delete(any());
+        verify(projectMapper).deleteById(anyLong());
     }
 
     private static Project project(long id) {
