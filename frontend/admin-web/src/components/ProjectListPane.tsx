@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, Empty, Input, Pagination, Spin } from 'antd';
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { api, type PageResult } from '@/lib/api';
+import { useListQuery } from '@/lib/listQuery';
 
 /** 项目行：资产统计字段由后端在列表里聚合（AssetService#fillProjectAssetStats），无需额外请求 */
 interface ProjectRow {
@@ -31,10 +32,21 @@ const formatArea = (value: unknown) =>
  * 「项目分区管理」左栏：项目列表（设计 §6.4）。
  */
 export function ProjectListPane({ selectedId, onSelect, canView }: ProjectListPaneProps) {
+  /** 输入框草稿（本地）：与 URL 上已提交的关键字分离，避免每敲一个字都发请求 */
   const [keyword, setKeyword] = useState('');
-  /** 已提交的关键字：与输入框分离，避免每敲一个字都发请求 */
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(1);
+  /**
+   * 已提交的关键字与页码进 URL（设计 §4）：从本页跳去资产表单再返回时本组件会重新挂载，
+   * 只在 state 里就会丢。加 `project` 前缀是因为同一 URL 上右栏资产表也有分页。
+   */
+  const {
+    page,
+    keyword: query,
+    setPage,
+    setKeyword: setQuery,
+  } = useListQuery({ prefix: 'project', defaultPageSize: PAGE_SIZE });
+
+  /** URL（前进/后退、外部链接）变化时把输入框同步回来 */
+  useEffect(() => setKeyword(query), [query]);
   /** 重拉信号：关键字与页码都没变时（查询 / 刷新 / 重试）靠它触发一次请求 */
   const [reloadToken, setReloadToken] = useState(0);
   const [rows, setRows] = useState<ProjectRow[]>([]);
@@ -70,9 +82,8 @@ export function ProjectListPane({ selectedId, onSelect, canView }: ProjectListPa
     void load(page, query);
   }, [load, page, query, reloadToken]);
 
-  /** 查询：页码归 1；关键字没变时靠 reloadToken 重拉（同值 setState 不会触发 effect） */
+  /** 查询：关键字写入 URL（setKeyword 内部把页码归 1）；关键字没变时靠 reloadToken 重拉 */
   const handleSearch = () => {
-    setPage(1);
     if (query === keyword) setReloadToken((token) => token + 1);
     else setQuery(keyword);
   };

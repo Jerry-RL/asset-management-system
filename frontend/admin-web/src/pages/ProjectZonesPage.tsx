@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PartitionOutlined } from '@ant-design/icons';
 import { usePerm } from '@/lib/perm';
 import { ProjectListPane } from '@/components/ProjectListPane';
-import { ZoneAssetPane } from '@/components/ZoneAssetPane';
+import { ASSET_PAGE_PARAM, ZoneAssetPane } from '@/components/ZoneAssetPane';
 
 /** URL 数字参数解析：缺失 / 非纯数字 / 非正数一律视为「未选中」 */
 const toPositiveInt = (raw: string | null): number | null => {
@@ -20,8 +20,8 @@ const toPositiveInt = (raw: string | null): number | null => {
  * <p>本组件只持有「跨栏共享」的两件事：URL 上的选中态与左右布局。
  * 左侧的项目列表、右侧的分区与资产读写都在各自组件里，避免一个文件承担全部状态。
  *
- * <p><strong>选中态以 URL query 为唯一真相</strong>：跳去资产表单页再返回时本页会整页
- * 重新挂载，state 全部丢失，选中项不落在 URL 上就回不来。
+ * <p><strong>选中态与各栏分页都以 URL query 为唯一真相</strong>：跳去资产表单页再返回时本页会整页
+ * 重新挂载，state 全部丢失，选中项与页码不落在 URL 上就回不来。
  */
 export function ProjectZonesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -37,22 +37,44 @@ export function ProjectZonesPage() {
   const zoneId = projectId == null ? null : toPositiveInt(searchParams.get('zoneId'));
 
   /**
-   * 切换项目：**不保留 `zoneId`**，即回到「全部分区」（spec §5.2 第 1 条）。
-   * 用 replace 写入：切换项目/Tab 不该在浏览器历史里留下每一步。
+   * 切换项目：**不保留 `zoneId`**（回到「全部分区」，spec §5.2 第 1 条），
+   * 并清掉右栏资产分页（它与分区强相关，换项目后没有意义）。
+   *
+   * <p>用合并式写入而不是整包替换：左栏项目的 `projectPage` / `projectKeyword` 必须保留，
+   * 整包替换会把左栏的搜索与分页一并抹掉。用 replace 写入：切换项目/Tab 不该在浏览器
+   * 历史里留下每一步。
    */
   const selectProject = useCallback(
-    (id: number) => setSearchParams({ projectId: String(id) }, { replace: true }),
+    (id: number) =>
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('projectId', String(id));
+          next.delete('zoneId');
+          next.delete(ASSET_PAGE_PARAM);
+          return next;
+        },
+        { replace: true },
+      ),
     [setSearchParams],
   );
 
-  /** 切换分区：null 表示「全部分区」，对应 URL 上 `zoneId` 缺省 */
+  /**
+   * 切换分区：null 表示「全部分区」，对应 URL 上 `zoneId` 缺省。
+   * 同样清掉右栏资产分页（spec §5.2 第 2 条：分页归 1、重拉）。
+   */
   const selectZone = useCallback(
     (id: number | null) => {
       if (projectId == null) return;
       setSearchParams(
-        id == null
-          ? { projectId: String(projectId) }
-          : { projectId: String(projectId), zoneId: String(id) },
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('projectId', String(projectId));
+          if (id == null) next.delete('zoneId');
+          else next.set('zoneId', String(id));
+          next.delete(ASSET_PAGE_PARAM);
+          return next;
+        },
         { replace: true },
       );
     },

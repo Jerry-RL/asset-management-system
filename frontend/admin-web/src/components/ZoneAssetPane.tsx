@@ -12,6 +12,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api, type PageResult } from '@/lib/api';
 import { confirmDelete } from '@/lib/confirm';
 import { ASSET_TYPE, LEASE_CONTROL_STATUS } from '@/lib/labels';
+import { useListQuery } from '@/lib/listQuery';
 import { currentPath } from '@/lib/navigation';
 import { usePerm } from '@/lib/perm';
 import { useProjectZones, type ProjectZone } from '@/lib/projectZones';
@@ -41,6 +42,14 @@ export interface ZoneAssetPaneProps {
 /** 「全部分区」Tab 的 key：分区 id 都是正数，不会与它冲突 */
 const ALL_ZONES_KEY = 'all';
 const PAGE_SIZE = 10;
+
+/**
+ * 右栏资产分页的 URL 键名。
+ *
+ * <p>导出给 {@link ProjectZonesPage}：切换项目/分区时它必须**原子地**把这个键删掉
+ * （回到第 1 页），否则会先按上一个分区的旧页码发一次请求再补发第 1 页。
+ */
+export const ASSET_PAGE_PARAM = 'assetPage';
 
 const formatArea = (value: unknown) =>
   Number(value ?? 0).toLocaleString('zh-CN', {
@@ -92,7 +101,11 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
 
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  /** 资产分页进 URL（设计 §4）：跳资产表单再返回时本页会整页重新挂载 */
+  const { page, setPage } = useListQuery({
+    prefix: 'asset',
+    defaultPageSize: PAGE_SIZE,
+  });
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [assetsFailed, setAssetsFailed] = useState(false);
   const [assetsReloadToken, setAssetsReloadToken] = useState(0);
@@ -131,18 +144,15 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
   );
 
   /**
-   * 上下文变化（项目 / 分区 / 重拉信号）→ 归第 1 页并重拉。
+   * 项目 / 分区 / 页码 / 重拉信号变化 → 按当前条件拉取。
    *
-   * <p>刻意**不把 `page` 纳入依赖**：那会在切换分区时先用旧页码发一次请求、再补发第 1 页。
-   * 翻页走 {@link handlePageChange} 的显式调用。
+   * <p>**不再在这里 `setPage(1)`**：切换项目或分区时由父级（{@link ProjectZonesPage}）
+   * 把 {@link ASSET_PAGE_PARAM} 从 URL 删掉，本组件下一次渲染拿到的就已经是第 1 页，
+   * 只发一次请求（原实现会先用旧页码发一次、再补发第 1 页）。
    */
   useEffect(() => {
-    setPage(1);
-    void loadAssets(1);
-    // loadAssets 的依赖已覆盖 projectId / zoneId / canViewLedger；把它列进依赖会因
-    // identity 变化而重复触发（同 ResourcePage 的处理）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, zoneId, canViewLedger, assetsReloadToken]);
+    void loadAssets(page);
+  }, [loadAssets, page, assetsReloadToken]);
 
   /**
    * URL 里的 zoneId 不属于当前项目（删分区后回退、手改链接）→ 回到「全部分区」。
@@ -168,10 +178,8 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
     setEditingZone(null);
   }, [projectId]);
 
-  const handlePageChange = (p: number) => {
-    setPage(p);
-    void loadAssets(p);
-  };
+  /** 翻页只写 URL：上面的 effect 会以新页码拉取，避免「显式 load + effect」双发 */
+  const handlePageChange = (p: number) => setPage(p);
 
   const reloadAssets = () => setAssetsReloadToken((token) => token + 1);
 
@@ -183,6 +191,7 @@ export function ZoneAssetPane({ projectId, zoneId, onZoneChange }: ZoneAssetPane
    */
   const handleRefresh = () => {
     void reloadZones();
+    setPage(1);
     reloadAssets();
   };
 
