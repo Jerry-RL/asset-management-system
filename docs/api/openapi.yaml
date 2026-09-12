@@ -1139,7 +1139,9 @@ components:
         message:
           type: string
         data:
+          type: object
           nullable: true
+          description: 业务数据；无返回值或错误响应时为 null。具体结构由各接口的 allOf 特化补充
         traceId:
           type: string
 
