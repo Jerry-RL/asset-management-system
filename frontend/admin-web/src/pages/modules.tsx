@@ -72,12 +72,13 @@ export const MENU: MenuGroup[] = [
     ],
   },
   {
-    title: '资债权证',
+    title: '资债权证记录',
     items: [
       { path: '/certificates', title: '权证信息' },
       { path: '/mortgages', title: '抵押列表' },
       { path: '/asset-transfers', title: '资产调拨' },
       { path: '/evaluations', title: '评估申请' },
+      { path: '/ownership-transfers', title: '权属流转' },
     ],
   },
   {

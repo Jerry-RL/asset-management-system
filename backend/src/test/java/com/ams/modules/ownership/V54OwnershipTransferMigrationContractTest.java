@@ -96,16 +96,28 @@ class V54OwnershipTransferMigrationContractTest {
     }
 
     @Test
-    @DisplayName("明细刻意不落 deleted_at：草稿改明细走全量 diff 真删，明细行无外部引用")
-    void assetTableHasNoSoftDelete() {
+    @DisplayName("明细表的列集恰好是 9 列：附件挂在主单上，明细行无外部引用，故刻意不落 deleted_at")
+    void assetTableColumnsAreExact() {
         String sql = sqlWithoutComments(SQL);
 
         int assetTableStart = sql.indexOf("CREATE TABLE IF NOT EXISTS " + ASSET_TABLE);
         int assetTableEnd = sql.indexOf(";", assetTableStart);
         assertThat(assetTableStart).as("明细表必须存在").isPositive();
-        assertThat(sql.substring(assetTableStart, assetTableEnd))
-                .as("附件挂在主单上，明细行无外部引用；留软删只会制造永不清理的孤儿行")
-                .doesNotContain("deleted_at");
+
+        // 用「列集恰好相等」而不是 doesNotContain("deleted_at")：后者只能证明少了一列，
+        // 前者同时证明没有多出任何列（含 deleted_at）。留软删只会制造永不清理的孤儿行。
+        List<String> columns = sql.substring(assetTableStart, assetTableEnd)
+                .lines()
+                .skip(1)
+                .map(String::trim)
+                .filter(line -> line.contains(" "))
+                .map(line -> line.split("\\s+")[0])
+                .toList();
+
+        assertThat(columns).containsExactly(
+                "id", "transfer_id", "asset_id",
+                "from_property_company_id", "from_operating_company_id",
+                "created_at", "updated_at", "created_by", "updated_by");
     }
 
     // ------------------------------------------------------------------

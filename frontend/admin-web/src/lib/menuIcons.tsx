@@ -76,6 +76,8 @@ export const PATH_ICONS: Record<string, ReactNode> = {
   '/mortgages': <IdcardOutlined />,
   '/asset-transfers': <SwapOutlined />,
   '/evaluations': <FormOutlined />,
+  // V54 菜单的 icon 列为 NULL，侧栏会回退到这里
+  '/ownership-transfers': <SwapOutlined />,
   '/lease-listings': <ShopOutlined />,
   '/tender/announcements': <NotificationOutlined />,
   '/tenants': <UserOutlined />,
@@ -132,7 +134,7 @@ export const GROUP_ICONS: Record<string, ReactNode> = {
   经营分析: <BarChartOutlined />,
   风险管控: <AlertOutlined />,
   资产台账: <BankOutlined />,
-  资债权证: <FileProtectOutlined />,
+  资债权证记录: <FileProtectOutlined />,
   资产招租: <ShopOutlined />,
   资产运营: <DeploymentUnitOutlined />,
   合同管理: <FileTextOutlined />,

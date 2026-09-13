@@ -30,6 +30,7 @@ tags:
   - name: Disposals
   - name: RecordSheets
   - name: Occupations
+  - name: OwnershipTransfers
   - name: Refunds
   - name: Approvals
   - name: Notifications
@@ -1069,6 +1070,153 @@ paths:
         '404':
           description: 资产不存在、已软删，或超出当前账号的数据范围
 
+  /ownership-transfers:
+    get:
+      tags: [OwnershipTransfers]
+      summary: 权属流转单列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, completed] }
+        - name: direction
+          in: query
+          schema: { type: string, enum: [internal, external] }
+        - name: fromCompanyId
+          in: query
+          schema: { type: integer }
+        - name: keyword
+          in: query
+          description: 模糊匹配流转原因 / 申请人姓名
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.ownershipTransfer:view
+    post:
+      tags: [OwnershipTransfers]
+      summary: 新建权属流转单（保存为草稿，不改写资产）
+      description: >-
+        direction 由前端选择、服务端按公司树（company.parent_id 上溯到根，同根为内部）校验，
+        不一致时 400 而不是以公司树覆盖用户选择；assetIds 必须去重且每个资产都要属于
+        fromCompanyId（按 transferScope 取产权公司或经营公司）；在押资产会被拒绝。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnershipTransferInput'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 参数或业务校验失败（方向与公司树不一致 / 资产不属于原公司 / 在押 / 金额超过 2 位小数）
+        '403':
+          description: 无 deed.ownershipTransfer:create
+
+  /ownership-transfers/asset-options:
+    get:
+      tags: [OwnershipTransfers]
+      summary: 资产下拉（按原公司 + 权属类型联动过滤，供远程搜索）
+      description: >-
+        transferScope 决定按哪一列过滤：operating → operating_company_id、
+        其余（property / both）→ property_company_id。
+      parameters:
+        - name: companyId
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: transferScope
+          in: query
+          schema: { type: string, enum: [both, property, operating] }
+        - name: keyword
+          in: query
+          description: 模糊匹配资产名称 / 资产编号
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 缺少 companyId
+        '403':
+          description: 无 deed.ownershipTransfer:view
+
+  /ownership-transfers/{id}:
+    get:
+      tags: [OwnershipTransfers]
+      summary: 权属流转单详情（含资产明细与附件）
+      parameters:
+        - $ref: '#/components/parameters/OwnershipTransferId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.ownershipTransfer:view
+        '404':
+          description: 单据不存在或已软删
+    put:
+      tags: [OwnershipTransfers]
+      summary: 修改权属流转单（仅草稿）
+      description: 请求体与新建一致；已完成（completed）的单据返回 409。
+      parameters:
+        - $ref: '#/components/parameters/OwnershipTransferId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnershipTransferInput'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 校验失败（同新建）
+        '403':
+          description: 无 deed.ownershipTransfer:update
+        '404':
+          description: 单据不存在或已软删
+        '409':
+          description: 不是草稿（已生效的单据不可再改）
+    delete:
+      tags: [OwnershipTransfers]
+      summary: 删除权属流转单（仅草稿，软删）
+      parameters:
+        - $ref: '#/components/parameters/OwnershipTransferId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.ownershipTransfer:delete
+        '404':
+          description: 单据不存在或已软删
+        '409':
+          description: 不是草稿
+
+  /ownership-transfers/{id}/effect:
+    post:
+      tags: [OwnershipTransfers]
+      summary: 生效（不可逆，逐资产改写公司字段）
+      description: >-
+        按 transferScope 改写资产的 property_company_id / operating_company_id；
+        外部流转（direction = external）额外把资产置为 ownership_status = transferred_out、
+        lifecycle_status = exited。生效前会**重新校验**（含跨草稿防重与在押复查），
+        已生效的单据重复调用是幂等的。生效后逐资产发布 OwnershipTransferredEvent 并发站内通知。
+      parameters:
+        - $ref: '#/components/parameters/OwnershipTransferId'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 生效前复查失败（资产已不属于原公司 / 已在押 / 已被另一张单改过）
+        '403':
+          description: 无 deed.ownershipTransfer:update
+        '404':
+          description: 单据不存在或已软删
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1123,6 +1271,12 @@ components:
       required: true
       schema:
         type: integer
+    OwnershipTransferId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1157,6 +1311,60 @@ components:
           type: integer
         pageSize:
           type: integer
+
+    OwnershipTransferInput:
+      type: object
+      required:
+        [direction, transferScope, fromCompanyId, toCompanyId, transferMode, applicantName, assetIds]
+      properties:
+        direction:
+          type: string
+          enum: [internal, external]
+          description: 内部 / 外部；服务端按公司树同根判定校验，不一致时 400
+        transferScope:
+          type: string
+          enum: [both, property, operating]
+          description: 决定生效时改写资产的哪个公司字段
+        fromCompanyId:
+          type: integer
+        toCompanyId:
+          type: integer
+          description: 必须与 fromCompanyId 不同；两处都必须是启用中的公司
+        transferMode:
+          type: string
+          enum: [allocate, purchase, auction]
+        applicantUserId:
+          type: integer
+          nullable: true
+          description: 内部员工时传，姓名以服务端查询结果为快照
+        applicantName:
+          type: string
+          description: 外部人员时手填；内部员工时会被服务端按 userId 覆盖
+        approvalDeadline:
+          type: string
+          format: date-time
+          nullable: true
+          description: 本期无审批环节，纯记录字段（不校验、不提醒）
+        amountWan:
+          type: number
+          nullable: true
+          description: 金额(万元)，最多 2 位小数；超过 2 位返回 400
+        reason:
+          type: string
+        assetIds:
+          type: array
+          items:
+            type: integer
+          description: 至少 1 个且已去重；每个资产都必须属于 fromCompanyId
+        attachments:
+          type: array
+          description: 附件引用，只提交 fileId 与顺序，name / url 由服务端回填
+          items:
+            type: object
+            required: [fileId]
+            properties:
+              fileId: { type: integer }
+              sort: { type: integer }
 
     LoginRequest:
       type: object

@@ -45,6 +45,7 @@ export const PATH_TO_CODE: Record<string, string> = {
   '/mortgages': 'deed.mortgage',
   '/asset-transfers': 'deed.transfer',
   '/evaluations': 'deed.evaluation',
+  '/ownership-transfers': 'deed.ownershipTransfer',
   // ---- 资产招租（lease / icon=listing） ----
   '/lease-listings': 'lease.listing',
   '/tender/announcements': 'lease.tender',

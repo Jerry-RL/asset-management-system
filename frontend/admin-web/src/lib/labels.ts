@@ -459,6 +459,37 @@ export const BILL_TYPE: Record<string, string> = {
   late_fee: '滞纳金',
 };
 
+/** 权属流转方向（sys_dict_type.code = transfer_direction） */
+export const TRANSFER_DIRECTION: Record<string, string> = {
+  internal: '内部流转',
+  external: '外部流转',
+};
+
+/** 权属类型（sys_dict_type.code = transfer_scope）——决定改资产的哪个公司字段 */
+export const TRANSFER_SCOPE: Record<string, string> = {
+  both: '经营权且产权',
+  property: '产权',
+  operating: '经营权',
+};
+
+/** 流转类型（sys_dict_type.code = transfer_mode） */
+export const TRANSFER_MODE: Record<string, string> = {
+  allocate: '直接划拨',
+  purchase: '购买流转',
+  auction: '拍卖流转',
+};
+
+/** 权属流转单据状态。
+ *
+ * 刻意**不复用** `TRANSFER_STATUS`（资产调拨，含 approving/approved）：两者是两套独立状态机，
+ * 本期权属流转没有审批环节。共用一张表会让「以后给其中一方加状态」变成同时改动另一方语义，
+ * 而这种错误只会表现为界面上显示一个错误的中文标签，不会报错。
+ */
+export const OWNERSHIP_TRANSFER_STATUS: Record<string, string> = {
+  draft: '草稿',
+  completed: '已完成',
+};
+
 /** 取字段中文名；未知 key 时尽量不把 camelCase 直接甩给用户 */
 export const fieldLabel = (key: string): string => {
   if (FIELD_LABELS[key]) return FIELD_LABELS[key];

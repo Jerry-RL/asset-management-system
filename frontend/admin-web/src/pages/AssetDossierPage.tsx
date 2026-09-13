@@ -34,10 +34,14 @@ import {
   LEASE_CONTROL_STATUS,
   METER_TYPE,
   MORTGAGE_STATUS,
+  OWNERSHIP_TRANSFER_STATUS,
   PARTIAL_LEASE_STATUS,
   PAYMENT_CYCLE,
   RENT_TYPE,
   REPAIR_STATUS,
+  TRANSFER_DIRECTION,
+  TRANSFER_MODE,
+  TRANSFER_SCOPE,
   TRANSFER_STATUS,
   VACATE_STATUS,
   enumLabel,
@@ -764,8 +768,11 @@ export function AssetDossierPage() {
               },
               {
                 key: 'ops',
-                label: `调拨/处置/占用(${
-                  dossier.transfers.length + dossier.disposals.length + dossier.occupations.length
+                label: `调拨/处置/占用/流转(${
+                  dossier.transfers.length +
+                  dossier.disposals.length +
+                  dossier.occupations.length +
+                  dossier.ownershipTransfers.length
                 })`,
                 children: (
                   <Space direction="vertical" className="w-full" size="middle">
@@ -825,6 +832,47 @@ export function AssetDossierPage() {
                         { title: '原因', dataIndex: 'reason', ellipsis: true },
                       ]}
                       locale={{ emptyText: '暂无占用' }}
+                    />
+                    {/* 权属流转（V54）：与上面「调拨」分两块。
+                        调拨改的是 operating_company_id 且单资产；权属流转可多资产、
+                        按权属类型改产权公司或经营公司，两者口径不同，合并显示会让人误以为是一件事。 */}
+                    <Table
+                      size="small"
+                      title={() => '权属流转'}
+                      rowKey="id"
+                      pagination={false}
+                      dataSource={dossier.ownershipTransfers}
+                      columns={[
+                        { title: 'ID', dataIndex: 'id', width: 70 },
+                        {
+                          title: '方向',
+                          dataIndex: 'direction',
+                          width: 90,
+                          render: (v) => enumLabel(TRANSFER_DIRECTION, v),
+                        },
+                        {
+                          title: '权属类型',
+                          dataIndex: 'transferScope',
+                          width: 110,
+                          render: (v) => enumLabel(TRANSFER_SCOPE, v),
+                        },
+                        { title: '原公司', dataIndex: 'fromCompanyId', width: 90 },
+                        { title: '新公司', dataIndex: 'toCompanyId', width: 90 },
+                        {
+                          title: '流转类型',
+                          dataIndex: 'transferMode',
+                          width: 110,
+                          render: (v) => enumLabel(TRANSFER_MODE, v),
+                        },
+                        {
+                          title: '状态',
+                          dataIndex: 'status',
+                          width: 90,
+                          render: (v) => statusTag(String(v ?? ''), OWNERSHIP_TRANSFER_STATUS),
+                        },
+                        { title: '生效时间', dataIndex: 'effectedAt', width: 160 },
+                      ]}
+                      locale={{ emptyText: '暂无权属流转' }}
                     />
                   </Space>
                 ),
