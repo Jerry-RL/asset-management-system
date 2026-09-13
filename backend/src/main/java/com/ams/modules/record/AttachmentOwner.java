@@ -20,7 +20,17 @@ public enum AttachmentOwner {
     SOURCE_INFO("source_info", "source_attach"),
     DISPOSAL_RECORD("disposal_record", "disposal_attach"),
     /** 资产侧处置单：附件的读写权限跟资产走，状态流转另用 operation.disposal。 */
-    DISPOSAL_ORDER("disposal_order", "disposal_attach");
+    DISPOSAL_ORDER("disposal_order", "disposal_attach"),
+    /** 成本信息：附件的读写权限跟宿主走。 */
+    COST_RECORD("cost_record", "cost_attach"),
+    /** 评估信息：附件的读写权限跟宿主走（PDF / Word 等）。 */
+    EVALUATION_INFO("evaluation_info", "evaluation_attach"),
+    /**
+     * 权属流转主单：附件的读写权限跟**单据**走（`deed.ownershipTransfer:view` / `:update`），
+     * 不跟资产走 —— 流转单是多资产的，挂到任一资产上都会让「谁能看这份附件」取决于
+     * 恰好被选中的是哪个资产。
+     */
+    OWNERSHIP_TRANSFER("ownership_transfer", "transfer_attach");
 
     private final String code;
     private final String bizType;

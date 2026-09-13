@@ -52,5 +52,11 @@ class OwnerEnumTest {
         assertThat(AttachmentOwner.DISPOSAL_RECORD.bizType()).isEqualTo("disposal_attach");
         assertThat(AttachmentOwner.DISPOSAL_ORDER.code()).isEqualTo("disposal_order");
         assertThat(AttachmentOwner.DISPOSAL_ORDER.bizType()).isEqualTo("disposal_attach");
+        assertThat(AttachmentOwner.COST_RECORD.code()).isEqualTo("cost_record");
+        assertThat(AttachmentOwner.COST_RECORD.bizType()).isEqualTo("cost_attach");
+        assertThat(AttachmentOwner.EVALUATION_INFO.code()).isEqualTo("evaluation_info");
+        assertThat(AttachmentOwner.EVALUATION_INFO.bizType()).isEqualTo("evaluation_attach");
+        assertThat(AttachmentOwner.OWNERSHIP_TRANSFER.code()).isEqualTo("ownership_transfer");
+        assertThat(AttachmentOwner.OWNERSHIP_TRANSFER.bizType()).isEqualTo("transfer_attach");
     }
 }
