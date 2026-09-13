@@ -145,6 +145,8 @@ interface AssetDossier {
   certificates: Record<string, unknown>[];
   mortgages: Record<string, unknown>[];
   transfers: Record<string, unknown>[];
+  /** 权属流转（V54）：与 transfers（调拨）分开两段，两者业务口径不同 */
+  ownershipTransfers: Record<string, unknown>[];
   structureLogs: Record<string, unknown>[];
   contracts: Record<string, unknown>[];
   vacateOrders: Record<string, unknown>[];
@@ -175,6 +177,7 @@ const TIMELINE_COLOR: Record<string, string> = {
   repair: 'purple',
   inspection: 'geekblue',
   transfer: 'gold',
+  ownership_transfer: 'orange',
   disposal: 'magenta',
   occupation: 'lime',
   evaluation: 'volcano',
@@ -192,6 +195,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   repair: '维修',
   inspection: '巡查',
   transfer: '调拨',
+  ownership_transfer: '权属流转',
   disposal: '处置',
   occupation: '占用',
   evaluation: '评估',

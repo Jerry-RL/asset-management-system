@@ -17,6 +17,7 @@ import com.ams.modules.maintenance.entity.InspectionRecord;
 import com.ams.modules.maintenance.entity.RepairOrder;
 import com.ams.modules.meter.entity.Meter;
 import com.ams.modules.occupation.entity.OccupationOrder;
+import com.ams.modules.ownership.entity.OwnershipTransfer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,6 +37,14 @@ public class AssetDossier {
     private List<AssetCertificate> certificates = new ArrayList<>();
     private List<Mortgage> mortgages = new ArrayList<>();
     private List<AssetTransfer> transfers = new ArrayList<>();
+    /**
+     * 该资产被哪些权属流转单改过（V54）。
+     *
+     * <p>与 {@link #transfers}（调拨）**刻意分成两段**：调拨改的是经营公司、单资产；
+     * 权属流转按权属类型改产权 / 经营公司、一单多资产。合成一段会让档案里无法区分
+     * 「调拨过」与「产权转出过」。
+     */
+    private List<OwnershipTransfer> ownershipTransfers = new ArrayList<>();
     private List<AssetStructureLog> structureLogs = new ArrayList<>();
     private List<Contract> contracts = new ArrayList<>();
     private List<VacateOrder> vacateOrders = new ArrayList<>();
