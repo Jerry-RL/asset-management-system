@@ -222,7 +222,9 @@ public final class RbacFixtures {
                 "asset.project:view", "asset.project:create", "asset.project:update", "asset.project:delete",
                 "asset.ledger:view", "asset.ledger:create", "asset.ledger:update", "asset.ledger:delete",
                 "asset.structureLog:view", "org.structure:view", "org.company:view",
-                "operation.disposal:create", "operation.disposal:update", "operation.disposal:approve");
+                "operation.disposal:create", "operation.disposal:update", "operation.disposal:approve",
+                "deed.ownershipTransfer:view", "deed.ownershipTransfer:create",
+                "deed.ownershipTransfer:update", "deed.ownershipTransfer:delete");
         f.grant(ROLE_FINANCE,
                 "billing.bill:view", "billing.bill:create",
                 "finance.payment:view", "finance.payment:create", "finance.payment:update",
@@ -365,7 +367,12 @@ public final class RbacFixtures {
         menu("system.dict", "数据字典", "menu");
         menu("system.menu", "菜单管理", "menu");
         menu("system.role", "角色权限", "menu");
+        // 审计日志（V51）：view 是独立权限点，刻意与 system.appLog 分开 ——
+        // 权限用例要能证明「只有 system.appLog:view 不够」
+        menu("system.operationLog", "操作日志", "menu");
         menu("operation.disposal", "资产处置", "menu");
+        // 权属流转（V54）：一张单改多个资产的产权 / 经营公司
+        menu("deed.ownershipTransfer", "权属流转", "menu");
         return this;
     }
 
