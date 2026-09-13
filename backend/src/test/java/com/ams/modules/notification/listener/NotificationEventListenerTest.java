@@ -16,6 +16,7 @@ import com.ams.platform.event.BillIssuedEvent;
 import com.ams.platform.event.BillOverdueEvent;
 import com.ams.platform.event.ContractExpiredEvent;
 import com.ams.platform.event.DisposalCompletedEvent;
+import com.ams.platform.event.OwnershipTransferredEvent;
 import com.ams.platform.event.PaymentRegisteredEvent;
 import com.ams.platform.event.outbox.EventConsumptionGuard;
 import java.math.BigDecimal;
@@ -56,8 +57,8 @@ class NotificationEventListenerTest {
     }
 
     @Test
-    @DisplayName("8 类事件各自产出通知，模板码与事件类型一一对应")
-    void allEightEventsProduceNotifications() {
+    @DisplayName("每类事件各自产出通知，模板码与事件类型一一对应")
+    void everyEventProducesNotificationWithItsOwnTemplate() {
         listener.onApprovalCompleted(new ApprovalCompletedEvent("contract", 1L, true));
         listener.onPaymentRegistered(new PaymentRegisteredEvent(2L));
         listener.onBillIssued(new BillIssuedEvent(3L, "B-3", 1L, new BigDecimal("100.00"),
@@ -68,6 +69,7 @@ class NotificationEventListenerTest {
         listener.onDisposalCompleted(new DisposalCompletedEvent(6L, 7L, "sale"));
         listener.onContractExpired(new ContractExpiredEvent(1L, "C-1", LocalDate.of(2026, 9, 1)));
         listener.onAssetTransferred(new AssetTransferredEvent(8L, 7L, 11L, 22L));
+        listener.onOwnershipTransferred(new OwnershipTransferredEvent(9L, 7L, 11L, 22L, "external"));
 
         verify(notificationService).sendByTemplate(eq("approval_completed"), any(), anyMap(), any(), any());
         verify(notificationService).sendByTemplate(eq("payment_registered"), any(), anyMap(), any(), any());
@@ -80,7 +82,10 @@ class NotificationEventListenerTest {
                 eq("contract"), eq(1L));
         verify(notificationService).sendByTemplate(eq("asset_transferred"), any(), anyMap(),
                 eq("asset_transfer"), eq(8L));
-        verify(notificationService, times(8)).sendByTemplate(any(), any(), anyMap(), any(), any());
+        // 权属流转：宿主 bizType 用单据自己的 ownership_transfer，bizId 是主单 id（不是资产 id）
+        verify(notificationService).sendByTemplate(eq("ownership_transferred"), any(), anyMap(),
+                eq("ownership_transfer"), eq(9L));
+        verify(notificationService, times(9)).sendByTemplate(any(), any(), anyMap(), any(), any());
     }
 
     @Test

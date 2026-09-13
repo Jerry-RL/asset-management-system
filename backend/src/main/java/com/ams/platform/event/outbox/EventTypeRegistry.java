@@ -8,6 +8,7 @@ import com.ams.platform.event.BillOverdueEvent;
 import com.ams.platform.event.ContractExpiredEvent;
 import com.ams.platform.event.DisposalCompletedEvent;
 import com.ams.platform.event.DomainEvent;
+import com.ams.platform.event.OwnershipTransferredEvent;
 import com.ams.platform.event.PaymentRegisteredEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
@@ -20,12 +21,18 @@ import java.util.Map;
  *
  * <p><b>键即 {@code getClass().getSimpleName()} 的字面值（含 {@code Event} 后缀）</b>，
  * 不做任何名称变换——曾因「登记键去掉后缀、而 nameOf 返回带后缀的类名」导致全部类型对不上、
- * 重放全部置 dead。{@code EventTypeRegistryTest} 会逐一断言 8 类事件可往返。
+ * 重放全部置 dead。{@code EventTypeRegistryTest} 会逐一断言每类事件可往返。
  *
  * <p><b>新增领域事件时必须在此登记</b>，否则 outbox 重放会因无法反序列化而置 {@code dead}。
  */
 public final class EventTypeRegistry {
 
+    /**
+     * 登记表本身。
+     *
+     * <p>用 {@code Map.of} 的 9 对重载 —— 它的上限是 10 对，第 11 类事件出现时会**编译失败**
+     * （这是好事：编译期就发现，而不是等到运行期重放置 dead），届时改成 {@code Map.ofEntries}。
+     */
     private static final Map<String, Class<? extends DomainEvent>> TYPES = Map.of(
             ApprovalCompletedEvent.class.getSimpleName(), ApprovalCompletedEvent.class,
             PaymentRegisteredEvent.class.getSimpleName(), PaymentRegisteredEvent.class,
@@ -34,7 +41,8 @@ public final class EventTypeRegistry {
             AlertTriggeredEvent.class.getSimpleName(), AlertTriggeredEvent.class,
             DisposalCompletedEvent.class.getSimpleName(), DisposalCompletedEvent.class,
             ContractExpiredEvent.class.getSimpleName(), ContractExpiredEvent.class,
-            AssetTransferredEvent.class.getSimpleName(), AssetTransferredEvent.class);
+            AssetTransferredEvent.class.getSimpleName(), AssetTransferredEvent.class,
+            OwnershipTransferredEvent.class.getSimpleName(), OwnershipTransferredEvent.class);
 
     private EventTypeRegistry() {
     }

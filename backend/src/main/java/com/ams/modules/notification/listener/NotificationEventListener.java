@@ -8,6 +8,7 @@ import com.ams.platform.event.BillIssuedEvent;
 import com.ams.platform.event.BillOverdueEvent;
 import com.ams.platform.event.ContractExpiredEvent;
 import com.ams.platform.event.DisposalCompletedEvent;
+import com.ams.platform.event.OwnershipTransferredEvent;
 import com.ams.platform.event.PaymentRegisteredEvent;
 import com.ams.platform.event.outbox.EventConsumptionGuard;
 import com.ams.platform.security.SecurityUtils;
@@ -19,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 领域事件 → 站内通知（FR-NOTIF-001、DSD §4.8）。
  *
- * <p><b>覆盖 DSD §4.8 全部 8 类事件</b>（此前只订阅 2 类，通知闭环实际只通 2 条链路，
+ * <p><b>覆盖 DSD §4.8 全部事件</b>（此前只订阅 2 类，通知闭环实际只通 2 条链路，
  * 见评审 P0-8）。
  *
  * <p><b>幂等与事务（两条缺一不可）</b>：
@@ -183,6 +184,25 @@ public class NotificationEventListener {
                         "assetId", String.valueOf(event.getAssetId()),
                         "toCompanyId", String.valueOf(event.getToCompanyId())),
                 "asset_transfer",
+                event.getTransferId());
+    }
+
+    /** 权属流转完成 → 双方对账提醒（设计 §5.6）。 */
+    @EventListener
+    @Transactional
+    public void onOwnershipTransferred(OwnershipTransferredEvent event) {
+        if (consumed(event.getEventId())) {
+            return;
+        }
+        notificationService.sendByTemplate(
+                "ownership_transferred",
+                SecurityUtils.currentUserIdOrNull(),
+                Map.of(
+                        "assetId", String.valueOf(event.getAssetId()),
+                        "fromCompanyId", String.valueOf(event.getFromCompanyId()),
+                        "toCompanyId", String.valueOf(event.getToCompanyId()),
+                        "direction", nullToEmpty(event.getDirection())),
+                "ownership_transfer",
                 event.getTransferId());
     }
 

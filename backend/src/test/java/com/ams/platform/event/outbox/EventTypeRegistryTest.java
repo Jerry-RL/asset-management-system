@@ -11,6 +11,7 @@ import com.ams.platform.event.BillOverdueEvent;
 import com.ams.platform.event.ContractExpiredEvent;
 import com.ams.platform.event.DisposalCompletedEvent;
 import com.ams.platform.event.DomainEvent;
+import com.ams.platform.event.OwnershipTransferredEvent;
 import com.ams.platform.event.PaymentRegisteredEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -23,7 +24,7 @@ import org.junit.jupiter.api.Test;
  * 事件类型登记表与载荷往返测试（ADR-0020 决策 F）。
  *
  * <p>这是 outbox 重放能力的地基：<b>登记名与实际类名错位、或事件类缺 {@code @JsonCreator}，
- * 都会让重放失败并把事件置 dead</b>。本测试对 DSD §4.8 全部 8 类事件逐一验证。
+ * 都会让重放失败并把事件置 dead</b>。本测试对 DSD §4.8 的每一类事件逐一验证。
  */
 class EventTypeRegistryTest {
 
@@ -41,17 +42,19 @@ class EventTypeRegistryTest {
                         "contract", 1001L, "合同即将到期需续签"),
                 new DisposalCompletedEvent(5005L, 6006L, "sale"),
                 new ContractExpiredEvent(1002L, "CON-2025-001", LocalDate.of(2026, 9, 1)),
-                new AssetTransferredEvent(7007L, 6006L, 11L, 22L));
+                new AssetTransferredEvent(7007L, 6006L, 11L, 22L),
+                new OwnershipTransferredEvent(8008L, 6006L, 33L, 44L, "external"));
     }
 
     @Test
-    @DisplayName("DSD §4.8 全部 8 类事件已登记，登记名即事件类简单名")
+    @DisplayName("DSD §4.8 全部事件已登记，登记名即事件类简单名")
     void allDsdEventsAreRegistered() {
         assertThat(EventTypeRegistry.registeredTypes())
                 .containsExactlyInAnyOrder(
                         "ApprovalCompletedEvent", "PaymentRegisteredEvent", "BillIssuedEvent",
                         "BillOverdueEvent", "AlertTriggeredEvent", "DisposalCompletedEvent",
-                        "ContractExpiredEvent", "AssetTransferredEvent");
+                        "ContractExpiredEvent", "AssetTransferredEvent",
+                        "OwnershipTransferredEvent");
 
         for (DomainEvent event : allEvents()) {
             assertThat(EventTypeRegistry.registeredTypes())
