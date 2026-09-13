@@ -77,6 +77,17 @@ public class Asset extends BaseEntity {
     private String oldAssetNo;
     /** in_book / exited；处置完成置 exited（ADR-0019：生命周期而非占用状态） */
     private String lifecycleStatus;
+    /**
+     * in_group 集团内 / transferred_out 已对外转出（V54）。外部权属流转生效后置
+     * {@code transferred_out} —— 仅靠 {@code lifecycle_status = 'exited'} 无法区分
+     * 「卖掉了」和「转出去了」，两者都会落到 {@code exited}。
+     */
+    private String ownershipStatus;
+    /**
+     * 软删除时间。**不使用 {@code @TableLogic}**：全局逻辑删除字段口径为 {@code deleted:0/1}，
+     * 与既有 {@code deleted_at TIMESTAMPTZ} 范式不一致，故沿用显式过滤（同 {@code AssetUnit}）。
+     */
+    private java.time.LocalDateTime deletedAt;
     /** 占用率（%）＝ 生效占用面积 / 单元面积合计；由 LeaseStatusDeriver 派生 */
     private BigDecimal occupancyRatio;
 
