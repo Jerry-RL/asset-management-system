@@ -207,6 +207,10 @@ WHERE NOT EXISTS (SELECT 1 FROM notification_template WHERE code = 'ownership_tr
 
 校验要求**方向与公司树一致**：选了 `internal` 而目标公司在树外 → 400；反之亦然。
 
+**演示种子里的外部受让方**（`DemoDataSeeder`）：截至本设计，组织架构演示数据只有「淮安市国资集团」**一个根**，所有公司都挂在它下面 —— 这意味着「外部流转」在演示库里根本选不出来。因此种子补了一家 `parent_id` 留空的公司「淮安润泽实业有限公司（集团外受让方）」，`company_type = private_enterprise`（不取 `subsidiary`，否则会被仓内按 `company_type = 'subsidiary'` 圈定集团内公司的演示脚本卷进去）。
+
+这一行的存在性**不能删**：它的 `parent_id` 一旦被填上，外部流转即静默退化为「永远 400」，而下拉里那家公司看起来一切正常。修改种子组织架构时请保持它 `parent_id` 为空。
+
 ### 5.3 业务规则
 
 **新建 / 编辑草稿**（`create` / `update`）

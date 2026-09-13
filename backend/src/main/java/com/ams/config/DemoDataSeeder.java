@@ -462,6 +462,22 @@ public class DemoDataSeeder implements ApplicationRunner {
         ensureCompany("淮安园区运营管理有限公司", industry.getId(), "subsidiary", "园区运营",
                 "江苏省淮安市经济技术开发区富强路66号", "0517-83510000", 1);
 
+        // ---- 集团外公司：权属流转「外部流转」的受让方 ----
+        //
+        // `parentId` 必须保持 null：权属流转判内 / 外的规则是「原公司与新公司沿 parent_id
+        // 上溯到根，同根为内部、不同根为外部」（TransferDirectionResolver）。集团本部那棵树
+        // 只有一个根（上面的 group），所以**不给它一个独立的根，「外部流转」就永远选不出来** ——
+        // 下拉里所有公司都同根，选了外部只会得到 400「所选新公司属于本集团」。
+        //
+        // `companyType` 用 V22 字典里的 `private_enterprise`（私企）而不是 `subsidiary`：
+        // 它本来就不是集团子公司，而仓内多处按 `company_type = 'subsidiary'` 圈定「参与演示业务的
+        // 集团内公司」（如本类的淮安地图补齐），带上 subsidiary 会被卷进那些演示数据。
+        //
+        // `shortName` 写成「集团外受让方」不是为了好看：公司下拉的显示文案是「名称（简称）」，
+        // 演示时能一眼看出这家就是用来试外部流转的，不必去组织架构里翻 parent_id。
+        ensureCompany("淮安润泽实业有限公司", null, "private_enterprise", "集团外受让方",
+                "江苏省淮安市清江浦区翔宇南道16号", "0517-83900000", 6);
+
         // ---- 部门树：集团本部 ----
         Department groupOffice = ensureDepartment(group.getId(), null, "集团办公室", null, 1,
                 "负责集团行政、文秘与会务");
