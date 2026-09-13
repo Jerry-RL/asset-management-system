@@ -20,19 +20,28 @@ import com.ams.modules.org.mapper.UserMapper;
 import com.ams.modules.record.AttachmentOwner;
 import com.ams.modules.record.RecordOwnerType;
 import com.ams.modules.record.dto.AttachmentRef;
+import com.ams.modules.record.dto.CostInput;
+import com.ams.modules.record.dto.CostItemInput;
 import com.ams.modules.record.dto.DisposalInput;
+import com.ams.modules.record.dto.EvaluationInput;
 import com.ams.modules.record.dto.IssueInput;
 import com.ams.modules.record.dto.ReceiveInput;
 import com.ams.modules.record.dto.RecordSheetRequest;
 import com.ams.modules.record.dto.RecordSheetView;
 import com.ams.modules.record.dto.SourceInput;
 import com.ams.modules.record.entity.BizAttachment;
+import com.ams.modules.record.entity.CostItem;
+import com.ams.modules.record.entity.CostRecord;
 import com.ams.modules.record.entity.DisposalRecord;
+import com.ams.modules.record.entity.EvaluationInfo;
 import com.ams.modules.record.entity.ReceiveIssue;
 import com.ams.modules.record.entity.ReceiveRecord;
 import com.ams.modules.record.entity.SourceInfo;
 import com.ams.modules.record.mapper.BizAttachmentMapper;
+import com.ams.modules.record.mapper.CostItemMapper;
+import com.ams.modules.record.mapper.CostRecordMapper;
 import com.ams.modules.record.mapper.DisposalRecordMapper;
+import com.ams.modules.record.mapper.EvaluationInfoMapper;
 import com.ams.modules.record.mapper.ReceiveIssueMapper;
 import com.ams.modules.record.mapper.ReceiveRecordMapper;
 import com.ams.modules.record.mapper.SourceInfoMapper;
@@ -68,12 +77,16 @@ class RecordSheetServiceTest {
     private final ReceiveIssueMapper receiveIssueMapper = mock(ReceiveIssueMapper.class);
     private final SourceInfoMapper sourceInfoMapper = mock(SourceInfoMapper.class);
     private final DisposalRecordMapper disposalRecordMapper = mock(DisposalRecordMapper.class);
+    private final CostRecordMapper costRecordMapper = mock(CostRecordMapper.class);
+    private final CostItemMapper costItemMapper = mock(CostItemMapper.class);
+    private final EvaluationInfoMapper evaluationInfoMapper = mock(EvaluationInfoMapper.class);
     private final BizAttachmentMapper bizAttachmentMapper = mock(BizAttachmentMapper.class);
     private final UserMapper userMapper = mock(UserMapper.class);
     private final FileService fileService = mock(FileService.class);
 
     private final RecordSheetService service = new RecordSheetService(
             receiveRecordMapper, receiveIssueMapper, sourceInfoMapper, disposalRecordMapper,
+            costRecordMapper, costItemMapper, evaluationInfoMapper,
             bizAttachmentMapper, userMapper, fileService);
 
     // ---- 全量 diff ----
@@ -667,6 +680,188 @@ class RecordSheetServiceTest {
         assertThat(projectView.getDisposalRecords()).hasSize(1);
     }
 
+    // ---- 成本信息 / 费用明细 ----
+
+    @Test
+    @DisplayName("成本信息：新增行由服务端写入 ownerType/ownerId，费用明细的 costId 由服务端赋值")
+    void newCostGetsOwnerAndItemCostId() {
+        stubEmptyExisting();
+        CostInput input = new CostInput();
+        input.setAmountWan(new BigDecimal("35.50"));
+        input.setCostDate(LocalDate.of(2026, 8, 2));
+        CostItemInput item = new CostItemInput();
+        item.setFeeName("装修款");
+        item.setCostType("decoration");
+        item.setAmount(new BigDecimal("20.00"));
+        input.getItems().add(item);
+        RecordSheetRequest request = new RecordSheetRequest();
+        request.getCostRecords().add(input);
+
+        service.save(RecordOwnerType.ZONE, ZONE_ID, request);
+
+        ArgumentCaptor<CostRecord> costCaptor = ArgumentCaptor.forClass(CostRecord.class);
+        verify(costRecordMapper).insert(costCaptor.capture());
+        assertThat(costCaptor.getValue().getOwnerType()).isEqualTo("zone");
+        assertThat(costCaptor.getValue().getOwnerId()).isEqualTo(ZONE_ID);
+        assertThat(costCaptor.getValue().getAmountWan()).isEqualByComparingTo("35.50");
+
+        ArgumentCaptor<CostItem> itemCaptor = ArgumentCaptor.forClass(CostItem.class);
+        verify(costItemMapper).insert(itemCaptor.capture());
+        // 归属来自服务端刚插入的成本记录（桩回填了 id=12），不是任何客户端输入
+        assertThat(itemCaptor.getValue().getCostId()).isEqualTo(12L);
+        assertThat(itemCaptor.getValue().getFeeName()).isEqualTo("装修款");
+        assertThat(itemCaptor.getValue().getSort()).isZero();
+    }
+
+    @Test
+    @DisplayName("成本信息：库中未提交的行连同费用明细与附件三级软删，绝不 deleteById")
+    void unsubmittedCostCascadesSoftDelete() {
+        CostRecord existing = new CostRecord();
+        existing.setId(12L);
+        existing.setOwnerType("zone");
+        existing.setOwnerId(ZONE_ID);
+        CostItem item = new CostItem();
+        item.setId(21L);
+        item.setCostId(12L);
+        BizAttachment attachment = new BizAttachment();
+        attachment.setId(41L);
+        attachment.setOwnerType(AttachmentOwner.COST_RECORD.code());
+        attachment.setOwnerId(12L);
+        attachment.setFileId(101L);
+        when(receiveRecordMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(receiveIssueMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(sourceInfoMapper.selectOne(any())).thenReturn(null);
+        when(disposalRecordMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(costRecordMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(existing)));
+        when(costItemMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(item)));
+        when(bizAttachmentMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(attachment)));
+        when(fileService.viewsByIds(any())).thenReturn(Map.of());
+
+        service.save(RecordOwnerType.ZONE, ZONE_ID, new RecordSheetRequest());
+
+        verifyAllSoftDeletes(costRecordMapper);
+        verifyAllSoftDeletes(costItemMapper);
+        verifyAllSoftDeletes(bizAttachmentMapper);
+        verify(costRecordMapper, never()).deleteById(anyLong());
+        verify(costItemMapper, never()).deleteById(anyLong());
+        verify(costRecordMapper, never()).updateById(any(CostRecord.class));
+        verify(costItemMapper, never()).updateById(any(CostItem.class));
+    }
+
+    @Test
+    @DisplayName("成本信息：带 id 的明细更新原生行，不新增第二条")
+    void costItemWithIdIsUpdated() {
+        CostRecord existingCost = new CostRecord();
+        existingCost.setId(12L);
+        CostItem existingItem = new CostItem();
+        existingItem.setId(21L);
+        existingItem.setCostId(12L);
+        stubEmptyExisting();
+        when(costRecordMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(existingCost)));
+        when(costItemMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(existingItem)));
+
+        CostInput input = new CostInput();
+        input.setId(12L);
+        CostItemInput item = new CostItemInput();
+        item.setId(21L);
+        item.setFeeName("新费用名称");
+        input.getItems().add(item);
+        RecordSheetRequest request = new RecordSheetRequest();
+        request.getCostRecords().add(input);
+
+        service.save(RecordOwnerType.ZONE, ZONE_ID, request);
+
+        ArgumentCaptor<CostItem> captor = ArgumentCaptor.forClass(CostItem.class);
+        verify(costItemMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getId()).isEqualTo(21L);
+        assertThat(captor.getValue().getFeeName()).isEqualTo("新费用名称");
+        verify(costItemMapper, never()).insert(any(CostItem.class));
+    }
+
+    // ---- 评估信息 ----
+
+    @Test
+    @DisplayName("评估信息：有效期限与金额原样落库，owner 由服务端赋值（资产主体同样适用）")
+    void newEvaluationKeepsAllFields() {
+        stubEmptyExisting();
+        EvaluationInput input = new EvaluationInput();
+        input.setInstitution("某某评估公司");
+        input.setAssetValue(new BigDecimal("1200.00"));
+        input.setRentUnitPrice(new BigDecimal("3.50"));
+        input.setRentPrice(new BigDecimal("4200.00"));
+        input.setEvaluateDate(LocalDate.of(2026, 6, 1));
+        input.setValidFrom(LocalDate.of(2026, 6, 1));
+        input.setValidTo(LocalDate.of(2027, 5, 31));
+        RecordSheetRequest request = new RecordSheetRequest();
+        request.getEvaluations().add(input);
+
+        service.save(RecordOwnerType.ASSET, ASSET_ID, request);
+
+        ArgumentCaptor<EvaluationInfo> captor = ArgumentCaptor.forClass(EvaluationInfo.class);
+        verify(evaluationInfoMapper).insert(captor.capture());
+        assertThat(captor.getValue().getOwnerType()).isEqualTo("asset");
+        assertThat(captor.getValue().getOwnerId()).isEqualTo(ASSET_ID);
+        assertThat(captor.getValue().getInstitution()).isEqualTo("某某评估公司");
+        assertThat(captor.getValue().getValidFrom()).isEqualTo(LocalDate.of(2026, 6, 1));
+        assertThat(captor.getValue().getValidTo()).isEqualTo(LocalDate.of(2027, 5, 31));
+        assertThat(captor.getValue().getRentUnitPrice()).isEqualByComparingTo("3.50");
+    }
+
+    @Test
+    @DisplayName("评估信息：带 id 时更新已在库中的行，不新增第二条")
+    void evaluationWithIdIsUpdated() {
+        EvaluationInfo existing = new EvaluationInfo();
+        existing.setId(61L);
+        existing.setOwnerType("project");
+        existing.setOwnerId(1L);
+        stubEmptyExisting();
+        when(evaluationInfoMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(existing)));
+
+        EvaluationInput input = new EvaluationInput();
+        input.setId(61L);
+        input.setInstitution("新机构");
+        RecordSheetRequest request = new RecordSheetRequest();
+        request.getEvaluations().add(input);
+
+        service.save(RecordOwnerType.PROJECT, 1L, request);
+
+        ArgumentCaptor<EvaluationInfo> captor = ArgumentCaptor.forClass(EvaluationInfo.class);
+        verify(evaluationInfoMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getId()).isEqualTo(61L);
+        assertThat(captor.getValue().getInstitution()).isEqualTo("新机构");
+        verify(evaluationInfoMapper, never()).insert(any(EvaluationInfo.class));
+    }
+
+    @Test
+    @DisplayName("读：成本信息与评估信息回显，费用明细与附件一并读回")
+    void readReturnsCostsAndEvaluations() {
+        CostRecord cost = new CostRecord();
+        cost.setId(12L);
+        CostItem item = new CostItem();
+        item.setId(21L);
+        item.setCostId(12L);
+        item.setFeeName("装修款");
+        EvaluationInfo evaluation = new EvaluationInfo();
+        evaluation.setId(61L);
+        evaluation.setInstitution("某某评估公司");
+        when(receiveRecordMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(receiveIssueMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(sourceInfoMapper.selectOne(any())).thenReturn(null);
+        when(disposalRecordMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(costRecordMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(cost)));
+        when(costItemMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(item)));
+        when(evaluationInfoMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(evaluation)));
+        when(bizAttachmentMapper.selectList(any())).thenReturn(new ArrayList<>());
+
+        RecordSheetView view = service.read(RecordOwnerType.ZONE, ZONE_ID);
+
+        assertThat(view.getCostRecords()).hasSize(1);
+        assertThat(view.getCostRecords().get(0).getItems()).hasSize(1);
+        assertThat(view.getCostRecords().get(0).getItems().get(0).getFeeName()).isEqualTo("装修款");
+        assertThat(view.getEvaluations()).hasSize(1);
+        assertThat(view.getEvaluations().get(0).getInstitution()).isEqualTo("某某评估公司");
+    }
+
     // ---- 辅助 ----
 
     /**
@@ -681,6 +876,38 @@ class RecordSheetServiceTest {
         assertThat(wrapper.getAllValues())
                 .isNotEmpty()
                 .allSatisfy(w -> assertThat(w.getSqlSet()).contains("deleted_at = now()"));
+    }
+
+    // ---- 附件宿主泛化（权属流转复用同一写入点） ----
+
+    @Test
+    @DisplayName("按 OWNERSHIP_TRANSFER 写附件：owner_type 与 biz_type 都取自枚举，不串到处置单宿主")
+    void syncAttachmentsForOwnershipTransfer() {
+        when(bizAttachmentMapper.selectList(any())).thenReturn(new ArrayList<>());
+
+        service.syncAttachments(
+                AttachmentOwner.OWNERSHIP_TRANSFER, 77L, List.of(ref(1001L), ref(1002L)));
+
+        ArgumentCaptor<BizAttachment> captor = ArgumentCaptor.forClass(BizAttachment.class);
+        verify(bizAttachmentMapper, times(2)).insert(captor.capture());
+
+        assertThat(captor.getAllValues())
+                .as("宿主必须逐字是枚举值：写错就会把权属流转的附件挂进处置单，且没有任何报错")
+                .allSatisfy(row -> {
+                    assertThat(row.getOwnerType()).isEqualTo(AttachmentOwner.OWNERSHIP_TRANSFER.code());
+                    assertThat(row.getBizType()).isEqualTo(AttachmentOwner.OWNERSHIP_TRANSFER.bizType());
+                    assertThat(row.getOwnerId()).isEqualTo(77L);
+                });
+        assertThat(captor.getAllValues())
+                .as("不能串到处置单宿主")
+                .noneSatisfy(row -> assertThat(row.getOwnerType())
+                        .isEqualTo(AttachmentOwner.DISPOSAL_ORDER.code()));
+    }
+
+    private static AttachmentRef ref(Long fileId) {
+        AttachmentRef r = new AttachmentRef();
+        r.setFileId(fileId);
+        return r;
     }
 
     private void stubEmptyExisting() {
@@ -701,6 +928,22 @@ class RecordSheetServiceTest {
             SourceInfo row = i.getArgument(0);
             if (row.getId() == null) {
                 row.setId(31L);
+            }
+            return 1;
+        });
+        // 成本 / 评估的 insert 也要回填主键，否则费用明细与附件会因「宿主尚未落库」被跳过
+        when(costRecordMapper.insert(any(CostRecord.class))).thenAnswer(i -> {
+            CostRecord row = i.getArgument(0);
+            if (row.getId() == null) {
+                row.setId(12L);
+            }
+            return 1;
+        });
+        when(costItemMapper.insert(any(CostItem.class))).thenReturn(1);
+        when(evaluationInfoMapper.insert(any(EvaluationInfo.class))).thenAnswer(i -> {
+            EvaluationInfo row = i.getArgument(0);
+            if (row.getId() == null) {
+                row.setId(61L);
             }
             return 1;
         });

@@ -7,19 +7,28 @@ import com.ams.modules.org.mapper.UserMapper;
 import com.ams.modules.record.AttachmentOwner;
 import com.ams.modules.record.RecordOwnerType;
 import com.ams.modules.record.dto.AttachmentRef;
+import com.ams.modules.record.dto.CostInput;
+import com.ams.modules.record.dto.CostItemInput;
 import com.ams.modules.record.dto.DisposalInput;
+import com.ams.modules.record.dto.EvaluationInput;
 import com.ams.modules.record.dto.IssueInput;
 import com.ams.modules.record.dto.ReceiveInput;
 import com.ams.modules.record.dto.RecordSheetRequest;
 import com.ams.modules.record.dto.RecordSheetView;
 import com.ams.modules.record.dto.SourceInput;
 import com.ams.modules.record.entity.BizAttachment;
+import com.ams.modules.record.entity.CostItem;
+import com.ams.modules.record.entity.CostRecord;
 import com.ams.modules.record.entity.DisposalRecord;
+import com.ams.modules.record.entity.EvaluationInfo;
 import com.ams.modules.record.entity.ReceiveIssue;
 import com.ams.modules.record.entity.ReceiveRecord;
 import com.ams.modules.record.entity.SourceInfo;
 import com.ams.modules.record.mapper.BizAttachmentMapper;
+import com.ams.modules.record.mapper.CostItemMapper;
+import com.ams.modules.record.mapper.CostRecordMapper;
 import com.ams.modules.record.mapper.DisposalRecordMapper;
+import com.ams.modules.record.mapper.EvaluationInfoMapper;
 import com.ams.modules.record.mapper.ReceiveIssueMapper;
 import com.ams.modules.record.mapper.ReceiveRecordMapper;
 import com.ams.modules.record.mapper.SourceInfoMapper;
@@ -51,6 +60,9 @@ public class RecordSheetService {
     private final ReceiveIssueMapper receiveIssueMapper;
     private final SourceInfoMapper sourceInfoMapper;
     private final DisposalRecordMapper disposalRecordMapper;
+    private final CostRecordMapper costRecordMapper;
+    private final CostItemMapper costItemMapper;
+    private final EvaluationInfoMapper evaluationInfoMapper;
     private final BizAttachmentMapper bizAttachmentMapper;
     private final UserMapper userMapper;
     private final FileService fileService;
@@ -60,6 +72,9 @@ public class RecordSheetService {
             ReceiveIssueMapper receiveIssueMapper,
             SourceInfoMapper sourceInfoMapper,
             DisposalRecordMapper disposalRecordMapper,
+            CostRecordMapper costRecordMapper,
+            CostItemMapper costItemMapper,
+            EvaluationInfoMapper evaluationInfoMapper,
             BizAttachmentMapper bizAttachmentMapper,
             UserMapper userMapper,
             FileService fileService) {
@@ -67,6 +82,9 @@ public class RecordSheetService {
         this.receiveIssueMapper = receiveIssueMapper;
         this.sourceInfoMapper = sourceInfoMapper;
         this.disposalRecordMapper = disposalRecordMapper;
+        this.costRecordMapper = costRecordMapper;
+        this.costItemMapper = costItemMapper;
+        this.evaluationInfoMapper = evaluationInfoMapper;
         this.bizAttachmentMapper = bizAttachmentMapper;
         this.userMapper = userMapper;
         this.fileService = fileService;
@@ -80,6 +98,9 @@ public class RecordSheetService {
         if (type != RecordOwnerType.ASSET) {
             syncDisposalRecords(type, ownerId, request.getDisposalRecords());
         }
+        // 成本 / 评估两段三种主体共用，不做资产特判
+        syncCostRecords(type, ownerId, request.getCostRecords());
+        syncEvaluations(type, ownerId, request.getEvaluations());
         return read(type, ownerId);
     }
 
@@ -95,6 +116,12 @@ public class RecordSheetService {
             for (DisposalRecord record : activeDisposals(type, ownerId)) {
                 view.getDisposalRecords().add(toDisposalInput(record));
             }
+        }
+        for (CostRecord record : activeCostRecords(type, ownerId)) {
+            view.getCostRecords().add(toCostInput(record));
+        }
+        for (EvaluationInfo record : activeEvaluations(type, ownerId)) {
+            view.getEvaluations().add(toEvaluationInput(record));
         }
         return view;
     }
@@ -117,6 +144,27 @@ public class RecordSheetService {
                 .eq(DisposalRecord::getOwnerType, type.code())
                 .eq(DisposalRecord::getOwnerId, ownerId))
                 .orderByAsc(DisposalRecord::getId));
+    }
+
+    private List<CostRecord> activeCostRecords(RecordOwnerType type, Long ownerId) {
+        return costRecordMapper.selectList(notDeleted(new LambdaQueryWrapper<CostRecord>()
+                .eq(CostRecord::getOwnerType, type.code())
+                .eq(CostRecord::getOwnerId, ownerId))
+                .orderByAsc(CostRecord::getId));
+    }
+
+    private List<CostItem> activeCostItems(Long costId) {
+        return costItemMapper.selectList(notDeleted(new LambdaQueryWrapper<CostItem>()
+                .eq(CostItem::getCostId, costId))
+                .orderByAsc(CostItem::getSort)
+                .orderByAsc(CostItem::getId));
+    }
+
+    private List<EvaluationInfo> activeEvaluations(RecordOwnerType type, Long ownerId) {
+        return evaluationInfoMapper.selectList(notDeleted(new LambdaQueryWrapper<EvaluationInfo>()
+                .eq(EvaluationInfo::getOwnerType, type.code())
+                .eq(EvaluationInfo::getOwnerId, ownerId))
+                .orderByAsc(EvaluationInfo::getId));
     }
 
     private List<ReceiveIssue> activeIssues(Long receiveId) {
@@ -313,11 +361,149 @@ public class RecordSheetService {
         target.setRemark(input.getRemark());
     }
 
+    // ---- 成本信息（1:N，含费用明细子表）----
+
+    private void syncCostRecords(RecordOwnerType type, Long ownerId, List<CostInput> inputs) {
+        List<CostInput> incoming = inputs == null ? List.of() : inputs;
+        Map<Long, CostRecord> existing = activeCostRecords(type, ownerId).stream()
+                .collect(Collectors.toMap(CostRecord::getId, Function.identity(),
+                        (a, b) -> a, LinkedHashMap::new));
+        Set<Long> kept = new LinkedHashSet<>();
+        for (CostInput input : incoming) {
+            CostRecord target;
+            if (input.getId() != null && existing.containsKey(input.getId())) {
+                target = existing.get(input.getId());
+                applyCost(input, target);
+                costRecordMapper.updateById(target);
+            } else {
+                target = new CostRecord();
+                target.setOwnerType(type.code());
+                target.setOwnerId(ownerId);
+                applyCost(input, target);
+                costRecordMapper.insert(target);
+            }
+            kept.add(target.getId());
+            syncCostItems(target.getId(), input.getItems());
+            syncAttachments(AttachmentOwner.COST_RECORD, target.getId(), input.getAttachments());
+        }
+        for (Long id : existing.keySet()) {
+            if (!kept.contains(id)) {
+                softDeleteCostRecord(id);
+            }
+        }
+    }
+
+    private void applyCost(CostInput input, CostRecord target) {
+        target.setAmountWan(input.getAmountWan());
+        target.setCostDate(input.getCostDate());
+        target.setRemark(input.getRemark());
+    }
+
+    /** 软删成本记录：连同其费用明细与附件。附件必须一起走，否则会留下孤儿关联。 */
+    private void softDeleteCostRecord(Long costId) {
+        for (CostItem item : activeCostItems(costId)) {
+            markDeleted(costItemMapper, CostItem::getId, item.getId());
+        }
+        syncAttachments(AttachmentOwner.COST_RECORD, costId, List.of());
+        markDeleted(costRecordMapper, CostRecord::getId, costId);
+    }
+
+    private void syncCostItems(Long costId, List<CostItemInput> inputs) {
+        List<CostItemInput> incoming = inputs == null ? List.of() : inputs;
+        Map<Long, CostItem> existing = activeCostItems(costId).stream()
+                .collect(Collectors.toMap(CostItem::getId, Function.identity(),
+                        (a, b) -> a, LinkedHashMap::new));
+        Set<Long> kept = new LinkedHashSet<>();
+        int index = 0;
+        for (CostItemInput input : incoming) {
+            CostItem target;
+            if (input.getId() != null && existing.containsKey(input.getId())) {
+                target = existing.get(input.getId());
+                applyCostItem(input, target, index);
+                costItemMapper.updateById(target);
+            } else {
+                target = new CostItem();
+                // cost_id 一律由服务端赋值：客户端无法把一条明细拼到别的成本记录上
+                target.setCostId(costId);
+                applyCostItem(input, target, index);
+                costItemMapper.insert(target);
+            }
+            kept.add(target.getId());
+            index++;
+        }
+        for (Long id : existing.keySet()) {
+            if (!kept.contains(id)) {
+                markDeleted(costItemMapper, CostItem::getId, id);
+            }
+        }
+    }
+
+    private void applyCostItem(CostItemInput input, CostItem target, int index) {
+        target.setFeeName(input.getFeeName());
+        target.setCostType(input.getCostType());
+        target.setAmount(input.getAmount());
+        target.setRemark(input.getRemark());
+        target.setSort(index);
+    }
+
+    // ---- 评估信息（1:N）----
+
+    private void syncEvaluations(RecordOwnerType type, Long ownerId, List<EvaluationInput> inputs) {
+        List<EvaluationInput> incoming = inputs == null ? List.of() : inputs;
+        Map<Long, EvaluationInfo> existing = activeEvaluations(type, ownerId).stream()
+                .collect(Collectors.toMap(EvaluationInfo::getId, Function.identity(),
+                        (a, b) -> a, LinkedHashMap::new));
+        Set<Long> kept = new LinkedHashSet<>();
+        for (EvaluationInput input : incoming) {
+            EvaluationInfo target;
+            if (input.getId() != null && existing.containsKey(input.getId())) {
+                target = existing.get(input.getId());
+                applyEvaluation(input, target);
+                evaluationInfoMapper.updateById(target);
+            } else {
+                target = new EvaluationInfo();
+                target.setOwnerType(type.code());
+                target.setOwnerId(ownerId);
+                applyEvaluation(input, target);
+                evaluationInfoMapper.insert(target);
+            }
+            kept.add(target.getId());
+            syncAttachments(AttachmentOwner.EVALUATION_INFO, target.getId(), input.getAttachments());
+        }
+        for (Long id : existing.keySet()) {
+            if (!kept.contains(id)) {
+                syncAttachments(AttachmentOwner.EVALUATION_INFO, id, List.of());
+                markDeleted(evaluationInfoMapper, EvaluationInfo::getId, id);
+            }
+        }
+    }
+
+    private void applyEvaluation(EvaluationInput input, EvaluationInfo target) {
+        target.setInstitution(input.getInstitution());
+        target.setAssetValue(input.getAssetValue());
+        target.setRentUnitPrice(input.getRentUnitPrice());
+        target.setRentPrice(input.getRentPrice());
+        target.setEvaluateDate(input.getEvaluateDate());
+        target.setValidFrom(input.getValidFrom());
+        target.setValidTo(input.getValidTo());
+    }
+
     /**
      * 附件全量 diff（设计 §4.3）。以 {@code fileId} 为身份：同一宿主下重复提交同一个文件
      * 只保留一行，未提交的行软删。
      */
-    void syncAttachments(AttachmentOwner owner, Long ownerId, List<AttachmentRef> refs) {
+    /**
+     * 附件全量 diff 写入（`owner` 决定这行附件挂在哪条记录上）。
+     *
+     * <p>**public 的边界**：本方法只做「按宿主 diff」，不判权限 —— 调用方必须自己先过
+     * 「该宿主单据的写权限」。处置单走 {@link #syncOrderAttachments}，权属流转走
+     * `OWNERSHIP_TRANSFER`，两者共用这唯一的写入点（设计 §4.4）。
+     *
+     * <p>之所以必须是**参数化的同一个方法**而不是各模块自己写一份：`biz_attachment` 是多态宿主表，
+     * 两处各写一份 `owner_type` / `biz_type` 的赋值，只要有一处写错成别的宿主枚举，
+     * 附件就会静默挂到另一张单上 —— 页面照常显示、没有任何报错。
+     */
+    public void syncAttachments(AttachmentOwner owner, Long ownerId, List<AttachmentRef> refs) {
         if (ownerId == null) {
             // 宿主还没落库（新增失败）时不能写附件，否则会造出 owner_id 为 null 的孤儿行
             return;
@@ -460,6 +646,39 @@ public class RecordSheetService {
         return input;
     }
 
+    private CostInput toCostInput(CostRecord record) {
+        CostInput input = new CostInput();
+        input.setId(record.getId());
+        input.setAmountWan(record.getAmountWan());
+        input.setCostDate(record.getCostDate());
+        input.setRemark(record.getRemark());
+        for (CostItem item : activeCostItems(record.getId())) {
+            CostItemInput itemInput = new CostItemInput();
+            itemInput.setId(item.getId());
+            itemInput.setFeeName(item.getFeeName());
+            itemInput.setCostType(item.getCostType());
+            itemInput.setAmount(item.getAmount());
+            itemInput.setRemark(item.getRemark());
+            input.getItems().add(itemInput);
+        }
+        input.setAttachments(toAttachmentRefs(AttachmentOwner.COST_RECORD, record.getId()));
+        return input;
+    }
+
+    private EvaluationInput toEvaluationInput(EvaluationInfo record) {
+        EvaluationInput input = new EvaluationInput();
+        input.setId(record.getId());
+        input.setInstitution(record.getInstitution());
+        input.setAssetValue(record.getAssetValue());
+        input.setRentUnitPrice(record.getRentUnitPrice());
+        input.setRentPrice(record.getRentPrice());
+        input.setEvaluateDate(record.getEvaluateDate());
+        input.setValidFrom(record.getValidFrom());
+        input.setValidTo(record.getValidTo());
+        input.setAttachments(toAttachmentRefs(AttachmentOwner.EVALUATION_INFO, record.getId()));
+        return input;
+    }
+
     /**
      * 批量回显附件：一次查全部 fileId，避免每条附件一次查询。
      *
@@ -467,8 +686,11 @@ public class RecordSheetService {
      * **不丢行** —— 丢弃会让该 fileId 在下次保存时不在请求体里，从而被 {@code syncAttachments}
      * 静默软删，把一个展示层的取舍变成静默数据丢失（设计 §4.3：不删 {@code file_metadata}、
      * 本期不做孤儿文件清理）。
+     *
+     * <p>与 {@link #syncAttachments} 同一套宿主口径：读与写必须成对，`owner` 由调用方显式传入，
+     * 不能默认成某个宿主（处置单专用入口见 {@link #orderAttachments}）。
      */
-    List<AttachmentRef> toAttachmentRefs(AttachmentOwner owner, Long ownerId) {
+    public List<AttachmentRef> toAttachmentRefs(AttachmentOwner owner, Long ownerId) {
         List<BizAttachment> rows = activeAttachments(owner, ownerId);
         if (rows.isEmpty()) {
             return new ArrayList<>();
