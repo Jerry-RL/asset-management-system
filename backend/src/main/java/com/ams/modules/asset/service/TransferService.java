@@ -6,20 +6,10 @@ import com.ams.modules.asset.entity.Asset;
 import com.ams.modules.asset.entity.AssetTransfer;
 import com.ams.modules.asset.mapper.AssetMapper;
 import com.ams.modules.asset.mapper.AssetTransferMapper;
-import com.ams.modules.billing.BillStatus;
-import com.ams.modules.billing.entity.Bill;
-import com.ams.modules.billing.mapper.BillMapper;
-import com.ams.modules.billing.service.PrepayService;
-import com.ams.modules.contract.ContractStatus;
-import com.ams.modules.contract.entity.Contract;
-import com.ams.modules.contract.mapper.ContractMapper;
 import com.ams.platform.event.AssetTransferredEvent;
 import com.ams.platform.event.DomainEventPublisher;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -34,9 +24,7 @@ public class TransferService {
     private final AssetTransferMapper transferMapper;
     private final AssetMapper assetMapper;
     private final CertificateService certificateService;
-    private final ContractMapper contractMapper;
-    private final BillMapper billMapper;
-    private final PrepayService prepayService;
+    private final AssetHandoverBuilder handoverBuilder;
     private final ObjectMapper objectMapper;
     private final DomainEventPublisher eventPublisher;
 
@@ -44,17 +32,13 @@ public class TransferService {
             AssetTransferMapper transferMapper,
             AssetMapper assetMapper,
             CertificateService certificateService,
-            ContractMapper contractMapper,
-            BillMapper billMapper,
-            PrepayService prepayService,
+            AssetHandoverBuilder handoverBuilder,
             ObjectMapper objectMapper,
             DomainEventPublisher eventPublisher) {
         this.transferMapper = transferMapper;
         this.assetMapper = assetMapper;
         this.certificateService = certificateService;
-        this.contractMapper = contractMapper;
-        this.billMapper = billMapper;
-        this.prepayService = prepayService;
+        this.handoverBuilder = handoverBuilder;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
     }
@@ -106,7 +90,12 @@ public class TransferService {
                     "在租资产须选择「带租调拨」，或先退租/解除占用");
         }
 
-        Map<String, Object> handover = buildHandover(asset, transfer);
+        Map<String, Object> handover = handoverBuilder.build(
+                asset,
+                transfer.getFromCompanyId() != null
+                        ? transfer.getFromCompanyId() : asset.getOperatingCompanyId(),
+                transfer.getToCompanyId(),
+                Map.of("transferType", transfer.getTransferType()));
         try {
             transfer.setHandoverJson(objectMapper.writeValueAsString(handover));
         } catch (Exception ex) {
@@ -128,61 +117,5 @@ public class TransferService {
                 transfer.getId(), asset.getId(),
                 transfer.getFromCompanyId(), transfer.getToCompanyId()));
         return transfer;
-    }
-
-    private Map<String, Object> buildHandover(Asset asset, AssetTransfer transfer) {
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("assetId", asset.getId());
-        root.put("assetNo", asset.getAssetNo());
-        root.put("fromCompanyId", transfer.getFromCompanyId() != null
-                ? transfer.getFromCompanyId() : asset.getOperatingCompanyId());
-        root.put("toCompanyId", transfer.getToCompanyId());
-        root.put("transferType", transfer.getTransferType());
-
-        List<Contract> contracts = contractMapper.selectList(
-                new LambdaQueryWrapper<Contract>()
-                        .eq(Contract::getAssetId, asset.getId())
-                        .in(Contract::getStatus,
-                                ContractStatus.ACTIVE, ContractStatus.EXPIRING,
-                                ContractStatus.RENEWABLE, ContractStatus.EXPIRED));
-        List<Map<String, Object>> contractRows = new ArrayList<>();
-        BigDecimal totalArrears = BigDecimal.ZERO;
-        BigDecimal totalDeposit = BigDecimal.ZERO;
-        BigDecimal totalPrepay = BigDecimal.ZERO;
-        for (Contract c : contracts) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("contractId", c.getId());
-            row.put("contractNo", c.getContractNo());
-            row.put("tenantId", c.getTenantId());
-            row.put("status", c.getStatus());
-            row.put("depositAmount", c.getDepositAmount());
-            BigDecimal prepayBal = prepayService.totalBalance(c.getId());
-            row.put("prepayBalance", prepayBal);
-            totalDeposit = totalDeposit.add(c.getDepositAmount() == null ? BigDecimal.ZERO : c.getDepositAmount());
-            totalPrepay = totalPrepay.add(prepayBal);
-
-            List<Bill> bills = billMapper.selectList(
-                    new LambdaQueryWrapper<Bill>()
-                            .eq(Bill::getContractId, c.getId())
-                            .in(Bill::getStatus, BillStatus.UNPAID, BillStatus.PARTIAL_PAID));
-            BigDecimal arrears = BigDecimal.ZERO;
-            for (Bill b : bills) {
-                BigDecimal due = nz(b.getAmount()).subtract(nz(b.getPaidAmount())).subtract(nz(b.getReducedAmount()));
-                BigDecimal late = nz(b.getLateFeeAmount()).subtract(nz(b.getLateFeePaidAmount()));
-                arrears = arrears.add(due.max(BigDecimal.ZERO)).add(late.max(BigDecimal.ZERO));
-            }
-            row.put("arrears", arrears);
-            totalArrears = totalArrears.add(arrears);
-            contractRows.add(row);
-        }
-        root.put("contracts", contractRows);
-        root.put("totalArrears", totalArrears);
-        root.put("totalDeposit", totalDeposit);
-        root.put("totalPrepay", totalPrepay);
-        return root;
-    }
-
-    private static BigDecimal nz(BigDecimal v) {
-        return v == null ? BigDecimal.ZERO : v;
     }
 }
