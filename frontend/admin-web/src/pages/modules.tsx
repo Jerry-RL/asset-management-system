@@ -1,5 +1,7 @@
 import type { ResourceConfig } from '@/components/ResourcePage';
 import { ProjectZonesPanel } from '@/components/ProjectZonesPanel';
+import { AssetUnitPanel } from '@/components/AssetUnitPanel';
+import { toAssetUnitOwner } from '@/lib/assetUnits';
 import { ASSET_QUICK_ACTIONS } from '@/lib/assetQuickActions';
 import * as L from '@/lib/labels';
 
@@ -243,6 +245,19 @@ const renderProjectZones = (row: Record<string, unknown>) => (
   <ProjectZonesPanel projectId={Number(row.id)} />
 );
 
+/**
+ * 资产台账的展开行：就地查看/拆合该资产的可租计租单元（ADR-0019 决策 A1 / ADR-0021）。
+ *
+ * <p>用 `compact` 面板：展开行的上一级已经写着资产编号与名称，再铺一遍是纯重复；
+ * 长说明也收短，否则每个展开行都重复一段同样的文字，会把真正的数据挤走。
+ *
+ * <p>不传 `onChanged`：资产台账列表展示的列（编号/名称/面积/租控状态…）都不随单元拆合变化 ——
+ * 面积预算是按 `asset.lease_area` 判的，不按单元合计。面板自身会刷新单元列表，外层无需重拉。
+ */
+const renderAssetUnits = (row: Record<string, unknown>) => (
+  <AssetUnitPanel compact asset={toAssetUnitOwner(row)} />
+);
+
 export const RESOURCES: Record<string, ResourceConfig> = {
   projects: {
     title: '项目管理',
@@ -360,6 +375,19 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     importPath: '/io/assets/import',
     /** 操作栏「编辑后续记录」：就地弹窗读写，不必跳进全量编辑页的两步走表单（资产侧含处置单流程） */
     recordSheetOwner: 'asset',
+    /**
+     * 操作栏「计租单元」：就地拆分/合并该资产的可租单元（ADR-0019/0021）。
+     * 部分出租必须先拆单元、再让合同挂到单元上，这是该能力的入口。
+     *
+     * <p>与下面的 `expandable` 是**互补**关系：列表模式用展开行（主路径，就在左侧的展开箭头），
+     * 卡片模式没有「行」的概念、展开行不生效，此时靠这个动作打开弹窗，否则那里没有任何入口。
+     */
+    unitSheet: true,
+    /**
+     * 列表模式下展开行显示该资产的可租计租单元，可就地拆分/合并（卡片模式不支持展开）。
+     * 与 `unitSheet` 同时配置 → 两种视图都有入口，且共用同一个面板组件。
+     */
+    expandable: { render: renderAssetUnits },
     columns: [
       { key: 'assetNo', label: '资产编号' },
       { key: 'name', label: '名称' },
@@ -1564,7 +1592,18 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     listPath: '/assets/structure-logs',
     columns: [
       { key: 'id', label: '日志ID' },
-      { key: 'opType', label: '操作', map: { split: '拆分', merge: '合并' } },
+      {
+        key: 'opType',
+        label: '操作',
+        // 资产层与单元层共用这张日志表（unit_split / unit_merge 由 AssetUnitService 写入）。
+        // 四种取值都要有中文，否则单元拆合会直接露出英文枚举值。
+        map: {
+          split: '资产拆分',
+          merge: '资产合并',
+          unit_split: '单元拆分',
+          unit_merge: '单元合并',
+        },
+      },
       { key: 'sourceAssetIds', label: '源资产' },
       { key: 'resultAssetIds', label: '结果资产' },
       { key: 'remark', label: '备注' },

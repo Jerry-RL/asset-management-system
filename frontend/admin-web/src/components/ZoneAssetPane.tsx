@@ -4,6 +4,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   FileTextOutlined,
+  PartitionOutlined,
   PlusOutlined,
   ProfileOutlined,
   ReloadOutlined,
@@ -20,6 +21,9 @@ import { useProjectZones, type ProjectZone } from '@/lib/projectZones';
 import { floorLabel, useProjectZoneFloors, type ProjectZoneFloor } from '@/lib/projectZoneFloors';
 import { TableActions, actionsColumnWidth, type TableActionItem } from '@/components/TableActions';
 import { RecordSheetModal } from '@/components/RecordSheetModal';
+import { AssetUnitPanel } from '@/components/AssetUnitPanel';
+import { AssetUnitSheetModal } from '@/components/AssetUnitSheetModal';
+import { toAssetUnitOwner } from '@/lib/assetUnits';
 import { ZoneFloorFormModal } from '@/components/ZoneFloorFormModal';
 import { ZoneFormModal } from '@/components/ZoneFormModal';
 
@@ -150,6 +154,12 @@ export function ZoneAssetPane({
    * 再选回任一分区会凭空弹出弹窗；存对象则天然只对用户点过的那一个分区生效。
    */
   const [recordSheetZone, setRecordSheetZone] = useState<ProjectZone | null>(null);
+
+  /**
+   * 计租单元弹窗（拆合部分租赁标的）：以**资产行**为目标，不是分区。
+   * 与 `recordSheetZone` 同一处理 —— 存对象而非布尔量，避免翻页/切分区后弹窗挂在不存在的行上。
+   */
+  const [unitSheetAsset, setUnitSheetAsset] = useState<AssetRow | null>(null);
 
   /**
    * 楼层栏（V50）：只在选中具体分区时请求 —— 「全部分区」下没有楼层可维护。
@@ -520,8 +530,9 @@ export function ZoneAssetPane({
     columns.push({
       title: '操作',
       key: '_actions',
-      // 删除在 more 里：hasMore 必须与下方 more 数组的实际内容（canDeleteLedger）一致
-      width: actionsColumnWidth(['编辑', '一物一档'], { hasMore: canDeleteLedger }),
+      // 删除与计租单元都在 more 里：hasMore 必须与下方 more 数组的实际内容
+      // （canDeleteLedger 的删除 / canUpdateLedger 的计租单元）一致，否则「更多」按钮出现时列宽算少
+      width: actionsColumnWidth(['编辑', '一物一档'], { hasMore: canDeleteLedger || canUpdateLedger }),
       render: (_: unknown, asset: AssetRow) => {
         const actions: TableActionItem[] = [];
         if (canUpdateLedger) {
@@ -539,6 +550,19 @@ export function ZoneAssetPane({
           to: `/assets/${asset.id}/dossier`,
         });
         const more: TableActionItem[] = [];
+        if (canUpdateLedger) {
+          /*
+           * 计租单元：部分出租的入口（ADR-0019 决策 A1）。收进「更多」而不是内联 ——
+           * 内联位已被「编辑 / 一物一档」占满，且拆单元不是高频动作。
+           * 权限与后端 `/assets/units/*` 的 `@RequiresPerm("asset.ledger:update")` 同源。
+           */
+          more.push({
+            key: 'unitSheet',
+            label: '计租单元',
+            icon: <PartitionOutlined />,
+            onClick: () => setUnitSheetAsset(asset),
+          });
+        }
         if (canDeleteLedger) {
           more.push({
             key: 'delete',
@@ -746,6 +770,27 @@ export function ZoneAssetPane({
             pagination={false}
             size="small"
             scroll={{ x: 960 }}
+            /*
+              展开行就地查看/拆合该资产的可租计租单元（ADR-0019 决策 A1）。
+              展开控制列在**最左侧**，所以「展开/收起」不会与右侧「操作」列抢位置。
+
+              用 `compact` 面板：展开行的上一行已经写着资产编号与名称，再铺一遍是纯重复。
+
+              onChanged 必须传：分区 Tab 与楼层 Tab 上的宗数/面积是后端按资产实时汇总的，
+              单元面积合计变化后不重拉，Tab 上的数字会与展开行里的明细对不上。
+            */
+            expandable={{
+              expandedRowRender: (asset) => (
+                <AssetUnitPanel
+                  compact
+                  asset={toAssetUnitOwner(asset)}
+                  onChanged={() => {
+                    void reloadZones();
+                    reloadAssets();
+                  }}
+                />
+              ),
+            }}
           />
           <div className="flex justify-end mt-3">
             <Pagination
@@ -786,6 +831,21 @@ export function ZoneAssetPane({
         // 与分区详情页、后端 PUT /projects/{pid}/zones/{zoneId}/record-sheet 的权限口径一致
         savePerm="asset.project:update"
         onClose={() => setRecordSheetZone(null)}
+      />
+
+      {/*
+        计租单元（拆分/合并）的**弹窗形态**：列表模式的展开行只在有「行」时可用，
+        卡片视图与窄屏下仍需要显式入口。
+        权限由 AssetUnitPanel 自行判定（与后端 /assets/units/* 同源），故此处不再传 canUpdate。
+      */}
+      <AssetUnitSheetModal
+        open={!!unitSheetAsset}
+        asset={unitSheetAsset == null ? null : toAssetUnitOwner(unitSheetAsset)}
+        onClose={() => setUnitSheetAsset(null)}
+        onChanged={() => {
+          void reloadZones();
+          reloadAssets();
+        }}
       />
     </div>
   );

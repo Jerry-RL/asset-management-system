@@ -24,6 +24,7 @@
 | [ADR-0018](./0018-jobrunr-async-jobs.md) | JobRunr 异步任务 | Accepted |
 | [ADR-0019](./0019-asset-unit-and-occupancy-model.md) | 资产计租单元与占用事件模型 | Proposed |
 | [ADR-0020](./0020-bounded-contexts-and-aggregate-boundaries.md) | 限界上下文划分与聚合边界 | Proposed |
+| [ADR-0021](./0021-asset-split-merge-rules.md) | 资产与计租单元拆分合并规则 | Proposed |
 
 **状态说明**：Proposed / Accepted / Deprecated / Superseded
 

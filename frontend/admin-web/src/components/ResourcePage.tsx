@@ -28,6 +28,7 @@ import {
   AppstoreOutlined,
   BarsOutlined,
   ProfileOutlined,
+  PartitionOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { FormInstance } from 'antd/es/form';
@@ -39,6 +40,8 @@ import { usePermByPath, type PermAction } from '@/lib/perm';
 import { codeForPath } from '@/lib/pathToCode';
 import { RecordSheetModal } from '@/components/RecordSheetModal';
 import type { RecordOwnerType } from '@/lib/recordSheet';
+import { AssetUnitSheetModal } from '@/components/AssetUnitSheetModal';
+import { toAssetUnitOwner } from '@/lib/assetUnits';
 import { AssetQrLabel } from '@/components/AssetQrLabel';
 import { CoverImage } from '@/components/CoverImage';
 import { TableActions, actionsColumnWidth, type TableActionItem } from '@/components/TableActions';
@@ -76,6 +79,7 @@ export function resolveRowActions(
     | 'detailLink'
     | 'qrcodePath'
     | 'recordSheetOwner'
+    | 'unitSheet'
   >,
   canDo: (action: PermAction) => boolean,
 ): {
@@ -84,6 +88,8 @@ export function resolveRowActions(
   rowActions: RowActionConfig[];
   /** 「编辑后续记录」是否可用：配了归属类型且当前账号有 update 权限 */
   showRecordSheet: boolean;
+  /** 「计租单元」是否可用：开了开关且当前账号有 update 权限 */
+  showUnitSheet: boolean;
   hasColumn: boolean;
 } {
   const showEdit = Boolean(config.update) && canDo('update');
@@ -91,16 +97,20 @@ export function resolveRowActions(
   const rowActions = (config.rowActions ?? []).filter((a) => !a.perm || canDo(a.perm));
   // 与后端 PUT /record-sheet 的 @RequiresPerm 同源：能改主体才能改它的后续记录
   const showRecordSheet = Boolean(config.recordSheetOwner) && canDo('update');
+  // 与后端 /assets/units/* 的 @RequiresPerm("asset.ledger:update") 同源
+  const showUnitSheet = Boolean(config.unitSheet) && canDo('update');
   const hasDetail = Boolean(config.detailPath || config.detailLink);
   return {
     showEdit,
     showDelete,
     rowActions,
     showRecordSheet,
+    showUnitSheet,
     hasColumn:
       showEdit ||
       showDelete ||
       showRecordSheet ||
+      showUnitSheet ||
       rowActions.length > 0 ||
       hasDetail ||
       Boolean(config.qrcodePath),
@@ -327,6 +337,17 @@ export interface ResourceConfig {
    * 动作按当前资源的 `update` 权限门控（与后端 `record-sheet` 的 `PUT` 口径一致）。
    */
   recordSheetOwner?: RecordOwnerType;
+  /**
+   * 「计租单元」入口（ADR-0019 决策 A1 / ADR-0021）。开启后操作栏出现该动作，
+   * 点开 {@link AssetUnitSheetModal} 就地拆分/合并该行资产的可租单元。
+   *
+   * <p><b>只对资产台账有意义</b>：部分出租的表达方式是"先拆单元、再把合同挂到单元上"，
+   * 单元本身依附于资产，其他资源没有这个概念，故不按 `recordSheetOwner` 那样泛化取类型。
+   *
+   * <p>动作按当前资源的 `update` 权限门控（与后端 `asset.ledger:update` 口径一致）；
+   * 面板内还会再判一次权限，用于把只读账号的勾选框与操作按钮一并去掉。
+   */
+  unitSheet?: boolean;
 }
 
 type Row = Record<string, unknown>;
@@ -761,6 +782,8 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
   const [actionSubmitting, setActionSubmitting] = useState(false);
   /** 「编辑后续记录」的目标行（null = 弹窗关闭）。就地编辑，不跳全量编辑页 */
   const [recordSheetRow, setRecordSheetRow] = useState<Row | null>(null);
+  /** 「计租单元」的目标行（null = 弹窗关闭）。拆合单元不跳页，避免丢掉列表的筛选与分页 */
+  const [unitSheetRow, setUnitSheetRow] = useState<Row | null>(null);
   const [qrModal, setQrModal] = useState<{
     open: boolean;
     loading: boolean;
@@ -1101,12 +1124,11 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
       },
     }));
     // 操作列的存在性也要按权限算：无权时整列消失，而不是留一个只有「详情」的空操作列
-    const { showEdit, showDelete, rowActions, showRecordSheet, hasColumn } = resolveRowActions(
-      config,
-      canDo,
-    );
+    const { showEdit, showDelete, rowActions, showRecordSheet, showUnitSheet, hasColumn } =
+      resolveRowActions(config, canDo);
     if (hasColumn) {
-      const hasMore = !!config.qrcodePath || showDelete || showRecordSheet || rowActions.length > 0;
+      const hasMore =
+        !!config.qrcodePath || showDelete || showRecordSheet || showUnitSheet || rowActions.length > 0;
       cols.push({
         title: '操作',
         key: '_actions',
@@ -1176,6 +1198,15 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
               onClick: () => setRecordSheetRow(row),
             });
           }
+          if (showUnitSheet) {
+            // 同上收进「更多」：「计租单元」4 个字内联会把操作列撑宽，而它不是高频动作
+            more.push({
+              key: 'unitSheet',
+              label: '计租单元',
+              icon: <PartitionOutlined />,
+              onClick: () => setUnitSheetRow(row),
+            });
+          }
           if (showDelete) {
             more.push({
               key: 'delete',
@@ -1204,11 +1235,19 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
     config.update,
     config.editLink,
     config.rowActions,
+    // 计租单元入口同样进依赖：开关/权限变化必须让「操作」列重算，否则动作不会出现或消失
+    config.unitSheet,
     // 字典加载完成后需重算列，否则类型等字段会停留在原始值
     resolveColumnLabel,
   ]);
 
-  const tableScrollX = Math.max(720, (config.columns.length + 1) * 140);
+  /*
+   * 横向滚动宽度。两类"额外列"必须计入：
+   *   +1 是「操作」列（数据列之外必然存在）；配置了展开行时再加一列展开控制列。
+   * 不计入会让最右侧的列被裁掉 —— 表现为「操作」按钮在宽表下部分不可见。
+   */
+  const tableScrollX =
+    Math.max(720, (config.columns.length + 1) * 140) + (config.expandable ? 48 : 0);
 
   return (
     <div className="bg-white rounded-lg border border-[var(--ams-border)] p-3 sm:p-4 min-w-0 max-w-full overflow-hidden">
@@ -1562,6 +1601,27 @@ export function ResourcePage({ config }: { config: ResourceConfig }) {
           // 动作本身已按 canDo('update') 门控，此处是纵深防御（menuCode 见上文的强不变式）
           savePerm={menuCode ? `${menuCode}:update` : ''}
           onClose={() => setRecordSheetRow(null)}
+        />
+      )}
+
+      {/*
+        计租单元（拆分/合并）：资产台账「部分出租」入口的**弹窗形态**。
+        列表模式下主路径是展开行（见 modules.tsx 的 expandable），本弹窗用于卡片视图与窄屏 ——
+        展开行只在列表模式生效，卡片模式没有「行」的概念，没有它就没有任何入口。
+
+        权限由 AssetUnitPanel 自行判定（与后端 /assets/units/* 同源），这里不再传 canUpdate ——
+        少一处由调用方传参，就少一处「某个入口忘了传」导致按钮越权出现或静默消失。
+
+        toAssetUnitOwner：列表行是 Record<string, unknown>，收敛成面板需要的展示与预算字段。
+        与 ZoneAssetPane、modules.tsx 的展开行共用同一份转换，避免三处各写一份而漂移。
+      */}
+      {config.unitSheet && (
+        <AssetUnitSheetModal
+          open={!!unitSheetRow}
+          asset={unitSheetRow == null ? null : toAssetUnitOwner(unitSheetRow, idField)}
+          onClose={() => setUnitSheetRow(null)}
+          // 单元面积合计变了会影响资产/分区层面的汇总，重拉一次列表让人看到的数字是新的
+          onChanged={() => setReloadToken((token) => token + 1)}
         />
       )}
 
