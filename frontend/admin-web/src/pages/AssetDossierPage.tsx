@@ -35,6 +35,7 @@ import {
   METER_TYPE,
   MORTGAGE_STATUS,
   OWNERSHIP_TRANSFER_STATUS,
+  ASSET_TRANSFER_RECORD_STATUS,
   PARTIAL_LEASE_STATUS,
   PAYMENT_CYCLE,
   RENT_TYPE,
@@ -151,6 +152,8 @@ interface AssetDossier {
   transfers: Record<string, unknown>[];
   /** 权属流转（V54）：与 transfers（调拨）分开两段，两者业务口径不同 */
   ownershipTransfers: Record<string, unknown>[];
+  /** 资产调拨记录（V55）：改责任部门 / 责任人，与上面两段再分开 */
+  transferRecords: Record<string, unknown>[];
   structureLogs: Record<string, unknown>[];
   contracts: Record<string, unknown>[];
   vacateOrders: Record<string, unknown>[];
@@ -772,7 +775,8 @@ export function AssetDossierPage() {
                   dossier.transfers.length +
                   dossier.disposals.length +
                   dossier.occupations.length +
-                  dossier.ownershipTransfers.length
+                  dossier.ownershipTransfers.length +
+                  dossier.transferRecords.length
                 })`,
                 children: (
                   <Space direction="vertical" className="w-full" size="middle">
@@ -873,6 +877,35 @@ export function AssetDossierPage() {
                         { title: '生效时间', dataIndex: 'effectedAt', width: 160 },
                       ]}
                       locale={{ emptyText: '暂无权属流转' }}
+                    />
+                    {/* 资产调拨记录（V55）：改的是责任部门 / 责任人 —— 组织内的责任交接，
+                        与前两段「资产归谁持有」是两件事，合并显示会让人误以为又调了一次公司。 */}
+                    <Table
+                      size="small"
+                      title={() => '资产调拨记录'}
+                      rowKey="id"
+                      pagination={false}
+                      dataSource={dossier.transferRecords}
+                      columns={[
+                        { title: 'ID', dataIndex: 'id', width: 70 },
+                        {
+                          title: '所属公司',
+                          dataIndex: 'companyId',
+                          width: 110,
+                          render: (v) => (v === null || v === undefined ? '-' : `#${v}`),
+                        },
+                        { title: '前责任部门', dataIndex: 'fromDepartmentId', width: 110 },
+                        { title: '新责任部门', dataIndex: 'toDepartmentId', width: 110 },
+                        { title: '新责任人', dataIndex: 'toUserId', width: 100 },
+                        {
+                          title: '状态',
+                          dataIndex: 'status',
+                          width: 90,
+                          render: (v) => statusTag(String(v ?? ''), ASSET_TRANSFER_RECORD_STATUS),
+                        },
+                        { title: '生效时间', dataIndex: 'effectedAt', width: 160 },
+                      ]}
+                      locale={{ emptyText: '暂无资产调拨记录' }}
                     />
                   </Space>
                 ),

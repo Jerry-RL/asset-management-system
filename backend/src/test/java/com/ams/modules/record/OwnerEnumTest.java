@@ -58,5 +58,10 @@ class OwnerEnumTest {
         assertThat(AttachmentOwner.EVALUATION_INFO.bizType()).isEqualTo("evaluation_attach");
         assertThat(AttachmentOwner.OWNERSHIP_TRANSFER.code()).isEqualTo("ownership_transfer");
         assertThat(AttachmentOwner.OWNERSHIP_TRANSFER.bizType()).isEqualTo("transfer_attach");
+        // V55 资产调拨记录：宿主码与 bizType 都不能与权属流转撞车 —— 两者都是一单多资产，
+        // 撞了之后附件列表页按 bizType 分组会把两个模块的附件混在一起
+        assertThat(AttachmentOwner.ASSET_TRANSFER_RECORD.code())
+                .isEqualTo("asset_transfer_record");
+        assertThat(AttachmentOwner.ASSET_TRANSFER_RECORD.bizType()).isEqualTo("alloc_attach");
     }
 }

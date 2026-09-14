@@ -30,6 +30,7 @@ import {
   ProjectOutlined,
   IdcardOutlined,
   SwapOutlined,
+  SwapRightOutlined,
   FormOutlined,
   NotificationOutlined,
   UserOutlined,
@@ -78,6 +79,8 @@ export const PATH_ICONS: Record<string, ReactNode> = {
   '/evaluations': <FormOutlined />,
   // V54 菜单的 icon 列为 NULL，侧栏会回退到这里
   '/ownership-transfers': <SwapOutlined />,
+  // V55 菜单的 icon 列同为 NULL（与 V54 同口径）
+  '/asset-transfer-records': <SwapRightOutlined />,
   '/lease-listings': <ShopOutlined />,
   '/tender/announcements': <NotificationOutlined />,
   '/tenants': <UserOutlined />,

@@ -24,6 +24,8 @@ import { AppLogPage } from '@/pages/AppLogPage';
 import { OperationLogPage } from '@/pages/OperationLogPage';
 import { OwnershipTransfersPage } from '@/pages/OwnershipTransfersPage';
 import { OwnershipTransferFormPage } from '@/pages/OwnershipTransferFormPage';
+import { AssetTransferRecordsPage } from '@/pages/AssetTransferRecordsPage';
+import { AssetTransferRecordFormPage } from '@/pages/AssetTransferRecordFormPage';
 import { ProjectFormPage } from '@/pages/ProjectFormPage';
 import ProjectDetailPage from '@/pages/ProjectDetailPage';
 import { ProjectZonesPage } from '@/pages/ProjectZonesPage';
@@ -80,6 +82,13 @@ export default function App() {
               <Route path="ownership-transfers" element={<OwnershipTransfersPage />} />
               <Route path="ownership-transfers/new" element={<OwnershipTransferFormPage />} />
               <Route path="ownership-transfers/:id/edit" element={<OwnershipTransferFormPage />} />
+              {/* 资产调拨记录：多资产改责任部门 / 责任人。列表 + 独立表单页 */}
+              <Route path="asset-transfer-records" element={<AssetTransferRecordsPage />} />
+              <Route path="asset-transfer-records/new" element={<AssetTransferRecordFormPage />} />
+              <Route
+                path="asset-transfer-records/:id/edit"
+                element={<AssetTransferRecordFormPage />}
+              />
               {/* 菜单管理：专用页面（树 + 抽屉 + 校验），不再走 ResourcePage */}
               <Route path="system/menus" element={<SystemMenuPage />} />
               <Route path="system/roles" element={<SystemRolePage />} />

@@ -29,6 +29,8 @@ import com.ams.modules.ownership.entity.OwnershipTransfer;
 import com.ams.modules.ownership.entity.OwnershipTransferAsset;
 import com.ams.modules.ownership.mapper.OwnershipTransferAssetMapper;
 import com.ams.modules.ownership.mapper.OwnershipTransferMapper;
+import com.ams.modules.transferrecord.mapper.AssetTransferRecordAssetMapper;
+import com.ams.modules.transferrecord.mapper.AssetTransferRecordMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,6 +72,10 @@ class AssetDossierOwnershipTransferTest {
     private final OwnershipTransferMapper ownershipTransferMapper = mock(OwnershipTransferMapper.class);
     private final OwnershipTransferAssetMapper ownershipTransferAssetMapper =
             mock(OwnershipTransferAssetMapper.class);
+    private final AssetTransferRecordMapper transferRecordMapper =
+            mock(AssetTransferRecordMapper.class);
+    private final AssetTransferRecordAssetMapper transferRecordAssetMapper =
+            mock(AssetTransferRecordAssetMapper.class);
 
     @BeforeEach
     void setUp() {
@@ -96,6 +102,7 @@ class AssetDossierOwnershipTransferTest {
         when(meterMapper.selectList(any())).thenReturn(List.of());
         when(ownershipTransferAssetMapper.selectList(any())).thenReturn(List.of());
         when(ownershipTransferMapper.selectList(any())).thenReturn(List.of());
+        when(transferRecordAssetMapper.selectList(any())).thenReturn(List.of());
     }
 
     private AssetDossierService newService() {
@@ -104,7 +111,8 @@ class AssetDossierOwnershipTransferTest {
                 structureLogMapper, contractMapper, vacateOrderMapper, billMapper, dunningRecordMapper,
                 repairOrderMapper, inspectionRecordMapper, disposalOrderMapper, occupationOrderMapper,
                 evaluationRequestMapper, leaseListingMapper, meterMapper,
-                ownershipTransferMapper, ownershipTransferAssetMapper);
+                ownershipTransferMapper, ownershipTransferAssetMapper,
+                transferRecordMapper, transferRecordAssetMapper);
     }
 
     private static OwnershipTransferAsset detail(long transferId) {

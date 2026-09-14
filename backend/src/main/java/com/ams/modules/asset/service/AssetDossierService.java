@@ -42,6 +42,10 @@ import com.ams.modules.ownership.entity.OwnershipTransfer;
 import com.ams.modules.ownership.entity.OwnershipTransferAsset;
 import com.ams.modules.ownership.mapper.OwnershipTransferAssetMapper;
 import com.ams.modules.ownership.mapper.OwnershipTransferMapper;
+import com.ams.modules.transferrecord.entity.AssetTransferRecord;
+import com.ams.modules.transferrecord.entity.AssetTransferRecordAsset;
+import com.ams.modules.transferrecord.mapper.AssetTransferRecordAssetMapper;
+import com.ams.modules.transferrecord.mapper.AssetTransferRecordMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -81,6 +85,8 @@ public class AssetDossierService {
     private final MeterMapper meterMapper;
     private final OwnershipTransferMapper ownershipTransferMapper;
     private final OwnershipTransferAssetMapper ownershipTransferAssetMapper;
+    private final AssetTransferRecordMapper transferRecordMapper;
+    private final AssetTransferRecordAssetMapper transferRecordAssetMapper;
 
     public AssetDossierService(
             AssetMapper assetMapper,
@@ -101,7 +107,9 @@ public class AssetDossierService {
             LeaseListingMapper leaseListingMapper,
             MeterMapper meterMapper,
             OwnershipTransferMapper ownershipTransferMapper,
-            OwnershipTransferAssetMapper ownershipTransferAssetMapper) {
+            OwnershipTransferAssetMapper ownershipTransferAssetMapper,
+            AssetTransferRecordMapper transferRecordMapper,
+            AssetTransferRecordAssetMapper transferRecordAssetMapper) {
         this.assetMapper = assetMapper;
         this.leaseControlLogMapper = leaseControlLogMapper;
         this.certificateMapper = certificateMapper;
@@ -121,6 +129,8 @@ public class AssetDossierService {
         this.meterMapper = meterMapper;
         this.ownershipTransferMapper = ownershipTransferMapper;
         this.ownershipTransferAssetMapper = ownershipTransferAssetMapper;
+        this.transferRecordMapper = transferRecordMapper;
+        this.transferRecordAssetMapper = transferRecordAssetMapper;
     }
 
     public AssetDossier getDossier(Long assetId) {
@@ -146,6 +156,7 @@ public class AssetDossierService {
                 new LambdaQueryWrapper<Mortgage>()
                         .eq(Mortgage::getAssetId, assetId)
                         .orderByDesc(Mortgage::getId)));
+        dossier.setTransferRecords(transferRecords(assetId));
         dossier.setTransfers(transferMapper.selectList(
                 new LambdaQueryWrapper<AssetTransfer>()
                         .eq(AssetTransfer::getAssetId, assetId)
@@ -264,6 +275,32 @@ public class AssetDossierService {
                 .orderByDesc(OwnershipTransfer::getId));
     }
 
+    /**
+     * 该资产所在的资产调拨记录单（V55）。
+     *
+     * <p>查的是 {@code asset_transfer_record_asset}（{@code asset_id} 上有索引），再按 id 取主单，
+     * 与 {@link #ownershipTransfers} 同一套做法 —— 一张调拨单也可以挂几十个资产，
+     * 扫主单反推既慢又容易漏。
+     *
+     * <p>软删的单据不显示：草稿删掉后不该在档案里留下痕迹。
+     */
+    private List<AssetTransferRecord> transferRecords(Long assetId) {
+        List<Long> recordIds = transferRecordAssetMapper.selectList(
+                        new LambdaQueryWrapper<AssetTransferRecordAsset>()
+                                .eq(AssetTransferRecordAsset::getAssetId, assetId))
+                .stream()
+                .map(AssetTransferRecordAsset::getRecordId)
+                .distinct()
+                .toList();
+        if (recordIds.isEmpty()) {
+            return List.of();
+        }
+        return transferRecordMapper.selectList(new LambdaQueryWrapper<AssetTransferRecord>()
+                .in(AssetTransferRecord::getId, recordIds)
+                .isNull(AssetTransferRecord::getDeletedAt)
+                .orderByDesc(AssetTransferRecord::getId));
+    }
+
     private void fillStatusSummary(AssetDossier dossier) {        Asset asset = dossier.getAsset();
         List<Bill> unpaid = dossier.getBills().stream()
                 .filter(b -> "unpaid".equals(b.getStatus()) || "partial_paid".equals(b.getStatus()))
@@ -329,6 +366,11 @@ public class AssetDossierService {
         // 与调拨刻意分成两类（D11）：合成一类会让档案里无法区分「调拨过」和「产权转出过」
         for (OwnershipTransfer t : dossier.getOwnershipTransfers()) {
             items.add(item("ownership_transfer", "权属流转 #" + t.getId(),
+                    t.getStatus(), t.getReason(), t.getId(), t.getCreatedAt()));
+        }
+        // 与上面两类再分一类：本段改的是责任部门 / 责任人，不是资产归谁持有
+        for (AssetTransferRecord t : dossier.getTransferRecords()) {
+            items.add(item("asset_transfer_record", "资产调拨 #" + t.getId(),
                     t.getStatus(), t.getReason(), t.getId(), t.getCreatedAt()));
         }
         for (DisposalOrder d : dossier.getDisposals()) {

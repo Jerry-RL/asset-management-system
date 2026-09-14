@@ -140,40 +140,11 @@ export const ownershipTransferApi = {
 };
 
 /**
- * 资产显示的公共入参：**下拉项与详情资产行的公共子集**。
- *
- * 为什么要有这个接口：下拉项（`TransferAssetOption`）的名字字段是 `name`，
- * 而详情资产行（`OwnershipTransferAssetView`）是 `assetName` —— 两者其余字段一致。
- * 若把 `assetOptionLabel` 写成只吃其中一种，另一处就必须自己再拼一份 label，
- * 而「两处拼接必然漂移」（同一次流转在两个页面显示成不同的资产名）。
+ * 资产显示的公共入参与文案已抽到 {@link ./assetLabel}（与资产调拨记录共用同一份实现）。
+ * 这里**再导出一次**：调用方（列表页 / 表单页）从本文件 import 即可，
+ * 不必为了一个格式化函数去记住它搬到了哪个文件。
  */
-export interface AssetLabelSource {
-  assetId: number;
-  assetNo?: string | null;
-  /** 下拉项的字段名 */
-  name?: string | null;
-  /** 详情资产行的字段名 */
-  assetName?: string | null;
-  projectName?: string | null;
-  zoneName?: string | null;
-  floorNo?: number | null;
-}
-
-/**
- * 资产下拉的显示文案：`项目 · 分区 · 楼层 · 资产名称`（需求指定的四段）。
- *
- * 空段跳过而不是留空占位：`- · - · 5层 · 厂房A` 比 `厂房A` 更难读。
- * 名称缺失时回落到资产编号 —— 至少让用户能选中一个可辨认的东西。
- */
-export const assetOptionLabel = (option: AssetLabelSource): string => {
-  const title = option.name ?? option.assetName ?? null;
-  const floor =
-    option.floorNo === null || option.floorNo === undefined ? null : `${option.floorNo}层`;
-  const segments = [option.projectName, option.zoneName, floor, title].filter(
-    (segment): segment is string => Boolean(segment && String(segment).trim()),
-  );
-  return segments.length > 0 ? segments.join(' · ') : (option.assetNo ?? `资产 #${option.assetId}`);
-};
+export { assetOptionLabel, type AssetLabelSource } from '@/lib/assetLabel';
 
 /** 公司名的兜底（公司被删或未加载时不该显示 `undefined`）。 */
 export const companyLabel = (name?: string | null, id?: number | null): string =>

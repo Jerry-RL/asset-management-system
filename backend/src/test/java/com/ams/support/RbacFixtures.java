@@ -224,7 +224,11 @@ public final class RbacFixtures {
                 "asset.structureLog:view", "org.structure:view", "org.company:view",
                 "operation.disposal:create", "operation.disposal:update", "operation.disposal:approve",
                 "deed.ownershipTransfer:view", "deed.ownershipTransfer:create",
-                "deed.ownershipTransfer:update", "deed.ownershipTransfer:delete");
+                "deed.ownershipTransfer:update", "deed.ownershipTransfer:delete",
+                "deed.transferRecord:view", "deed.transferRecord:create",
+                "deed.transferRecord:update", "deed.transferRecord:delete",
+                "deed.mortgage:view", "deed.mortgage:create",
+                "deed.mortgage:update", "deed.mortgage:delete");
         f.grant(ROLE_FINANCE,
                 "billing.bill:view", "billing.bill:create",
                 "finance.payment:view", "finance.payment:create", "finance.payment:update",
@@ -373,6 +377,10 @@ public final class RbacFixtures {
         menu("operation.disposal", "资产处置", "menu");
         // 权属流转（V54）：一张单改多个资产的产权 / 经营公司
         menu("deed.ownershipTransfer", "权属流转", "menu");
+        // 资产调拨记录（V55）：一张单改多个资产的责任部门 / 责任人
+        menu("deed.transferRecord", "资产调拨记录", "menu");
+        // 抵押记录（V56）：抵押标的是项目 / 分区 / 资产三级，V45 建菜单时叫「抵押列表」
+        menu("deed.mortgage", "抵押记录", "menu");
         return this;
     }
 

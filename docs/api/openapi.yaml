@@ -1217,6 +1217,155 @@ paths:
         '404':
           description: 单据不存在或已软删
 
+  /asset-transfer-records:
+    get:
+      tags: [AssetTransferRecords]
+      summary: 资产调拨记录列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, completed] }
+        - name: companyId
+          in: query
+          description: 按所属公司筛选
+          schema: { type: integer }
+        - name: keyword
+          in: query
+          description: 模糊匹配原因 / 备注
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.transferRecord:view
+    post:
+      tags: [AssetTransferRecords]
+      summary: 新建资产调拨记录（保存为草稿，不改写资产）
+      description: >-
+        一张单挂多个资产，生效时把它们的 responsible_department_id / responsible_user_id
+        改成 toDepartmentId / toUserId。companyId 是「所属公司」，生效时**不改**它
+        （改公司归属属于权属流转的职责）；toDepartmentId 必须属于 companyId，
+        toUserId 必须属于 toDepartmentId；assetIds 去重后每个资产都必须属于 companyId
+        且未退出（lifecycle_status != exited）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetTransferRecordInput'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: >-
+            业务校验失败（所属公司不存在或停用 / 部门不属于该公司 /
+            责任人不属于该部门 / 资产不属于该公司 / 资产已退出）
+        '403':
+          description: 无 deed.transferRecord:create
+
+  /asset-transfer-records/asset-options:
+    get:
+      tags: [AssetTransferRecords]
+      summary: 资产下拉（按所属公司联动过滤，供远程搜索）
+      description: >-
+        按 asset.asset_company_id 过滤，与资产台账表单里「责任部门」的上级字段一致 ——
+        两个界面必须按同一个字段过滤，否则同一批资产在一个界面选得到、在另一个界面选不到。
+      parameters:
+        - name: companyId
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: keyword
+          in: query
+          description: 模糊匹配资产名称 / 资产编号
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 缺少 companyId
+        '403':
+          description: 无 deed.transferRecord:view
+
+  /asset-transfer-records/{id}:
+    get:
+      tags: [AssetTransferRecords]
+      summary: 资产调拨记录详情（含资产明细与附件）
+      parameters:
+        - $ref: '#/components/parameters/AssetTransferRecordId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.transferRecord:view
+        '404':
+          description: 单据不存在或已软删
+    put:
+      tags: [AssetTransferRecords]
+      summary: 修改资产调拨记录（仅草稿）
+      description: 请求体与新建一致；已完成（completed）的单据返回 409。
+      parameters:
+        - $ref: '#/components/parameters/AssetTransferRecordId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetTransferRecordInput'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 校验失败（同新建）
+        '403':
+          description: 无 deed.transferRecord:update
+        '404':
+          description: 单据不存在或已软删
+        '409':
+          description: 不是草稿（已生效的单据不可再改）
+    delete:
+      tags: [AssetTransferRecords]
+      summary: 删除资产调拨记录（仅草稿，软删）
+      parameters:
+        - $ref: '#/components/parameters/AssetTransferRecordId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.transferRecord:delete
+        '404':
+          description: 单据不存在或已软删
+        '409':
+          description: 不是草稿
+
+  /asset-transfer-records/{id}/effect:
+    post:
+      tags: [AssetTransferRecords]
+      summary: 生效（不可逆，逐资产改写责任部门与责任人）
+      description: >-
+        把每个资产的 responsible_department_id / responsible_user_id 改成单上的新值，
+        并在 asset_transfer_record_asset 里写下**生效那一刻**的原值快照。
+        生效前会**重新校验**（公司 / 部门 / 人员 / 资产归属都可能变过），
+        已生效的单据重复调用是幂等的。本模块**不校验抵押**（责任岗位交接与抵押权无关），
+        也不写租控状态与生命周期。
+      parameters:
+        - $ref: '#/components/parameters/AssetTransferRecordId'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 生效前复查失败（部门或人员已停用 / 资产已不属于该公司 / 资产已退出）
+        '403':
+          description: 无 deed.transferRecord:update
+        '404':
+          description: 单据不存在或已软删
+        '409':
+          description: 资产被并发修改（optimistic lock 失败），整单回滚
+
 components:
   securitySchemes:
     BearerAuth:

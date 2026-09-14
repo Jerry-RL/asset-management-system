@@ -18,6 +18,7 @@ import com.ams.modules.maintenance.entity.RepairOrder;
 import com.ams.modules.meter.entity.Meter;
 import com.ams.modules.occupation.entity.OccupationOrder;
 import com.ams.modules.ownership.entity.OwnershipTransfer;
+import com.ams.modules.transferrecord.entity.AssetTransferRecord;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,6 +46,14 @@ public class AssetDossier {
      * 「调拨过」与「产权转出过」。
      */
     private List<OwnershipTransfer> ownershipTransfers = new ArrayList<>();
+    /**
+     * 该资产所在的资产调拨记录单（V55）。
+     *
+     * <p>与 {@link #transfers}（调拨，改经营公司）与 {@link #ownershipTransfers}（权属流转，
+     * 改产权 / 经营公司）**分成三段**：本段改的是责任部门 / 责任人 —— 组织内的责任交接，
+     * 与「资产归谁持有」是两件事，混在一起会让档案里读不出「这次改动到底动了什么」。
+     */
+    private List<AssetTransferRecord> transferRecords = new ArrayList<>();
     private List<AssetStructureLog> structureLogs = new ArrayList<>();
     private List<Contract> contracts = new ArrayList<>();
     private List<VacateOrder> vacateOrders = new ArrayList<>();

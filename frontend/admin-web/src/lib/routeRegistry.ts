@@ -42,6 +42,8 @@ export const STANDALONE_ROUTES: string[] = [
   '/org/structure',
   // 权属流转：多资产远程选择 + 附件，字段类型超出 ResourcePage 的表达能力，走独立页
   '/ownership-transfers',
+  // 资产调拨记录（V55）：同样是多资产远程选择 + 附件 + 三个级联下拉，走独立页
+  '/asset-transfer-records',
 ];
 
 export interface RouteMeta {

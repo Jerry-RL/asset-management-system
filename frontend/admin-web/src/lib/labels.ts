@@ -490,6 +490,17 @@ export const OWNERSHIP_TRANSFER_STATUS: Record<string, string> = {
   completed: '已完成',
 };
 
+/** 资产调拨记录单据状态（V55）。
+ *
+ * 与 `OWNERSHIP_TRANSFER_STATUS` 的**取值恰好相同，但仍是两张独立的表**：两者是两套独立
+ * 状态机（将来给调拨记录加「待接收」等状态时，不该顺带改掉权属流转的显示）。
+ * 合并成一张「通用单据状态」表会让这种耦合静默存在 —— 界面上只会显示一个错误的中文标签。
+ */
+export const ASSET_TRANSFER_RECORD_STATUS: Record<string, string> = {
+  draft: '草稿',
+  completed: '已完成',
+};
+
 /** 取字段中文名；未知 key 时尽量不把 camelCase 直接甩给用户 */
 export const fieldLabel = (key: string): string => {
   if (FIELD_LABELS[key]) return FIELD_LABELS[key];
