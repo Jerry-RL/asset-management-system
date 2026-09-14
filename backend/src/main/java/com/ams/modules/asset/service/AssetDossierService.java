@@ -152,16 +152,16 @@ public class AssetDossierService {
                 new LambdaQueryWrapper<AssetCertificate>()
                         .eq(AssetCertificate::getAssetId, assetId)
                         .orderByDesc(AssetCertificate::getId)));
-        dossier.setMortgages(mortgageMapper.selectList(
-                new LambdaQueryWrapper<Mortgage>()
-                        .eq(Mortgage::getAssetId, assetId)
-                        .orderByDesc(Mortgage::getId)));
-        dossier.setTransferRecords(transferRecords(assetId));
+        // 覆盖查询：资产自身、所属分区、所属项目三级抵押都算在它头上。
+        // 只取 asset_id 反查的话，项目级抵押下的资产在档案里显示「未抵押」，
+        // 而处置时又被 assertNotMortgaged 拦下 —— 档案的职责是解释「为什么被拦」
+        dossier.setMortgages(mortgageMapper.selectCoveringAsset(assetId));
         dossier.setTransfers(transferMapper.selectList(
                 new LambdaQueryWrapper<AssetTransfer>()
                         .eq(AssetTransfer::getAssetId, assetId)
                         .orderByDesc(AssetTransfer::getId)));
         dossier.setOwnershipTransfers(ownershipTransfers(assetId));
+        dossier.setTransferRecords(transferRecords(assetId));
 
         String idToken = String.valueOf(assetId);
         List<AssetStructureLog> structureLogs = structureLogMapper.selectList(
@@ -301,6 +301,21 @@ public class AssetDossierService {
                 .orderByDesc(AssetTransferRecord::getId));
     }
 
+    /**
+     * 时间线的抵押标题：标出这条抵押是挂在**哪一级**上的。
+     *
+     * <p>档案的时间线里同时会出现「这个资产被抵押」和「它所属的项目 / 分区被抵押」两种来源，
+     * 而它们的 id 空间不共享 —— 只写「抵押 #12」会让人以为都是资产级。
+     */
+    private String mortgageTimelineTitle(Mortgage m) {
+        String scope = switch (String.valueOf(m.getTargetType())) {
+            case Mortgage.TARGET_PROJECT -> "项目抵押";
+            case Mortgage.TARGET_ZONE -> "分区抵押";
+            default -> "资产抵押";
+        };
+        return scope + " #" + m.getId();
+    }
+
     private void fillStatusSummary(AssetDossier dossier) {        Asset asset = dossier.getAsset();
         List<Bill> unpaid = dossier.getBills().stream()
                 .filter(b -> "unpaid".equals(b.getStatus()) || "partial_paid".equals(b.getStatus()))
@@ -394,8 +409,10 @@ public class AssetDossierService {
                     s.getOpType(), s.getRemark(), s.getId(), s.getCreatedAt()));
         }
         for (Mortgage m : dossier.getMortgages()) {
-            items.add(item("mortgage", "抵押 #" + m.getId(),
-                    m.getStatus(), null, m.getId(), m.getCreatedAt()));
+            // 标题带上标的类型：档案里混着「本项目被抵押」和「这个资产被抵押」两种来源，
+            // 只写「抵押 #12」会让人以为都是资产级，进而误解为什么被拦住
+            items.add(item("mortgage", mortgageTimelineTitle(m),
+                    m.getStatus(), m.getMortgagee(), m.getId(), m.getCreatedAt()));
         }
 
         items.sort(Comparator.comparing(

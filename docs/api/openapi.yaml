@@ -1366,6 +1366,164 @@ paths:
         '409':
           description: 资产被并发修改（optimistic lock 失败），整单回滚
 
+  /mortgages:
+    get:
+      tags: [Mortgages]
+      summary: 抵押记录列表
+      description: >-
+        标的是**单个**项目 / 分区或资产（三选一），由 targetType 区分。
+        列表只回 targetType / targetId 与拼接所需的名称原料，附件仅在详情里返回。
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, active, released] }
+        - name: targetType
+          in: query
+          schema: { type: string, enum: [project, zone, asset] }
+        - name: companyId
+          in: query
+          description: 按所属公司筛选
+          schema: { type: integer }
+        - name: keyword
+          in: query
+          description: 模糊匹配抵押公司/人、抵押银行、抵押合同编号
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.mortgage:view
+    post:
+      tags: [Mortgages]
+      summary: 新建抵押记录（保存为草稿，标的不进入在押）
+      description: >-
+        draft 状态的记录**不计入在押**：`hasActiveMortgage` 只按 status = active 判定，
+        所以存草稿不会拦截标的的处置 / 流转 / 调拨。targetId 必须属于 companyId
+        （分区按其上级项目推导公司）；amount / interestRate 分别限 2 / 4 位小数；
+        contractNo 在未删除的记录之间全局唯一；endDate 由 startDate + termMonths 推导，不接受入参。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MortgageRecordInput'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: >-
+            业务校验失败（公司不存在或停用 / 项目类型非法 / 标的不属于该公司 /
+            标的不存在或已退出 / 金额或利率或期限越界 / 合同编号重复）
+        '403':
+          description: 无 deed.mortgage:create
+
+  /mortgages/target-options:
+    get:
+      tags: [Mortgages]
+      summary: 抵押标的下拉（按项目类型 + 所属公司联动过滤，供远程搜索）
+      description: >-
+        三种 targetType 返回同一种 DTO（targetId + 名称原料），由前端拼接展示文案：
+        项目级用 name，分区级用 projectName + name，资产级复用资产文案（项目 · 分区 · 楼层 · 名称）。
+      parameters:
+        - name: targetType
+          in: query
+          required: true
+          description: 标的类型；三选一，决定检索哪张表
+          schema: { type: string, enum: [project, zone, asset] }
+        - name: companyId
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: keyword
+          in: query
+          description: 模糊匹配项目 / 分区 / 资产名称或编号
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 缺少 targetType 或 companyId
+        '403':
+          description: 无 deed.mortgage:view
+
+  /mortgages/{id}:
+    get:
+      tags: [Mortgages]
+      summary: 抵押记录详情（含附件）
+      parameters:
+        - $ref: '#/components/parameters/MortgageId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.mortgage:view
+        '404':
+          description: 记录不存在或已软删
+    put:
+      tags: [Mortgages]
+      summary: 修改抵押记录（仅草稿）
+      description: 请求体与新建一致；已生效（active / released）的记录返回 409。
+      parameters:
+        - $ref: '#/components/parameters/MortgageId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MortgageRecordInput'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 校验失败（同新建）
+        '403':
+          description: 无 deed.mortgage:update
+        '404':
+          description: 记录不存在或已软删
+        '409':
+          description: 不是草稿
+    delete:
+      tags: [Mortgages]
+      summary: 删除抵押记录（仅草稿，软删）
+      parameters:
+        - $ref: '#/components/parameters/MortgageId'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 deed.mortgage:delete
+        '404':
+          description: 记录不存在或已软删
+        '409':
+          description: 不是草稿
+
+  /mortgages/{id}/effect:
+    post:
+      tags: [Mortgages]
+      summary: 生效（草稿 → 在押，不可逆）
+      description: >-
+        状态置为 active 并重算 asset_certificate.mortgage_status。从这一刻起该标的
+        （项目 / 分区级会连带其下所有资产）会被处置 / 权属流转 / 调拨的前置校验拦截。
+        生效前会**重新校验**一遍（公司 / 标的 / 合同编号都可能已变过），
+        已生效的记录重复调用是幂等的。解除抵押**不走本接口**，复用既有解押审批流程（mortgage_release）。
+      parameters:
+        - $ref: '#/components/parameters/MortgageId'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 生效前复查失败（公司停用 / 标的不再属于该公司 / 合同编号重复）
+        '403':
+          description: 无 deed.mortgage:update
+        '404':
+          description: 记录不存在或已软删
+        '409':
+          description: 不是草稿
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1421,6 +1579,18 @@ components:
       schema:
         type: integer
     OwnershipTransferId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    AssetTransferRecordId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    MortgageId:
       name: id
       in: path
       required: true
@@ -1514,6 +1684,183 @@ components:
             properties:
               fileId: { type: integer }
               sort: { type: integer }
+
+    AssetTransferRecordInput:
+      type: object
+      required: [companyId, toDepartmentId, toUserId, assetIds]
+      properties:
+        companyId:
+          type: integer
+          description: >-
+            所属公司（asset.asset_company_id）。生效时**不改**它 —— 改公司归属属于权属流转的职责；
+            这里只用来过滤资产下拉与校验资产归属。
+        fromDepartmentId:
+          type: integer
+          nullable: true
+          description: >-
+            前责任部门，业务留痕，可不填（一张单可以挂来自不同部门的资产）；
+            每个资产真实的原值由 asset_transfer_record_asset 的快照承载
+        toDepartmentId:
+          type: integer
+          description: 新责任部门；必须存在、启用，且属于 companyId
+        toUserId:
+          type: integer
+          description: 新责任人；必须存在、启用，且属于 toDepartmentId
+        approvalDeadline:
+          type: string
+          format: date-time
+          nullable: true
+          description: 本期无审批环节，纯记录字段（不校验、不提醒）
+        reason:
+          type: string
+          maxLength: 500
+        remark:
+          type: string
+          maxLength: 500
+        assetIds:
+          type: array
+          items:
+            type: integer
+          description: 至少 1 个且已去重；每个资产都必须属于 companyId 且 lifecycle_status != exited
+        attachments:
+          type: array
+          description: 附件引用，只提交 fileId 与顺序，name / url 由服务端回填
+          items:
+            type: object
+            required: [fileId]
+            properties:
+              fileId: { type: integer }
+              sort: { type: integer }
+
+    MortgageRecordInput:
+      type: object
+      required: [companyId, targetType, targetId, mortgagee, amount, startDate, termMonths]
+      properties:
+        companyId:
+          type: integer
+          description: 所属公司；只用于过滤标的下拉与校验标的归属，本表单不改资产归属
+        targetType:
+          type: string
+          enum: [project, zone, asset]
+          description: 标的类型，决定 targetId 指向哪张表
+        targetId:
+          type: integer
+          description: >-
+            标的 ID（单标的）；必须存在、未软删，且属于 companyId
+            （分区按其上级项目推导公司）；资产标的还要求 lifecycle_status != exited
+        mortgagee:
+          type: string
+          maxLength: 200
+          description: 抵押公司/人
+        amount:
+          type: number
+          description: 抵押金额，最多 2 位小数，>= 0
+        interestRate:
+          type: number
+          nullable: true
+          description: 利率（百分数，如 4.35 表示 4.35%），最多 4 位小数，0 ~ 100
+        bank:
+          type: string
+          maxLength: 200
+          description: 抵押银行
+        repaymentDate:
+          type: string
+          format: date
+          nullable: true
+          description: 还款日（业务字段，允许早于 / 晚于推导出的抵押到期日）
+        startDate:
+          type: string
+          format: date
+          description: 抵押起始时间
+        termMonths:
+          type: integer
+          minimum: 1
+          maximum: 1200
+          description: 抵押期限（月）
+        endDate:
+          type: string
+          format: date
+          readOnly: true
+          description: 抵押到期日，由 startDate + termMonths 推导，**不接受入参**
+        contractNo:
+          type: string
+          maxLength: 100
+          nullable: true
+          description: 抵押合同编号；填写后在未删除的记录之间全局唯一
+        attachments:
+          type: array
+          description: 附件引用，只提交 fileId 与顺序，name / url 由服务端回填
+          items:
+            type: object
+            required: [fileId]
+            properties:
+              fileId: { type: integer }
+              sort: { type: integer }
+
+    MortgageRecordView:
+      type: object
+      description: >-
+        列表与详情共用。附件只在详情里返回（列表页每行查一次附件就是 N+1）。
+        标的展示所需的名称原料（targetName / projectName / zoneName / floorNo / assetNo）
+        一并返回，由前端拼接文案 —— 服务端不做拼接是刻意的：拼接规则会随模块演进，
+        放在前端可以让「同一个标的在哪一页显示成同一个名字」由一处代码保证。
+      properties:
+        id: { type: integer }
+        companyId: { type: integer }
+        companyName: { type: string }
+        targetType: { type: string, enum: [project, zone, asset] }
+        targetId: { type: integer }
+        targetName: { type: string, nullable: true }
+        projectName: { type: string, nullable: true }
+        zoneName: { type: string, nullable: true }
+        floorNo: { type: integer, nullable: true }
+        assetNo: { type: string, nullable: true }
+        mortgagee: { type: string, nullable: true }
+        amount: { type: number }
+        interestRate: { type: number, nullable: true }
+        bank: { type: string, nullable: true }
+        repaymentDate: { type: string, format: date, nullable: true }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        termMonths: { type: integer }
+        contractNo: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [draft, active, released]
+          description: draft 不计入在押；active 才拦截处置 / 流转 / 调拨
+        releaseStatus:
+          type: string
+          nullable: true
+          description: 复用既有解押审批流程的状态
+        releaseRemark: { type: string, nullable: true }
+        releasedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        attachments:
+          type: array
+          nullable: true
+          description: 仅详情返回
+          items:
+            type: object
+            properties:
+              fileId: { type: integer }
+              sort: { type: integer }
+              fileName: { type: string }
+              url: { type: string }
+
+    MortgageTargetOption:
+      type: object
+      description: >-
+        标的选题项。三种 targetType 共用同一结构：服务端只回名称原料，
+        由前端按 targetType 决定怎么拼（项目用 name、分区用 projectName + name、
+        资产复用资产文案），避免服务端与前端各拼一份而出现两种口径。
+      properties:
+        targetId: { type: integer }
+        name: { type: string, nullable: true }
+        projectName: { type: string, nullable: true }
+        zoneName: { type: string, nullable: true }
+        floorNo: { type: integer, nullable: true }
+        assetNo: { type: string, nullable: true }
 
     LoginRequest:
       type: object

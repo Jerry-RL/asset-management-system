@@ -44,6 +44,9 @@ export const STANDALONE_ROUTES: string[] = [
   '/ownership-transfers',
   // 资产调拨记录（V55）：同样是多资产远程选择 + 附件 + 三个级联下拉，走独立页
   '/asset-transfer-records',
+  // 抵押记录（V56）：标的类型（项目 / 分区 / 资产）决定候选查询与展示拼接，
+  // 且金额 / 利率 / 期限 / 合同号超出 ResourcePage 的表达能力，走独立页
+  '/mortgages',
 ];
 
 export interface RouteMeta {

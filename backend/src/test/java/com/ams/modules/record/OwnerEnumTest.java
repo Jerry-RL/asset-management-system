@@ -63,5 +63,8 @@ class OwnerEnumTest {
         assertThat(AttachmentOwner.ASSET_TRANSFER_RECORD.code())
                 .isEqualTo("asset_transfer_record");
         assertThat(AttachmentOwner.ASSET_TRANSFER_RECORD.bizType()).isEqualTo("alloc_attach");
+        // V56 抵押记录：标的可能是项目 / 分区 / 资产，宿主码与 bizType 同样不能与既有撞车
+        assertThat(AttachmentOwner.MORTGAGE.code()).isEqualTo("mortgage");
+        assertThat(AttachmentOwner.MORTGAGE.bizType()).isEqualTo("mortgage_attach");
     }
 }

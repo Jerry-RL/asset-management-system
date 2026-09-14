@@ -3,6 +3,7 @@ package com.ams;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import com.ams.modules.asset.mapper.MortgageMapper;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -252,8 +253,10 @@ class MigrationChainPostgresTest {
         assertThat(versions)
                 .as("V51 加 success/error 两列与菜单，V52 加按对象查询的索引；"
                         + "V54 加权属流转两表与 asset.ownership_status；"
+                        + "V55 加资产调拨记录两表与它的菜单；"
+                        + "V56 把 mortgage 扩成项目 / 分区 / 资产三级标的；"
                         + "迁移文件躺在仓库里而从未被执行过，是本仓长期存在的状态，这里把它钉住")
-                .contains("51", "52", "54");
+                .contains("51", "52", "54", "55", "56");
     }
 
     // ------------------------------------------------------------------
@@ -503,5 +506,266 @@ class MigrationChainPostgresTest {
                 .isNotEmpty()
                 .allSatisfy(row -> assertThat(row).endsWith(":view"))
                 .allSatisfy(row -> assertThat(row).doesNotStartWith("super_admin:"));
+    }
+
+    // ------------------------------------------------------------------
+    // 5. V55：资产调拨记录在真库上的落库结果
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("V55：asset_transfer_record 的必填 / 可空列与设计一致")
+    void createsAssetTransferRecordTable() {
+        assertThat(columnType("asset_transfer_record", "company_id"))
+                .as("所属公司必填：资产下拉与校验都按它过滤，NULL 会让「选了公司」变成什么都没筛")
+                .startsWith("bigint|NO|");
+        assertThat(columnType("asset_transfer_record", "from_department_id"))
+                .as("前责任部门必须可空：一张单可以挂来自不同部门的资产")
+                .startsWith("bigint|YES|");
+        assertThat(columnType("asset_transfer_record", "to_department_id"))
+                .startsWith("bigint|NO|");
+        assertThat(columnType("asset_transfer_record", "to_user_id")).startsWith("bigint|NO|");
+        assertThat(columnType("asset_transfer_record", "status"))
+                .as("status 是带默认值 draft 的 NOT NULL：没有默认值时服务端不传就会插成 NULL，"
+                        + "而列表页按状态筛选会把这条整个漏掉")
+                .startsWith("character varying|NO|");
+        assertThat(columnType("asset_transfer_record", "approval_deadline"))
+                .as("审批截止时间本期只是留痕，必须可空 —— 不是所有调拨都有截止时间")
+                .startsWith("timestamp with time zone|YES|");
+    }
+
+    @Test
+    @DisplayName("V55：同一张单重复挂同一资产会被唯一索引拒绝")
+    void rejectsDuplicateAssetInSameTransferRecord() {
+        execute("INSERT INTO asset_transfer_record (company_id, to_department_id, to_user_id)"
+                + " VALUES (2, 11, 21)");
+        long recordId = queryLong(
+                "SELECT id FROM asset_transfer_record ORDER BY id DESC LIMIT 1");
+
+        execute("INSERT INTO asset_transfer_record_asset (record_id, asset_id) VALUES ("
+                + recordId + ", 9501)");
+
+        try {
+            execute("INSERT INTO asset_transfer_record_asset (record_id, asset_id) VALUES ("
+                    + recordId + ", 9501)");
+            fail("唯一索引 uk_asset_transfer_record_asset 未生效：同一张单可以把同一个资产挂两次");
+        } catch (AssertionError expected) {
+            assertThat(expected.getCause())
+                    .as("必须是唯一约束冲突，而不是别的 SQL 错误")
+                    .isInstanceOf(java.sql.SQLException.class);
+        }
+    }
+
+    @Test
+    @DisplayName("V55：菜单挂在 deed 目录下、path 与前端镜像逐字一致，view 只回填给非超管")
+    void seedsTransferRecordMenu() {
+        assertThat(queryString("SELECT path FROM menu WHERE code = 'deed.transferRecord'"))
+                .as("path 与前端 PATH_TO_CODE['/asset-transfer-records'] 必须逐字一致，"
+                        + "否则点菜单会落回首页")
+                .isEqualTo("/asset-transfer-records");
+
+        long deedId = queryLong("SELECT id FROM menu WHERE code = 'deed'");
+        assertThat(deedId)
+                .as("父目录 deed 必须存在（V53 把它的显示名改成了「资债权证记录」，但 code 不变），"
+                        + "否则按 code 解析 parent_id 会得到 NULL，菜单挂不上树")
+                .isPositive();
+        assertThat(queryString("SELECT parent_id FROM menu WHERE code = 'deed.transferRecord'"))
+                .as("菜单必须挂在 deed 目录下")
+                .isEqualTo(String.valueOf(deedId));
+
+        assertThat(queryString("SELECT name FROM menu WHERE code = 'deed.transferRecord'"))
+                .isEqualTo("资产调拨记录");
+
+        List<String> rows = queryStrings(
+                "SELECT r.code || ':' || rp.action"
+                        + " FROM role_permission rp JOIN role r ON r.id = rp.role_id"
+                        + " WHERE rp.menu_code = 'deed.transferRecord'"
+                        + " ORDER BY r.code, rp.action");
+        assertThat(rows)
+                .as("只允许 view 且不含 super_admin（它由 PermissionRegistry 特判全通）")
+                .isNotEmpty()
+                .allSatisfy(row -> assertThat(row).endsWith(":view"))
+                .allSatisfy(row -> assertThat(row).doesNotStartWith("super_admin:"));
+    }
+
+    // ------------------------------------------------------------------
+    // 6. V56：抵押记录的标的扩展在真库上的落库结果
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("V56：mortgage 的标的列约束正确 —— target_type 有默认值，asset_id 放开，company_id 仍可空")
+    void extendsMortgageTargetColumns() {
+        assertThat(columnType("mortgage", "target_type"))
+                .as("target_type 必须 NOT NULL 且有默认值 asset：存量行（只有 asset_id）"
+                        + "不会被升级成 NULL，而 NULL 类型的记录在三级在押校验里一条都命中不了")
+                .startsWith("character varying|NO|");
+        assertThat(queryString("SELECT column_default FROM information_schema.columns"
+                        + " WHERE table_name = 'mortgage' AND column_name = 'target_type'"))
+                .as("默认值必须是字面量 asset")
+                .contains("asset");
+
+        assertThat(columnType("mortgage", "target_id"))
+                .as("target_id 必须 NOT NULL：没有标的的抵押记录会静默拦不住任何人，且无法排查")
+                .startsWith("bigint|NO|");
+
+        assertThat(columnType("mortgage", "asset_id"))
+                .as("asset_id 必须放开 NOT NULL：项目 / 分区抵押没有资产 id")
+                .startsWith("bigint|YES|");
+
+        assertThat(columnType("mortgage", "company_id"))
+                .as("company_id 刻意可空：asset.asset_company_id 本身可空，NOT NULL 会让迁移"
+                        + "在某些数据集上于上线时刻直接失败")
+                .startsWith("bigint|YES|");
+
+        assertThat(columnType("mortgage", "interest_rate"))
+                .as("利率是 NUMERIC(8,4)：百分数 + 4 位小数")
+                .isEqualTo("numeric|YES|");
+        assertThat(queryString("SELECT numeric_precision || ',' || numeric_scale"
+                        + " FROM information_schema.columns"
+                        + " WHERE table_name = 'mortgage' AND column_name = 'interest_rate'"))
+                .isEqualTo("8,4");
+
+        assertThat(columnType("mortgage", "deleted_at"))
+                .as("deleted_at 可空：只有草稿会被软删")
+                .startsWith("timestamp with time zone|YES|");
+    }
+
+    @Test
+    @DisplayName("V56：只写 asset_id 不写 target_id 会被 NOT NULL 挡下 —— 杜绝「看起来在押、其实不拦」")
+    void mortgageRequiresTargetId() {
+        try {
+            execute("INSERT INTO mortgage (asset_id, mortgagee, status) VALUES (9501, '某银行', 'draft')");
+            fail("target_id 允许 NULL：这条记录在三级在押校验里一条都命中不了，"
+                    + "表现为「抵押列表里有、处置时却不拦」");
+        } catch (AssertionError expected) {
+            assertThat(expected.getCause())
+                    .as("必须是 NOT NULL 违约，而不是别的 SQL 错误")
+                    .isInstanceOf(java.sql.SQLException.class);
+        }
+    }
+
+    @Test
+    @DisplayName("V56：抵押合同编号部分唯一索引只约束「已填写且未软删」，空编号允许重复")
+    void contractNoUniqueIndexIsPartial() {
+        execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status, contract_no)"
+                + " VALUES ('project', 7001, '某银行', 'draft', 'DY-TEST-0001')");
+
+        try {
+            execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status, contract_no)"
+                    + " VALUES ('asset', 9501, '另一银行', 'draft', 'DY-TEST-0001')");
+            fail("uk_mortgage_contract_no 未生效：同一份合同编号可以被两条记录占用，"
+                    + "而合同编号是人工对账的唯一线索");
+        } catch (AssertionError expected) {
+            assertThat(expected.getCause()).isInstanceOf(java.sql.SQLException.class);
+        }
+
+        // 空编号必须允许多行：草稿阶段绝大多数记录还没拿到合同号，
+        // 若索引不是 partial，第二条空编号的草稿就会被拒
+        execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status, contract_no)"
+                + " VALUES ('project', 7002, '甲银行', 'draft', NULL)");
+        execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status, contract_no)"
+                + " VALUES ('project', 7003, '乙银行', 'draft', NULL)");
+        assertThat(queryLong("SELECT count(*) FROM mortgage WHERE contract_no IS NULL"))
+                .as("两条空编号草稿都必须插入成功")
+                .isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("V56：项目级抵押必须覆盖其下资产 —— 这是本模块存在的理由")
+    void projectMortgageCoversAssets() {
+        // 项目 7801 → 分区 A(7802) / B(7804) → 各一个资产（7803 / 7805）
+        execute("INSERT INTO project (id, company_id, name) VALUES (7801, 2, '抵押测试项目')");
+        execute("INSERT INTO project_zone (id, project_id, name) VALUES (7802, 7801, 'A区')");
+        execute("INSERT INTO project_zone (id, project_id, name) VALUES (7804, 7801, 'B区')");
+        execute("INSERT INTO asset (id, project_id, zone_id, asset_no, name, asset_type,"
+                + " asset_company_id, lease_control_status)"
+                + " VALUES (7803, 7801, 7802, 'MORT-TEST-1', '抵押测试资产A', 'property', 2, 'vacant')");
+        execute("INSERT INTO asset (id, project_id, zone_id, asset_no, name, asset_type,"
+                + " asset_company_id, lease_control_status)"
+                + " VALUES (7805, 7801, 7804, 'MORT-TEST-2', '抵押测试资产B', 'property', 2, 'vacant')");
+
+        // 草稿不算在押：否则「先起草抵押、再补材料」会把项目下所有资产冻结
+        execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status)"
+                + " VALUES ('asset', 7803, '某银行', 'draft')");
+        assertThat(coveringCount(7803)).as("草稿不得算作在押").isZero();
+
+        // 资产级在押：只覆盖它自己，同项目的兄弟资产不受影响
+        execute("UPDATE mortgage SET status = 'active' WHERE target_id = 7803 AND target_type = 'asset'");
+        assertThat(coveringCount(7803)).as("资产级在押必须覆盖自身").isEqualTo(1);
+        assertThat(coveringCount(7805)).as("资产级抵押不得波及同项目的其它资产").isZero();
+
+        // 分区级在押：覆盖本分区资产，不覆盖其它分区
+        execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status)"
+                + " VALUES ('zone', 7802, '某银行', 'active')");
+        assertThat(coveringCount(7803)).as("分区级在押也必须算在资产头上").isEqualTo(2);
+        assertThat(coveringCount(7805)).as("分区级抵押不得波及别的分区").isZero();
+
+        // 项目级在押：整个项目下的资产都算
+        execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status)"
+                + " VALUES ('project', 7801, '某银行', 'active')");
+        assertThat(coveringCount(7805)).as("项目级在押必须覆盖它下面的资产").isEqualTo(1);
+
+        // 软删的行不算：删掉项目级那条后，B区资产重新变成未抵押
+        execute("UPDATE mortgage SET deleted_at = now()"
+                + " WHERE target_type = 'project' AND target_id = 7801");
+        assertThat(coveringCount(7805)).as("软删的抵押不得继续拦截业务").isZero();
+    }
+
+    @Test
+    @DisplayName("V56：解押一张抵押后，仍被另一张覆盖的资产必须保持「在押」（不能按方向直接赋值）")
+    void refreshCertStatusRecomputesPerAsset() {
+        execute("INSERT INTO project (id, company_id, name) VALUES (7901, 2, '重算测试项目')");
+        execute("INSERT INTO asset (id, project_id, asset_no, name, asset_type, asset_company_id,"
+                + " lease_control_status) VALUES (7903, 7901, 'MORT-TEST-3', '重算测试资产',"
+                + " 'property', 2, 'vacant')");
+        execute("INSERT INTO asset_certificate (asset_id, cert_no, mortgage_status)"
+                + " VALUES (7903, 'CERT-MORT-1', 'none')");
+
+        // 项目级 + 资产级两张在押，都覆盖 7903
+        execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status)"
+                + " VALUES ('project', 7901, '甲银行', 'active')");
+        execute("INSERT INTO mortgage (target_type, target_id, mortgagee, status)"
+                + " VALUES ('asset', 7903, '乙银行', 'active')");
+
+        execute(MortgageMapper.REFRESH_CERT_SQL
+                .replace("#{targetType}", "'project'").replace("#{targetId}", "7901"));
+        assertThat(queryString("SELECT mortgage_status FROM asset_certificate WHERE asset_id = 7903"))
+                .as("两张在押覆盖时权证状态应为「在押」")
+                .isEqualTo("mortgaged");
+
+        // 解掉资产级那一张，但项目级那张仍在 —— 权证状态必须保持 mortgaged
+        execute("UPDATE mortgage SET status = 'released' WHERE target_type = 'asset' AND target_id = 7903");
+        execute(MortgageMapper.REFRESH_CERT_SQL
+                .replace("#{targetType}", "'asset'").replace("#{targetId}", "7903"));
+        assertThat(queryString("SELECT mortgage_status FROM asset_certificate WHERE asset_id = 7903"))
+                .as("还有一张在押覆盖着它，权证状态不能被改成「无抵押」——"
+                        + "这正是「按变更方向直接赋值」会写错的地方")
+                .isEqualTo("mortgaged");
+
+        // 两张都解掉，才回到「无抵押」
+        execute("UPDATE mortgage SET status = 'released' WHERE target_type = 'project' AND target_id = 7901");
+        execute(MortgageMapper.REFRESH_CERT_SQL
+                .replace("#{targetType}", "'project'").replace("#{targetId}", "7901"));
+        assertThat(queryString("SELECT mortgage_status FROM asset_certificate WHERE asset_id = 7903"))
+                .isEqualTo("none");
+    }
+
+    /** 直接执行 Mapper 里那条 SQL，而不是在测试里重写一遍（重写会漂移）。 */
+    private long coveringCount(long assetId) {
+        return queryLong(MortgageMapper.COUNT_ACTIVE_COVERING_SQL
+                .replace("#{assetId}", String.valueOf(assetId)));
+    }
+
+    @Test
+    @DisplayName("V56：抵押记录菜单改名，但 code 与 path 不变（path 变了会让既有书签落回首页）")
+    void renamesMortgageMenu() {
+        assertThat(queryString("SELECT name FROM menu WHERE code = 'deed.mortgage'"))
+                .as("页面已从只读列表升级为完整模块，名字要跟上")
+                .isEqualTo("抵押记录");
+        assertThat(queryString("SELECT path FROM menu WHERE code = 'deed.mortgage'"))
+                .as("path 与前端 PATH_TO_CODE['/mortgages'] 必须逐字一致")
+                .isEqualTo("/mortgages");
+        assertThat(queryString("SELECT parent_id FROM menu WHERE code = 'deed.mortgage'"))
+                .as("菜单必须仍挂在 deed 目录下（V53 改过它的显示名，但 code 不变）")
+                .isEqualTo(String.valueOf(queryLong("SELECT id FROM menu WHERE code = 'deed'")));
     }
 }

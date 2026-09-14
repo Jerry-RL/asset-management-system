@@ -997,16 +997,44 @@ public class DemoDataSeeder implements ApplicationRunner {
         certificateMapper.insert(c);
     }
 
+    /**
+     * 资产级抵押记录。
+     *
+     * <p>{@code target_type} / {@code target_id} 必须与 {@code asset_id} 一起写：
+     * V56 起在押校验按 (target_type, target_id) 判定，只写 {@code asset_id} 的种子数据
+     * 会让这个资产在界面上显示「在押」，但处置 / 流转时又不被拦住。
+     */
     private void mortgage(Long assetId, String mortgagee, String amount, LocalDate start,
             LocalDate end, String status) {
         Mortgage m = new Mortgage();
+        m.setTargetType(Mortgage.TARGET_ASSET);
+        m.setTargetId(assetId);
         m.setAssetId(assetId);
+        m.setCompanyId(companyIdOfAsset(assetId));
         m.setMortgagee(mortgagee);
         m.setAmount(new BigDecimal(amount));
+        m.setBank("江苏银行淮安分行");
+        m.setInterestRate(new BigDecimal("4.3500"));
+        m.setContractNo("DY-2026-0001");
         m.setStartDate(start);
         m.setEndDate(end);
+        m.setRepaymentDate(end);
+        m.setTermMonths(monthsBetween(start, end));
         m.setStatus(status);
         mortgageMapper.insert(m);
+    }
+
+    private Long companyIdOfAsset(Long assetId) {
+        Asset asset = assetMapper.selectById(assetId);
+        return asset == null ? null : asset.getAssetCompanyId();
+    }
+
+    /** 期限（月）：由起止日推出，保证 end_date 与 term_months 在种子数据里也是自洽的。 */
+    private Integer monthsBetween(LocalDate start, LocalDate end) {
+        if (start == null || end == null) {
+            return null;
+        }
+        return (int) java.time.temporal.ChronoUnit.MONTHS.between(start, end);
     }
 
     private Tenant tenant(String name, String phone, String type, boolean blacklist, int credit) {

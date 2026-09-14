@@ -26,6 +26,8 @@ import { OwnershipTransfersPage } from '@/pages/OwnershipTransfersPage';
 import { OwnershipTransferFormPage } from '@/pages/OwnershipTransferFormPage';
 import { AssetTransferRecordsPage } from '@/pages/AssetTransferRecordsPage';
 import { AssetTransferRecordFormPage } from '@/pages/AssetTransferRecordFormPage';
+import { MortgagesPage } from '@/pages/MortgagesPage';
+import { MortgageFormPage } from '@/pages/MortgageFormPage';
 import { ProjectFormPage } from '@/pages/ProjectFormPage';
 import ProjectDetailPage from '@/pages/ProjectDetailPage';
 import { ProjectZonesPage } from '@/pages/ProjectZonesPage';
@@ -89,6 +91,10 @@ export default function App() {
                 path="asset-transfer-records/:id/edit"
                 element={<AssetTransferRecordFormPage />}
               />
+              {/* 抵押记录（V56）：标的类型（项目 / 分区 / 资产）三级联动 + 金额 / 利率 / 期限 */}
+              <Route path="mortgages" element={<MortgagesPage />} />
+              <Route path="mortgages/new" element={<MortgageFormPage />} />
+              <Route path="mortgages/:id/edit" element={<MortgageFormPage />} />
               {/* 菜单管理：专用页面（树 + 抽屉 + 校验），不再走 ResourcePage */}
               <Route path="system/menus" element={<SystemMenuPage />} />
               <Route path="system/roles" element={<SystemRolePage />} />

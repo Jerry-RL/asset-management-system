@@ -39,10 +39,9 @@ public class CertificateController {
         return ApiResponse.ok(certificateService.listCertificates(null), TraceIdUtil.get());
     }
 
-    @GetMapping("/mortgages")
-    public ApiResponse<List<Mortgage>> allMortgages() {
-        return ApiResponse.ok(certificateService.listMortgages(null), TraceIdUtil.get());
-    }
+    // 全量抵押列表（旧 GET /mortgages，无分页）已删除：该路径归 MortgageController 的
+    // 抵押记录分页列表（V56）。保留一个「一次拖回全表」的入口，正是本模块要修掉的问题。
+    // 按资产列抵押仍走下面的 /assets/{assetId}/mortgages。
 
     @GetMapping("/assets/{assetId}/certificates")
     public ApiResponse<List<AssetCertificate>> certificates(@PathVariable Long assetId) {

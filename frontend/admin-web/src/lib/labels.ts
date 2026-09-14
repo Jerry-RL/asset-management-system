@@ -252,6 +252,9 @@ export const METER_TYPE: Record<string, string> = {
 };
 
 export const MORTGAGE_STATUS: Record<string, string> = {
+  // V56 起：草稿不计入在押（后端 hasActiveMortgage 按 status = 'active' 过滤），
+  // 所以这里必须能显示草稿，否则列表里会出现一片空白状态
+  draft: '草稿',
   active: '在押',
   released: '已解押',
 };

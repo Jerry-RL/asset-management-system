@@ -38,7 +38,16 @@ public enum AttachmentOwner {
      * <p>{@code bizType} 与 {@link #OWNERSHIP_TRANSFER} **不复用**：它是「属于哪个字段」，
      * 两个模块的附件是两个不同的字段，共用会让附件列表页无法按模块区分。
      */
-    ASSET_TRANSFER_RECORD("asset_transfer_record", "alloc_attach");
+    ASSET_TRANSFER_RECORD("asset_transfer_record", "alloc_attach"),
+    /**
+     * 抵押记录主单（V56）：标的可能是项目 / 分区 / 资产，
+     * 附件的读写权限跟**单据**走（`deed.mortgage:view` / `:update`）——
+     * 三者的权限判定路径完全不同，跟标的走会让「谁能看这份抵押合同」取决于标的类型。
+     *
+     * <p>{@code bizType} 不复用既有任何一个：抵押合同是独立的一份材料，
+     * 与权属流转 / 调拨的附件不是同一个字段。
+     */
+    MORTGAGE("mortgage", "mortgage_attach");
 
     private final String code;
     private final String bizType;

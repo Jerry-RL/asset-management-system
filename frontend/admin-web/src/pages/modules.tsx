@@ -75,7 +75,7 @@ export const MENU: MenuGroup[] = [
     title: '资债权证记录',
     items: [
       { path: '/certificates', title: '权证信息' },
-      { path: '/mortgages', title: '抵押列表' },
+      { path: '/mortgages', title: '抵押记录' },
       { path: '/asset-transfers', title: '资产调拨' },
       { path: '/evaluations', title: '评估申请' },
       { path: '/ownership-transfers', title: '权属流转' },
@@ -1557,19 +1557,6 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: 'bizId', label: '业务单ID' },
       { key: 'status', label: '状态', map: { pending: '待推送', pushed: '已推送' } },
       { key: 'pushedAt', label: '推送时间' },
-    ],
-  },
-  mortgages: {
-    title: '抵押列表',
-    listPath: '/mortgages',
-    columns: [
-      { key: 'assetId', label: '资产ID' },
-      { key: 'mortgagee', label: '抵押权人' },
-      { key: 'amount', label: '抵押金额' },
-      { key: 'startDate', label: '起' },
-      { key: 'endDate', label: '止' },
-      { key: 'status', label: '状态', map: L.MORTGAGE_STATUS },
-      { key: 'releaseStatus', label: '解押审批' },
     ],
   },
   'assets/structure-logs': {
