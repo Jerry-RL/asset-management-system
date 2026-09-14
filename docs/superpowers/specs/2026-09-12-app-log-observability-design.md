@@ -496,9 +496,12 @@ public ResponseEntity<ApiResponse<Void>> handleOther(Exception ex) {
 1. `menu` 插一行：
    - `code='system.appLog'`、`name='应用日志'`、`menu_type='menu'`、`path='/system/app-logs'`、`icon=NULL`；
    - 父目录按 **`code='system'` 解析**，不硬编码 `parent_id`（对齐 `V47__project_zone_menu.sql` 口径）；
-   - `sort` 排在 `system.dict` 之后；
+   - `sort=40`（`system.role`=10 / `system.menu`=20 / `system.dict`=30 之后）；
    - `ON CONFLICT (code) DO NOTHING`。
-2. `role_permission` 回填 `view`：`ON CONFLICT DO NOTHING`，**显式排除 `super_admin`**，且**不回填 `delete`**（对齐 V45/V47 口径：动作级回填是上线前置人工步骤，误回填的宽权限是静默的）。
+2. `role_permission` 回填 `view`，`ON CONFLICT DO NOTHING`，且**只授给 `operator` 角色**（连同 `super_admin` 走 `isSuperAdmin()` 旁路，无需数据行）。
+
+   > **为什么不像 `V47` 那样对所有非超管角色回填**：`V45` §5.2 明确把 `system.*` 归为**敏感菜单**，只授予运维/管理员角色（`operator`），「不向业务角色敞开」。`V47` 回填的是 `asset.projectZone`（业务导航类），口径不同。应用日志含端侧 URL、UA、用户自报 ID、异常堆栈，属运维数据，按敏感菜单处理。
+3. **不回填任何写动作**（尤其 `delete`）—— 对齐 V45 §5.3：动作级回填是上线前置人工步骤，误回填的宽权限是静默的且会长期留在库里。`system.appLog:delete`（手动清理）由 `super_admin` 在角色权限页显式下发。
 
 ### 11.2 `PermissionRegistry` 的启动断言
 
@@ -524,6 +527,16 @@ public ResponseEntity<ApiResponse<Void>> handleOther(Exception ex) {
 
 > **类级 + 方法级覆盖**：`PermissionRegistry.collect` 同时扫描类级与方法级注解（`getAllDeclaredMethods`），并在 `purge` 上按方法级注解生效。这是项目既有模式。
 
+> **`AppLogAlertService` 的装配陷阱（实质是应用起不来）**：该类有<em>两个</em>构造器
+> （生产用的 2 参 + 测试注入时钟的 3 参），而 Java 一旦存在多个构造器，Spring 就**不再**
+> 自动选择「那个唯一的构造器」，而是回去找无参构造器并以
+> `Failed to instantiate ...: No default constructor found` 让整个上下文启动失败。
+> 因此生产构造器必须显式标 `@Autowired`。
+>
+> 同理，它**不能**直接注入 `ObservabilityProperties.Alert`：`@ConfigurationPropertiesScan`
+> 只注册顶层类，嵌套 record 不是 bean。注入 `ObservabilityProperties` 本体再取 `alert()`，
+> 与 `AppLogPurgeJob` 的写法保持一致。
+
 ### 11.4 前端五处必改（否则 `pnpm check:perm` 直接失败）
 
 | 文件 | 改动 |
@@ -533,6 +546,23 @@ public ResponseEntity<ApiResponse<Void>> handleOther(Exception ex) {
 | `frontend/admin-web/src/lib/pathToCode.ts` | 加 `'/system/app-logs': 'system.appLog'`（必须与 DB 菜单一致，否则 `checkCodeMappingDrift` 告警） |
 | `frontend/admin-web/src/pages/modules.tsx` | 静态 `MENU` 的「系统管理」组加 `{ path: '/system/app-logs', title: '应用日志' }` |
 | `frontend/admin-web/src/lib/menuIcons.tsx` | `PATH_ICONS['/system/app-logs']`（如 `<FileSearchOutlined />`） |
+
+### 11.5 实现补充（与 §11.4 的差异，均为落地时必须补齐的部分）
+
+§11.4 只列了「漏改就会让 `pnpm check:perm` 失败」的 5 处；实际落地还需要以下文件，
+它们漏改**不会**被现有门禁发现，因此一并登记：
+
+| 文件 | 用途 | 漏改的症状（静默） |
+|------|------|--------------------|
+| `admin-web/src/lib/log.ts`、`h5-tenant/src/lib/log.ts`、`h5-worker/src/lib/log.ts` | 各端 SDK 单例（`api.ts` 与 `main.tsx` 共用同一个实例，否则去重表有两份） | 同一错误按两条路径各报一次，客户端去重失效 |
+| `miniprogram-*/utils/config.js` | `BASE_URL` 唯一来源（`api.js` 与 `logger.js` 共用） | 上报打到另一个环境，且不报错 |
+| `miniprogram-*/utils/logger.js` | 小程序 SDK 单例（绝对地址 + `appType`） | 端侧日志整体缺失 |
+| `scripts/check-mp-log-sdk.mjs` + `pnpm check:mp-sdk` / `sync:mp-sdk` | 产物一致性 + 五端接线守卫（§17 R3 的落点） | 小程序跑的是一直没更新的旧 SDK，表现为「新采集项没数据」而不是报错 |
+
+> **小程序 SDK 的同步方式**：`dist/` 被 `.gitignore` 忽略，仓库里被提交的 SDK 代码就是
+> 两端 `utils/log-sdk.js` 那两份拷贝 —— 因此「改了 `packages/log-sdk/src` 但忘了重新拷贝」
+> 在 CI 上是完全不可见的。`pnpm check:mp-sdk` 会先构建产物再逐字节比对两份拷贝，
+> `pnpm sync:mp-sdk` 则构建 + 覆盖拷贝（本会话已用「故意写坏一份拷贝」验证过守卫会失败）。
 
 ---
 
@@ -582,7 +612,7 @@ ams:
 | 1 | 迁移 `V48` 随应用启动执行 | 无需手工步骤；`menu` 与 `role_permission` 一并落库 |
 | 2 | 小程序「服务器域名」含 API 域名 | 与现有请求同域，通常无需新增；上线前确认 |
 | 3 | 反代场景需启用 `server.forward-headers-strategy=framework` | 否则限流会按代理 IP 汇总（§7.4）。本期不实现 XFF 解析 |
-| 4 | 角色权限：给需要的角色勾 `system.appLog:view` | 迁移只回填 `view`，`delete` 需人工授予 |
+| 4 | 角色权限：给需要的角色勾 `system.appLog:view`；`delete` 需显式授予 | 迁移只为 `operator` 回填 `view`（敏感菜单口径，V45 §5.2）；`super_admin` 走旁路 |
 | 5 | 告警：`AMS_LOG_ALERT_ENABLED=true` + `AMS_LOG_WEBHOOK_URL` | 未配置时启动会 `log.warn` |
 
 ---
@@ -710,7 +740,7 @@ ams:
 4. 日志系统故障（表不可写）时，业务接口的响应与状态码**不受任何影响**（`GlobalExceptionHandlerLogTest` 回归）。
 5. ERROR 达阈值推送 Webhook；同 `fingerprint` 在冷却期内只推一次。
 6. `retention-days` 到期的记录被定时任务清理；未到期的不被删。
-7. 只有 `system.appLog:view` 的角色能看到列表与链路抽屉，看不到清理入口且直接调 `purge` 得 403；迁移为除 `super_admin` 外所有角色回填 `view`。
+7. 只有 `system.appLog:view` 的角色能看到列表与链路抽屉，看不到清理入口且直接调 `purge` 得 403；迁移只为 `operator` 角色回填 `view`（`super_admin` 走旁路），业务角色须由管理员显式授予。
 8. 查询页的筛选/分页进 URL：抽屉返回、刷新、分享链接都能还原。
 9. 非法入参（appType / source / level）返回 400 且不落库；超限返回 413 / 429。
 10. 畸形 JSON 返回 **400**（不再是 500）且**不产生** `app_log` 行、**不触发**告警（§7.2.1）。

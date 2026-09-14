@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ams.common.exception.GlobalExceptionHandler;
+import com.ams.platform.observability.service.AppLogRecorder;
 import com.ams.modules.disposal.controller.DisposalController;
 import com.ams.modules.disposal.entity.DisposalOrder;
 import com.ams.modules.disposal.service.DisposalService;
@@ -139,7 +140,7 @@ class DisposalPermissionTest {
     private MockMvc mvc() {
         return MockMvcBuilders.standaloneSetup(controller)
                 .addInterceptors(new PermissionInterceptor(rbacService, false))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(mock(AppLogRecorder.class)))
                 .build();
     }
 }

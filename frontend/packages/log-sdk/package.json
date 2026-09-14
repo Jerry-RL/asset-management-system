@@ -1,0 +1,17 @@
+{
+  "name": "@ams/log-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "应用日志端侧 SDK：采集 JS 运行时错误 / Promise 未捕获 / API 失败，上报到 /api/v1/public/app-logs",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build:mp": "node scripts/build-mp.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node scripts/build-mp.mjs && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

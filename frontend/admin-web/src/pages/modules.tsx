@@ -197,6 +197,7 @@ export const MENU: MenuGroup[] = [
       { path: '/system/roles', title: '角色权限' },
       { path: '/system/menus', title: '菜单管理' },
       { path: '/system/dict', title: '系统字典' },
+      { path: '/system/app-logs', title: '应用日志' },
     ],
   },
   {

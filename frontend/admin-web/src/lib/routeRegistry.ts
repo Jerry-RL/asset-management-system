@@ -37,6 +37,7 @@ export const STANDALONE_ROUTES: string[] = [
   '/system/dict',
   '/system/menus',
   '/system/roles',
+  '/system/app-logs',
   '/org/structure',
   // 权属流转：多资产远程选择 + 附件，字段类型超出 ResourcePage 的表达能力，走独立页
   '/ownership-transfers',

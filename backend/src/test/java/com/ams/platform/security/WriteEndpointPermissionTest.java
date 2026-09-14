@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ams.common.exception.GlobalExceptionHandler;
+import com.ams.platform.observability.service.AppLogRecorder;
 import com.ams.modules.billing.controller.BillingController;
 import com.ams.modules.billing.entity.Bill;
 import com.ams.modules.billing.entity.Payment;
@@ -289,7 +290,7 @@ class WriteEndpointPermissionTest {
     private MockMvc mvc(Object controller) {
         return MockMvcBuilders.standaloneSetup(controller)
                 .addInterceptors(new PermissionInterceptor(rbacService, false))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(mock(AppLogRecorder.class)))
                 .build();
     }
 

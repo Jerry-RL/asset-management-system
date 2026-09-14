@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ams.common.exception.GlobalExceptionHandler;
+import com.ams.platform.observability.service.AppLogRecorder;
 import com.ams.modules.record.RecordOwnerType;
 import com.ams.modules.record.dto.RecordSheetRequest;
 import com.ams.modules.record.dto.RecordSheetView;
@@ -172,7 +173,7 @@ class RecordSheetEndpointPermissionTest {
     private MockMvc mvc() {
         return MockMvcBuilders.standaloneSetup(controller)
                 .addInterceptors(new PermissionInterceptor(rbacService, false))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(mock(AppLogRecorder.class)))
                 .build();
     }
 }

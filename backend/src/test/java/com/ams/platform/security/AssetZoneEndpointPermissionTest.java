@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ams.common.exception.GlobalExceptionHandler;
+import com.ams.platform.observability.service.AppLogRecorder;
 import com.ams.modules.asset.controller.AssetController;
 import com.ams.modules.asset.entity.ProjectZone;
 import com.ams.modules.asset.service.AssetDossierService;
@@ -186,7 +187,7 @@ class AssetZoneEndpointPermissionTest {
     private MockMvc mvc() {
         return MockMvcBuilders.standaloneSetup(controller)
                 .addInterceptors(new PermissionInterceptor(rbacService, false))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(mock(AppLogRecorder.class)))
                 .build();
     }
 }

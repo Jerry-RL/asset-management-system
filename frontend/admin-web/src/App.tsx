@@ -20,6 +20,7 @@ import { SystemDictionaryPage } from '@/pages/SystemDictionaryPage';
 import { SystemMenuPage } from '@/pages/SystemMenuPage';
 import { SystemRolePage } from '@/pages/SystemRolePage';
 import { OrgStructurePage } from '@/pages/OrgStructurePage';
+import { AppLogPage } from '@/pages/AppLogPage';
 import { OwnershipTransfersPage } from '@/pages/OwnershipTransfersPage';
 import { OwnershipTransferFormPage } from '@/pages/OwnershipTransferFormPage';
 import { ProjectFormPage } from '@/pages/ProjectFormPage';
@@ -70,6 +71,8 @@ export default function App() {
               <Route path="contract-templates" element={<ContractTemplatesPage />} />
               <Route path="contracts/:contractId" element={<ContractDetailPage />} />
               <Route path="system/dict" element={<SystemDictionaryPage />} />
+              {/* 应用日志：排查页（统计 + 筛选 + 详情抽屉 + 链路抽屉 + 手动清理） */}
+              <Route path="system/app-logs" element={<AppLogPage />} />
               {/* 权属流转：多资产改产权公司。列表 + 独立表单页（新建 / 编辑草稿同页） */}
               <Route path="ownership-transfers" element={<OwnershipTransfersPage />} />
               <Route path="ownership-transfers/new" element={<OwnershipTransferFormPage />} />
