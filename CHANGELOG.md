@@ -11,8 +11,8 @@
   - 后端 `AssetUnitService.merge`（**新增能力**）：把同一资产下多个空置单元合并为一个；保留排序最靠前的单元、其余软删，面积与底价**相加**；前置按**占用表**判定（无未收口占用含预留、无生效招租、资产未在押）
   - 后端 `AssetUnitService.split` 修正：① 面积为 0 的占位单元**一律拒绝**（原实现会跳过面积守恒校验，可突破面积预算）；② 底价与可租面积**按面积比例分摊**，不再整份复制（原实现会让拆分后底价总额放大 N 倍）；③ 容差由 0.01 收紧到 0.005；④ 补权属负担互斥校验
   - 拆分/合并均写 `asset_structure_log`（`op_type` 为 `unit_split` / `unit_merge`，单元粒度信息入 `mapping_json`），满足 FR-MDM-003「任意时点可查资产结构树」
-  - 前端 `AssetUnitSheetModal`（单元面板：勾选合并 + 逐行拆分）+ `AssetUnitSplitModal`（面积列表拆分、实时守恒校验、「均分」一键填充）+ `lib/assetUnits.ts`
-  - 入口（按钮）落在**两处**：资产台账（`ResourcePage` 新增 `unitSheet` 配置项，操作栏「更多 → 计租单元」）与项目分区管理（`ZoneAssetPane` 资产行「更多 → 计租单元」）
+  - 前端 `AssetUnitPanel`（单元面板：勾选合并 + 逐行拆分，权限自判 `asset.ledger:update`，支持 `compact` 紧凑模式）+ `AssetUnitSplitModal`（面积列表拆分、实时守恒校验、「均分」一键填充）+ `lib/assetUnits.ts`
+  - 入口（按钮）落在三处：① **资产台账列表行的展开行**（`ResourcePage.expandable`，展开控制列在最左侧，可就地查看并拆分/合并，主路径）；② 资产台账操作栏「更多 → 计租单元」（弹窗形态，覆盖卡片视图与窄屏 —— 展开行只在列表模式生效）；③ 项目分区管理（`ZoneAssetPane`）资产行的展开行与「更多 → 计租单元」弹窗。三处共用同一个面板组件与同一个行转换函数 `toAssetUnitOwner`，避免多份实现漂移
   - 权限复用既有 `asset.ledger:view` / `asset.ledger:update`：**刻意不新开权限码** —— `PermissionRegistry` 会校验注解里的菜单码在 `menu` 表中存在，新开码会让接口对所有角色 403 且应用启动即失败
   - 测试：新增 `AssetUnitSplitMergeTest` 13 例（守恒、占位单元拒绝、分摊、占用/招租/抵押前置、跨资产拒绝、去重、结果单元选取）；回归 `AssetServiceZoneTest`/`OccupationServiceTest`/`SelfUseServiceTest`/`MigrationServiceLeaseControlTest`/`AssetOccupancyServiceTest` 共 53 例全绿
   - **本次未交付**（详见 [改造清单](docs/design/资产单元与占用模型改造清单.md)）：拆合**幂等键**、**预演（dry-run）**、**可回滚窗口判定**、拆合审批、资产层拆合重做（触点 15）、以及**合同接入单元与占用**（触点 8，是"合同挂到单元上"能否生效的阻塞项——当前单元可拆，但合同侧尚未写 `asset_unit_id`）
