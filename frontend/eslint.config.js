@@ -25,6 +25,15 @@ export default tseslint.config(
     },
   },
   {
+    // Node 环境下运行的构建脚本与纯逻辑单测（不是浏览器代码），需要 Node 全局变量。
+    // 只授给 `.mjs`：各应用的 `.ts/.tsx` 都跑在浏览器里，一并放开会把
+    // 「误用 Node API / 变量名拼错」这类真实缺陷变成静默通过。
+    files: ['**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly' },
+    },
+  },
+  {
     // 仅启用 Hook 的核心两条规则：
     // 插件需先注册，代码中的 eslint-disable react-hooks/exhaustive-deps 才能被识别。
     // 未采用 configs['recommended-latest']（含 React Compiler 系 17 条规则），避免一次性引入大量错误。

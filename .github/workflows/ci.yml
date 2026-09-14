@@ -30,6 +30,18 @@ jobs:
       - name: 权限与路由一致性检查
         working-directory: .
         run: node scripts/check-perm-invariants.mjs
+      # 后端静态契约守卫（不需要 JDK，把「编译期才会炸」的问题前移到这一层）：
+      # 迁移 ↔ 实体列、@TableName、契约测试、RecordSheetService 存取器、
+      # 前后端聚合段、AttachmentOwner、V49/V50 结构不变量、pageAssets 实参个数
+      - name: 后端契约检查
+        working-directory: .
+        run: node scripts/check-backend-contracts.mjs
+      # 审计覆盖守卫：每个写接口必须显式「记录」(@Audited) 或「豁免」(@AuditedExempt)。
+      # 漏加注解的接口照常工作、页面完全看不出来，只是那类操作从此不在审计台账里 ——
+      # 而审计的价值恰恰来自「完整」，所以这条必须是硬失败。
+      - name: 审计覆盖检查
+        working-directory: .
+        run: node scripts/check-audit-coverage.mjs
 
   backend:
     runs-on: ubuntu-latest
