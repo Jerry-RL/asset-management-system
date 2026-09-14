@@ -198,6 +198,7 @@ export const MENU: MenuGroup[] = [
       { path: '/system/menus', title: '菜单管理' },
       { path: '/system/dict', title: '系统字典' },
       { path: '/system/app-logs', title: '应用日志' },
+      { path: '/system/operation-logs', title: '操作日志' },
     ],
   },
   {

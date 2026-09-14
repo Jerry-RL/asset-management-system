@@ -9,6 +9,7 @@ import com.ams.modules.intelligence.entity.AgentSession;
 import com.ams.modules.intelligence.entity.AgentToolCall;
 import com.ams.modules.intelligence.service.IntelligenceService;
 import com.ams.platform.security.Audited;
+import com.ams.platform.security.AuditedExempt;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +33,7 @@ public class IntelligenceController {
     }
 
     @PostMapping("/sessions")
+    @AuditedExempt("创建 AI 会话容器属瞬时、非关键业务操作；同模块的 chat / generate_report 已审计")
     public ApiResponse<AgentSession> createSession(@RequestBody Map<String, Object> body) {
         Long companyId = body.get("companyId") == null ? null : Long.valueOf(body.get("companyId").toString());
         return ApiResponse.ok(intelligenceService.createSession((String) body.get("title"), companyId), TraceIdUtil.get());

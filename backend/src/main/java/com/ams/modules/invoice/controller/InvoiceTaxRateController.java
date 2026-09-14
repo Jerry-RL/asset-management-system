@@ -2,6 +2,7 @@ package com.ams.modules.invoice.controller;
 
 import com.ams.common.web.ApiResponse;
 import com.ams.common.web.TraceIdUtil;
+import com.ams.platform.security.Audited;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -32,6 +33,7 @@ public class InvoiceTaxRateController {
     }
 
     @PostMapping
+    @Audited(module = "invoice", action = "tax_rate_save")
     public ApiResponse<Void> save(@RequestBody Map<String, Object> body) {
         jdbcTemplate.update(
                 "INSERT INTO invoice_tax_rate (tax_code, tax_name, rate, effective_date, status) VALUES (?, ?, ?, ?, ?)",

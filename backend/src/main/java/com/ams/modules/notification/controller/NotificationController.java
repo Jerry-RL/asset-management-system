@@ -5,6 +5,7 @@ import com.ams.common.web.TraceIdUtil;
 import com.ams.modules.notification.entity.Notification;
 import com.ams.modules.notification.entity.NotificationTemplate;
 import com.ams.modules.notification.service.NotificationService;
+import com.ams.platform.security.AuditedExempt;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,6 +43,7 @@ public class NotificationController {
     }
 
     @PostMapping("/{notificationId}/read")
+    @AuditedExempt("用户标记自己的站内信已读：高频低价值，落库会淹没真正的关键业务操作")
     public ApiResponse<Void> markRead(@PathVariable Long notificationId) {
         notificationService.markRead(notificationId);
         return ApiResponse.ok(null, TraceIdUtil.get());

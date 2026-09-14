@@ -43,6 +43,7 @@ public class ApportionConfigController {
     }
 
     @PostMapping
+    @Audited(module = "utility", action = "apportion_config_save")
     public ApiResponse<Void> save(@RequestBody Map<String, Object> body) {
         jdbcTemplate.update(
                 "INSERT INTO apportion_config (company_id, project_id, apportion_basis, enabled,"

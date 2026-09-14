@@ -8,6 +8,7 @@ import com.ams.modules.contract.service.ContractDocumentService;
 import com.ams.modules.contract.service.ContractSlotCatalog;
 import com.ams.modules.contract.service.ContractTemplateService;
 import com.ams.platform.security.Audited;
+import com.ams.platform.security.AuditedExempt;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +76,7 @@ public class ContractTemplateController {
     }
 
     @PostMapping("/contract-templates/{id}/preview")
+    @AuditedExempt("只读渲染预览、不落库；用 POST 仅因为 slots 需要请求体（GET 带不了 body）")
     public ApiResponse<Map<String, Object>> previewTemplate(
             @PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
         Map<String, String> overrides = stringMap(body == null ? null : body.get("slots"));
@@ -107,6 +109,7 @@ public class ContractTemplateController {
 
     /** 草稿预览（不落库）：按模板 + 已填插槽渲染。 */
     @PostMapping("/contracts/{contractId}/document/preview")
+    @AuditedExempt("草稿预览明确不落库、不改变系统状态；POST 仅因为要传 slots 与 templateId")
     public ApiResponse<Map<String, Object>> draftPreview(
             @PathVariable Long contractId, @RequestBody(required = false) Map<String, Object> body) {
         Long templateId = null;

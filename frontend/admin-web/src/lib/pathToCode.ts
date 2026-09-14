@@ -108,6 +108,7 @@ export const PATH_TO_CODE: Record<string, string> = {
   '/system/menus': 'system.menu',
   '/system/dict': 'system.dict',
   '/system/app-logs': 'system.appLog',
+  '/system/operation-logs': 'system.operationLog',
   // ---- 智能中心（intelligence / icon=ai） ----
   '/intelligence/templates': 'intelligence.template',
   '/intelligence/reports': 'intelligence.report',

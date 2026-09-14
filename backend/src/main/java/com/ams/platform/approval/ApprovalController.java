@@ -4,6 +4,7 @@ import com.ams.common.web.ApiResponse;
 import com.ams.common.web.TraceIdUtil;
 import com.ams.platform.approval.entity.ApprovalInstance;
 import com.ams.platform.approval.entity.ApprovalTask;
+import com.ams.platform.security.Audited;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,6 +46,7 @@ public class ApprovalController {
     }
 
     @PostMapping("/{instanceId}/approve")
+    @Audited(module = "approval", action = "approve")
     public ApiResponse<ApprovalInstance> approve(
             @PathVariable Long instanceId, @RequestBody(required = false) Map<String, String> body) {
         String comment = body == null ? null : body.get("comment");
@@ -52,6 +54,7 @@ public class ApprovalController {
     }
 
     @PostMapping("/{instanceId}/reject")
+    @Audited(module = "approval", action = "reject")
     public ApiResponse<ApprovalInstance> reject(
             @PathVariable Long instanceId, @RequestBody(required = false) Map<String, String> body) {
         String comment = body == null ? null : body.get("comment");

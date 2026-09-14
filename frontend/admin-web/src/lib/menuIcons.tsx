@@ -123,6 +123,7 @@ export const PATH_ICONS: Record<string, ReactNode> = {
   '/system/menus': <MenuOutlined />,
   '/system/dict': <BookOutlined />,
   '/system/app-logs': <FileSearchOutlined />,
+  '/system/operation-logs': <AuditOutlined />,
   '/intelligence/templates': <ExperimentOutlined />,
   '/intelligence/sessions': <RobotOutlined />,
   '/intelligence/reports': <FileTextOutlined />,

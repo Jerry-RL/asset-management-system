@@ -9,6 +9,7 @@ import com.ams.modules.invoice.entity.Invoice;
 import com.ams.modules.invoice.service.InvoiceService;
 import com.ams.platform.integration.esign.ESignAdapter;
 import com.ams.platform.integration.invoice.DigitalInvoiceAdapter;
+import com.ams.platform.security.AuditedExempt;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
@@ -49,6 +50,7 @@ public class CallbackController {
     }
 
     @PostMapping("/wechat-pay")
+    @AuditedExempt("第三方支付回调：无登录用户会产出 username=null 的幽灵审计行，且渠道重放会重复落库")
     public ApiResponse<Map<String, String>> wechatPay(
             @RequestBody String rawBody,
             @RequestHeader Map<String, String> headers) throws Exception {
@@ -69,6 +71,7 @@ public class CallbackController {
     }
 
     @PostMapping("/esign")
+    @AuditedExempt("第三方电子签回调：无登录用户会产出 username=null 的幽灵审计行，且渠道重放会重复落库")
     public ApiResponse<Contract> esign(
             @RequestBody String rawBody,
             @RequestHeader Map<String, String> headers) throws Exception {
@@ -89,6 +92,7 @@ public class CallbackController {
     }
 
     @PostMapping("/invoice")
+    @AuditedExempt("第三方数电发票回调：无登录用户会产出 username=null 的幽灵审计行，且渠道重放会重复落库")
     public ApiResponse<Invoice> invoice(
             @RequestBody String rawBody,
             @RequestHeader Map<String, String> headers) throws Exception {
