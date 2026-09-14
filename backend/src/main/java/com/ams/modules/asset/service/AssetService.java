@@ -75,6 +75,14 @@ public class AssetService {
     private final AssetUnitService assetUnitService;
     /** 分区删除前的水位检查：有后续记录的分区不许删（设计 §7.3）。 */
     private final RecordPresenceChecker recordPresenceChecker;
+    /**
+     * 楼层随分区级联删除的唯一入口（V50）。
+     *
+     * <p>注入的是 service 而不是 ProjectZoneFloorMapper：三条分区删除路径都要走同一套软删/物理删口径，
+     * 把「按 zone_id 批量删楼层」的写法留在 ProjectZoneFloorService 里，避免在四个类里各写一遍条件。
+     * 反向不成立（ProjectZoneFloorService 不依赖本类），因此没有循环依赖。
+     */
+    private final ProjectZoneFloorService zoneFloorService;
 
     public AssetService(
             ProjectMapper projectMapper,
@@ -89,7 +97,8 @@ public class AssetService {
             BillMapper billMapper,
             BillPaymentMapper billPaymentMapper,
             AssetUnitService assetUnitService,
-            RecordPresenceChecker recordPresenceChecker) {
+            RecordPresenceChecker recordPresenceChecker,
+            ProjectZoneFloorService zoneFloorService) {
         this.projectMapper = projectMapper;
         this.projectZoneMapper = projectZoneMapper;
         this.assetMapper = assetMapper;
@@ -103,6 +112,7 @@ public class AssetService {
         this.billPaymentMapper = billPaymentMapper;
         this.assetUnitService = assetUnitService;
         this.recordPresenceChecker = recordPresenceChecker;
+        this.zoneFloorService = zoneFloorService;
     }
 
     // ---- 项目 ----
@@ -352,10 +362,13 @@ public class AssetService {
         // 逐分区过同一个守卫。此路径上项目级资产检查已排除资产，
         // 所以这里实际只会命中「记录」分支 —— 但不因此另写一份检查：
         // 三条路径共用一个判定点，才不会再次出现口径漂移。
-        for (ProjectZone zone : projectZoneMapper.selectList(activeZoneQuery()
-                .eq(ProjectZone::getProjectId, id))) {
+        List<ProjectZone> zones = projectZoneMapper.selectList(activeZoneQuery()
+                .eq(ProjectZone::getProjectId, id));
+        for (ProjectZone zone : zones) {
             assertZoneRemovable(zone);
         }
+        // 项目物理删除，楼层跟着物理删（与下面分区的 delete 口径一致）
+        zoneFloorService.deleteFloorsOfZones(zones.stream().map(ProjectZone::getId).toList());
         projectZoneMapper.delete(
                 new LambdaQueryWrapper<ProjectZone>().eq(ProjectZone::getProjectId, id));
         projectMapper.deleteById(id);
@@ -435,7 +448,7 @@ public class AssetService {
             }
         }
         if (!removedIds.isEmpty()) {
-            // 分区可删：先置空其下资产的归属，再软删分区（避免遗留悬空 zone_id）
+            // 分区可删：先置空其下资产的归属，再软删分区（避免遗留悬空 zone_id），楼层一并软删
             assetMapper.update(null, new LambdaUpdateWrapper<Asset>()
                     .set(Asset::getZoneId, null)
                     .in(Asset::getZoneId, removedIds));
@@ -443,6 +456,7 @@ public class AssetService {
                     .setSql("deleted_at = now()")
                     .in(ProjectZone::getId, removedIds)
                     .apply("deleted_at IS NULL"));
+            zoneFloorService.softDeleteFloorsOfZones(removedIds);
         }
     }
 
@@ -512,6 +526,8 @@ public class AssetService {
                 .setSql("deleted_at = now()")
                 .eq(ProjectZone::getId, zoneId)
                 .apply("deleted_at IS NULL"));
+        // 楼层随分区一起软删：楼层是分区的从属结构，留着一批 zone_id 指向空分区的行没有意义
+        zoneFloorService.softDeleteFloorsOfZones(List.of(zoneId));
     }
 
     /**
@@ -899,7 +915,7 @@ public class AssetService {
      */
     public PageResult<Asset> pageAssets(long page, long pageSize, String assetType, String keyword,
             String sourceType, String ownershipType, String leaseControlStatus, Long companyId,
-            String projectType, Long projectId, Long zoneId) {
+            String projectType, Long projectId, Long zoneId, Integer floorNo) {
         LoginUser user = SecurityUtils.current();
         CompanyScope scope = rbacService.companyScope(user);
         Page<Asset> result = assetMapper.selectPage(
@@ -912,6 +928,9 @@ public class AssetService {
                         .eq(companyId != null, Asset::getOperatingCompanyId, companyId)
                         .eq(projectId != null, Asset::getProjectId, projectId)
                         .eq(zoneId != null, Asset::getZoneId, zoneId)
+                        // 楼层由「项目分区管理」页的楼层 Tab 传入（V50）：与 zoneId 一样是定位条件，
+                        // 但不做归属校验 —— floorNo 只是分区内的一个数字，非法值自然是空结果
+                        .eq(floorNo != null, Asset::getFloorNo, floorNo)
                         // 项目属性在 project 表上，用 EXISTS 子查询过滤，避免先查项目 ID 再回填
                         .exists(hasText(projectType),
                                 "select 1 from project p where p.id = asset.project_id"

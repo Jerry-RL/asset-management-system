@@ -187,7 +187,7 @@ COMMENT ON COLUMN biz_disposal_record.amount_wan IS '处置金额(万元)，2 �
 COMMENT ON COLUMN disposal_order.disposal_date   IS '处置日期';
 ```
 
-> `disposal_order.actual_amount` 的现有单位未在库中标注（V2 无 `COMMENT`）。本设计**不擅自改它的口径**；实现前需确认它当前存的是元还是万元，再决定是否补注释或做换算，避免与 `biz_disposal_record.amount_wan`（万元）混用。
+> **单位口径（2026-09-13 定案）**：`disposal_order.actual_amount` **按原值（元）存**，不做任何换算 —— 依据是 `DisposalService.complete` 直接把它当金额写进收款记录（`paymentService.registerConfirmed`）与损益，与收款口径同源；`biz_disposal_record.amount_wan` 按万元存。两个字段在各自实体里名字不同，但前端卡片只有一个「处置金额」输入框，因此统一卡片形状里的键名沿用 `amountWan`（前端只认这一个键），**单位不统一**：卡片用 `InputNumber` 的 `addonAfter` 把「元」/「万元」显式画出来，避免同一个标签误导录入。前端的金额格式化 / 换算工具**不介入**这两个字段。
 
 **字典种子**（沿用 `V19` 的字典写法，带存在性守卫）：
 
@@ -258,6 +258,7 @@ modules/record/
 | GET/PUT | `/api/v1/projects/{pid}/record-sheet` | `asset.project:view/update` | 项目后续记录 |
 | GET/PUT | `/api/v1/projects/{pid}/zones/{zoneId}/record-sheet` | `asset.project:view/update` | 分区后续记录 |
 | GET | `/api/v1/assets/{id}/disposals` | `asset.ledger:view` | 该资产处置单列表（只读，流程走下面的既有端点） |
+| PUT | `/api/v1/assets/{id}/disposals` | `operation.disposal:create` | 资产处置单**全量同步**（同一套卡片交互的落点，见 §6.6 / §7.1） |
 | POST | `/api/v1/disposals`（沿用） | `operation.disposal:create` | 新建处置单（draft） |
 | POST | `/api/v1/disposals/{id}/submit`（沿用） | `operation.disposal:create` | 提交审批 |
 | POST | `/api/v1/disposals/{id}/approve`（沿用） | `operation.disposal:approve` | 审批 |
@@ -315,7 +316,7 @@ modules/record/
 }
 ```
 
-- **资产主体**：`disposalRecords` 段**被忽略**（资产的处置一律走 `disposal_order` 与上面的流转端点，保持审批与生命周期语义单一）。资产的 `disposal_order` 附件通过 `POST /disposals` 请求体里的 `attachments` 提交。
+- **资产主体**：`disposalRecords` 段**被忽略**（资产的处置一律走 `disposal_order`，保持审批与生命周期语义单一）。资产的处置卡片改的是 `disposal_order`：**读**由 `GET /assets/{id}/disposals` 额外合并（见 §6.6 的 `loadOwnerSheet`），**写**走 `PUT /assets/{id}/disposals`（同一张卡片、同一套 diff 语义，只是落点不同）。
 - **项目 / 分区主体**：`disposalRecords` 段落到 `biz_disposal_record` 台账（无审批、不改生命周期）。
 - `sourceInfo` 为 `null` 或整体缺失时表示不修改；传 `{}` 表示清空该行。
 
@@ -394,8 +395,28 @@ modules/record/
 ### 6.6 三模块复用组件（新增 `RecordSheetSections.tsx`）
 
 - 一个组件吃一个 `ownerType`（`asset` / `project` / `zone`）+ 读写路径，内部渲染三个模块，供资产表单第 3 步、项目表单第 3 步、分区详情页三处复用。
-- 处置模块按 `ownerType` 切换数据源：`asset` → 只读列表 + 状态与操作按钮（走 `disposal_order` 流程）；`project` / `zone` → 可编辑台账（走 record-sheet 的 `disposalRecords` 段）。
 - 该组件不直接画 UI，而是组合 `AttachmentField` / `ActorField` 与 antd 表单，保持「一处修改三处生效」。
+
+**处置模块：三种主体共用同一套卡片（2026-09-13 统一）。**
+
+| 交互 | 说明 |
+|------|------|
+| 新增 | 「新增处置记录」按钮在列表尾部**追加一张空卡**，字段就地编辑（不再弹「新建处置单」弹窗） |
+| 修改 | 卡片内直接改，改动攒在本地，点宿主的「保存」才提交 |
+| 删除 | 卡片内的删除按钮从本地列表移除，随下一次保存提交（全量 diff 语义） |
+| 字段 | 两侧**同名同义同顺序**：处置类型 → 处置人 → 处置金额 → 处置日期 → 备注 → 处置附件 |
+
+差异只有两处，都由 `ownerType` 决定：
+
+- **数据源**：`asset` → `disposal_order`（读 `GET /assets/{id}/disposals` + `record-sheet`，写 `PUT /assets/{id}/disposals`）；`project` / `zone` → record-sheet 的 `disposalRecords` 段（`biz_disposal_record` 台账）。
+- **资产卡片多三样**：状态标签 + 资产专有字段（评估价 / 账面价 / 交易对手 / 处置事由）+ 流程按钮。**非草稿一律只读**（审批中及之后由流程端点驱动，表单再改字段等于绕过审批）。
+
+前端用**单一 `DisposalRecord` 形状**吃下两个数据源（`lib/recordSheet.ts`），所以「单位」这件事必须在字段上写清：台账 `amount_wan` 是**万元**，资产 `actual_amount` 是**元**，两侧**不做换算**，卡片用 `InputNumber` 的 `addonAfter` 把单位显式画出来（避免同一个标签误导录入）。
+
+读写编排放进 `lib/recordSheet.ts` 的两个函数，宿主不再各写一遍：
+
+- `loadOwnerSheet(ownerType, ownerId, projectId?)`：先读 record-sheet，`asset` 再合并 `/assets/{id}/disposals`。**宿主一律经它取数** —— 直接调 `loadRecordSheet` 会拿到永远为空的处置段，且不报错。
+- `saveOwnerSheet(ownerType, ownerId, sheet, { projectId?, canSyncDisposals? })`：`asset` 先写 record-sheet（处置段显式清空，如实反映「不经 record-sheet」）、再同步处置单；非资产一次写掉。**返回值必须回写本地**（新记录 id、附件名、处置单状态都靠它）。无 `operation.disposal:create` 时必须传 `canSyncDisposals: false` 跳过那次请求，否则「只改了接收信息」的保存也会 403。
 
 ---
 
@@ -405,15 +426,19 @@ modules/record/
 
 ```
 资产编辑页第3步
-  → 新建处置单（draft，落 disposal_order + biz_attachment[owner_type=disposal_order]）
-  → submit（待审批，需 operation.disposal:create）
+  → 卡片刻录 / 就地改（本地暂存，与项目、分区同一套交互）
+  → 点「保存」→ saveOwnerSheet → PUT /assets/{id}/disposals（全量 diff；新增的落成 draft）
+  → 卡片上「提交审批」（submit，需 operation.disposal:create）
+      ⚠ 点按钮会先把本地改动 sync 一次，再用服务端返回的规范结果覆盖本地
   → approve（需 operation.disposal:approve；无此权限不显示按钮）
-  → execute（需 operation.disposal:update）
+  → execute（需 operation.disposal:update；弹窗补录实际金额与交易对手）
   → complete（需 operation.disposal:update）→ asset.lifecycle_status = exited
 ```
 
-- 第 3 步的处置面板 = 列表（状态、类型、日期、金额、附件）+ 按状态和权限显隐的操作按钮。
+- 第 3 步的处置面板 = **可就地编辑的卡片列表**（与项目/分区同一套卡片），资产卡片额外有状态标签与按状态/权限显隐的流程按钮。
 - 项目/分区处置 = `biz_disposal_record` 台账，只有登记与编辑，无状态机。
+- **流程按钮为什么必须先同步**：卡片上的改动是本地暂存的，直接调流程端点会让服务端用库里那份旧值发起审批；而提交后卡片变成非草稿、之后保存不再接受写入 —— 用户刚改的金额就静默丢了。
+- `PUT /assets/{id}/disposals` 的三条硬规则：**只有草稿会被改 / 删**（非草稿原样留在库里）、**请求体里的 id 必须属于该资产**（否则 400 —— 否则转发别人的单子 id 就能改到另一个资产的处置数据）、**新增一律先过抵押校验**并建成草稿（与 `POST /disposals` 同口径）。
 
 ### 7.2 新建资产的顺序约束
 
@@ -475,6 +500,9 @@ modules/record/
 8. 越权访问不泄露存在性：用 A 公司账号访问 B 公司的资产/项目/分区 record-sheet（含仅凭 id 直取的场景），响应与「该宿主不存在」**完全一致**（同 404 状态码、同文案）；与「无功能权限 → 403」区分开。
 9. 所有新写接口在 `operation_log` / 审计中留有 `@Audited` 记录。
 10. record-sheet 的 PUT 是原子的：请求体中间某条记录非法（如 issue 描述超长）时，**整单不落库**，不出现半成品。
+11. 三处处置记录**交互一致**：资产表单第 3 步、项目表单第 3 步、分区详情页都是「卡片列表」——新增 = 尾部追加空卡、字段就地编辑、删除按钮在卡片内，改动都攒到点保存才提交；资产卡片刻录的处置单在保存后落成 `disposal_order` 的 `draft`。
+12. 资产侧流程按钮**先同步再推进**：在已有草稿的卡片上改了金额后直接点「提交审批」，提交成功后重新打开该资产，卡片与库里都是**新**金额（不允许出现「按新金额审批、库里留旧值」）。
+13. 无 `operation.disposal:create` 的账号在资产表单第 3 步：处置卡片只读（不显示「新增处置记录」），且保存时**不发** `PUT /assets/{id}/disposals`（保存接收信息不会报 403）。
 
 ---
 
@@ -493,7 +521,7 @@ modules/record/
 
 | 风险 | 说明 | 缓解 |
 |------|------|------|
-| 处置模型不对称 | 资产的处置记录来自 `disposal_order`（带状态机），项目/分区来自 `biz_disposal_record`（台账）。同一个前端组件要吃两种数据源 | `RecordSheetSections` 内部按 `ownerType` 切换数据源与编辑能力，对外暴露统一的 `{type, user, amount, date, remark, attachments, status?, actions[]}` 形状 |
+| 处置模型不对称 | 资产的处置记录来自 `disposal_order`（带状态机），项目/分区来自 `biz_disposal_record`（台账）。同一个前端组件要吃两种数据源 | `RecordSheetSections` 用**同一套卡片**渲染两者，差异只有两处：数据源（`ownerType`）与「资产卡片多状态/扩展字段/流程按钮」。前端只维护一个 `DisposalRecord` 形状，读写编排收口在 `loadOwnerSheet` / `saveOwnerSheet`（见 §6.6）——**代价是写入路径不共用**：台账随 record-sheet 一次提交，资产打到 `PUT /assets/{id}/disposals`，两处都由服务端做全量 diff 以保持语义一致 |
 | 表单内审批 = 自提自批 | 「可走完整流程」会让能编辑资产的人同时看到审批按钮 | 审批用独立权限码 `operation.disposal:approve`，按钮按权限显隐 + 后端强校验 |
 | 无外键的一致性风险 | `owner_type/owner_id` 多态归属无法用数据库约束 | 服务层统一 `OwnerResolver` 校验 + 复合索引；所有写入必须过 `RecordSheetService`，禁止直接写 Mapper |
 | 相对人快照与 `sys_user` 脱节 | 存姓名快照后，员工改名历史记录不跟着变 | 这是**有意为之**（历史凭证应保留当时姓名）；查询时若有 `xxx_id` 可同时回显当前名称并标注差异 |

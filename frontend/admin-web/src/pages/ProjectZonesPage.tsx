@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PartitionOutlined } from '@ant-design/icons';
 import { usePerm } from '@/lib/perm';
 import { ProjectListPane } from '@/components/ProjectListPane';
-import { ASSET_PAGE_PARAM, ZoneAssetPane } from '@/components/ZoneAssetPane';
+import { ASSET_PAGE_PARAM, FLOOR_NO_PARAM, ZoneAssetPane } from '@/components/ZoneAssetPane';
 
 /** URL 数字参数解析：缺失 / 非纯数字 / 非正数一律视为「未选中」 */
 const toPositiveInt = (raw: string | null): number | null => {
@@ -12,6 +12,18 @@ const toPositiveInt = (raw: string | null): number | null => {
   if (!raw || !/^\d+$/.test(raw)) return null;
   const value = Number(raw);
   return value > 0 ? value : null;
+};
+
+/**
+ * 楼层号解析：**允许 0 与负数**（地下层 B1 = -1）。
+ *
+ * <p>不能复用 `toPositiveInt`：那会把地下层参数整条丢掉，表现为
+ * 「从 B1 楼层 Tab 刷新页面后回到全部楼层」。
+ */
+const toFloorNo = (raw: string | null): number | null => {
+  if (!raw || !/^-?\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? value : null;
 };
 
 /**
@@ -35,6 +47,12 @@ export function ProjectZonesPage() {
    * 在无项目时提前 return，只有用户真的选了项目才会被 `selectProject` 覆盖。
    */
   const zoneId = projectId == null ? null : toPositiveInt(searchParams.get('zoneId'));
+  /**
+   * `floorNo` **必须挂在 `zoneId` 之下**（V50）：楼层是分区的从属结构，
+   * `/project-zones?projectId=1&floorNo=3` 这种没有分区的楼层参数无从解释，
+   * 而且右栏 `selectFloor` 在无分区时提前 return，自己清不掉它。
+   */
+  const floorNo = zoneId == null ? null : toFloorNo(searchParams.get(FLOOR_NO_PARAM));
 
   /**
    * 切换项目：**不保留 `zoneId`**（回到「全部分区」，spec §5.2 第 1 条），
@@ -51,6 +69,7 @@ export function ProjectZonesPage() {
           const next = new URLSearchParams(prev);
           next.set('projectId', String(id));
           next.delete('zoneId');
+          next.delete(FLOOR_NO_PARAM);
           next.delete(ASSET_PAGE_PARAM);
           return next;
         },
@@ -61,7 +80,8 @@ export function ProjectZonesPage() {
 
   /**
    * 切换分区：null 表示「全部分区」，对应 URL 上 `zoneId` 缺省。
-   * 同样清掉右栏资产分页（spec §5.2 第 2 条：分页归 1、重拉）。
+   * 同样清掉右栏资产分页与**楼层选中**（spec §5.2 第 2 条：分页归 1、重拉）——
+   * 楼层号只在原分区内成立，跟着换分区就会指向另一个分区里同号的楼层。
    */
   const selectZone = useCallback(
     (id: number | null) => {
@@ -72,6 +92,7 @@ export function ProjectZonesPage() {
           next.set('projectId', String(projectId));
           if (id == null) next.delete('zoneId');
           else next.set('zoneId', String(id));
+          next.delete(FLOOR_NO_PARAM);
           next.delete(ASSET_PAGE_PARAM);
           return next;
         },
@@ -79,6 +100,29 @@ export function ProjectZonesPage() {
       );
     },
     [projectId, setSearchParams],
+  );
+
+  /**
+   * 切换楼层：null 表示「全部楼层」，对应 URL 上 `floorNo` 缺省。
+   * 与切分区同一处理：分页归 1（楼层过滤下的页码与上层无关）。
+   */
+  const selectFloor = useCallback(
+    (value: number | null) => {
+      if (projectId == null || zoneId == null) return;
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('projectId', String(projectId));
+          next.set('zoneId', String(zoneId));
+          if (value == null) next.delete(FLOOR_NO_PARAM);
+          else next.set(FLOOR_NO_PARAM, String(value));
+          next.delete(ASSET_PAGE_PARAM);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [projectId, zoneId, setSearchParams],
   );
 
   return (
@@ -92,7 +136,13 @@ export function ProjectZonesPage() {
 
       <div className="flex flex-col lg:flex-row gap-3 min-w-0 items-stretch">
         <ProjectListPane selectedId={projectId} onSelect={selectProject} canView={canViewProject} />
-        <ZoneAssetPane projectId={projectId} zoneId={zoneId} onZoneChange={selectZone} />
+        <ZoneAssetPane
+          projectId={projectId}
+          zoneId={zoneId}
+          onZoneChange={selectZone}
+          floorNo={floorNo}
+          onFloorChange={selectFloor}
+        />
       </div>
     </div>
   );

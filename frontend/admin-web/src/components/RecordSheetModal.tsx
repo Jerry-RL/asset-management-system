@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Modal, Spin, message } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import { RecordSheetSections } from '@/components/RecordSheetSections';
-import { PermissionGuard } from '@/lib/perm';
+import { PermissionGuard, usePerm } from '@/lib/perm';
 import {
-  loadRecordSheet,
+  loadOwnerSheet,
   recordSheetPath,
-  saveRecordSheet,
+  saveOwnerSheet,
   type RecordOwnerType,
-  type RecordSheet,
   type RecordSheetPayload,
 } from '@/lib/recordSheet';
 
@@ -18,10 +17,10 @@ import {
  * <p>为列表页提供「不离开当前列表就能改后续记录」的入口：项目管理 / 资产台账的操作栏、
  * 以及项目分区管理页的分区工具栏都复用它。三处的读写契约完全一致，差异只有归属类型与权限码。
  *
- * <p><strong>为什么必须先读回整张 sheet 再提交</strong>：`saveRecordSheet` 是**全量 diff**
- * 语义（未出现在请求体里的记录与附件会被服务端软删）。所以本组件在打开时先
- * `loadRecordSheet` 拉回完整聚合，编辑后把整张回写 —— 只提交「改动的那一条」会静默删掉
- * 其它记录。这也是它不能退化成「行内表单」的原因。
+ * <p><strong>为什么必须先读回整张 sheet 再提交</strong>：保存是**全量 diff** 语义
+ * （未出现在请求体里的记录与附件会被服务端软删）。所以本组件在打开时先拉回完整聚合
+ * （{@link loadOwnerSheet} —— 资产侧还会把 disposal_order 上的处置单合并进来），
+ * 编辑后把整张回写（{@link saveOwnerSheet}）。只提交「改动的那一条」会静默删掉其它记录。
  */
 export interface RecordSheetModalProps {
   open: boolean;
@@ -57,17 +56,20 @@ export function RecordSheetModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   /** 失败重试信号：递增即触发重新拉取 */
   const [reloadToken, setReloadToken] = useState(0);
+  // 资产处置单需要 operation.disposal:create；无该权限时面板是只读的（见 lib/recordSheet.ts）
+  const can = usePerm();
 
   /**
-   * 只能按 id 算路径，算出来就缓存：`recordSheetPath` 在「分区缺 projectId」时会直接抛错，
-   * 这里兜住并当作「不可用」而不是让整页崩掉。
+   * `recordSheetPath` 在「分区缺 projectId」时会直接抛错：这里先算一次兜住，
+   * 缺条件就按「不可用」处理，而不是让整页崩掉。
    */
-  const path = useMemo(() => {
-    if (ownerId == null) return null;
+  const available = useMemo(() => {
+    if (ownerId == null) return false;
     try {
-      return recordSheetPath(ownerType, ownerId, projectId ?? undefined);
+      recordSheetPath(ownerType, ownerId, projectId ?? undefined);
+      return true;
     } catch {
-      return null;
+      return false;
     }
   }, [ownerType, ownerId, projectId]);
 
@@ -76,21 +78,23 @@ export function RecordSheetModal({
    * 同一个归属对象被反复打开时也要拿到**服务端最新**的记录，否则会用上一次的旧快照做全量 diff。
    */
   useEffect(() => {
-    if (!open || path == null) {
+    if (!open || !available || ownerId == null) {
       setSheet(null);
       return;
     }
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    loadRecordSheet(path)
+    loadOwnerSheet(ownerType, ownerId, projectId ?? undefined)
       .then((loaded) => {
         if (cancelled) return;
-        // 显式挑三块业务数据：读视图将来多出字段时不至于被原样回写进请求体
+        // 显式挑五块业务数据：读视图将来多出字段时不至于被原样回写进请求体
         setSheet({
           receives: loaded.receives,
           sourceInfo: loaded.sourceInfo,
           disposalRecords: loaded.disposalRecords,
+          costRecords: loaded.costRecords,
+          evaluations: loaded.evaluations,
         });
       })
       .catch((e) => {
@@ -104,19 +108,24 @@ export function RecordSheetModal({
     return () => {
       cancelled = true;
     };
-  }, [open, path, reloadToken]);
+  }, [open, available, ownerType, ownerId, projectId, reloadToken]);
 
   const handleSave = useCallback(async () => {
-    if (!sheet || path == null) return;
+    if (!sheet || !available || ownerId == null) return;
     try {
       setSaving(true);
-      /** 存回来的值必须覆盖本地：服务端会回填记录 id 与附件 fileName/url，
+      /** 存回来的值必须覆盖本地：服务端会回填记录 id、附件 fileName/url 与处置单状态，
        *  不覆盖的话下一次保存会把新记录又当成「新增」重复插入。 */
-      const saved: RecordSheet = await saveRecordSheet(path, sheet);
+      const saved = await saveOwnerSheet(ownerType, ownerId, sheet, {
+        projectId: projectId ?? undefined,
+        canSyncDisposals: can('operation.disposal', 'create'),
+      });
       setSheet({
         receives: saved.receives,
         sourceInfo: saved.sourceInfo,
         disposalRecords: saved.disposalRecords,
+        costRecords: saved.costRecords,
+        evaluations: saved.evaluations,
       });
       message.success('后续记录已保存');
       onClose();
@@ -125,7 +134,7 @@ export function RecordSheetModal({
     } finally {
       setSaving(false);
     }
-  }, [sheet, path, onClose]);
+  }, [sheet, available, ownerId, ownerType, projectId, can, onClose]);
 
   return (
     <Modal
@@ -172,7 +181,7 @@ export function RecordSheetModal({
             </Button>
           }
         />
-      ) : path == null ? (
+      ) : !available ? (
         <Alert type="warning" showIcon message="缺少归属对象，无法读取后续记录" />
       ) : (
         <RecordSheetSections

@@ -21,6 +21,7 @@ import com.ams.modules.asset.service.AssetDossierService;
 import com.ams.modules.asset.service.AssetQrService;
 import com.ams.modules.asset.service.AssetService;
 import com.ams.modules.asset.service.AssetStructureService;
+import com.ams.modules.asset.service.ProjectZoneFloorService;
 import com.ams.modules.disposal.service.DisposalService;
 import com.ams.support.RbacFixtures;
 import java.util.List;
@@ -66,7 +67,7 @@ class AssetZoneEndpointPermissionTest {
         when(assetService.updateProjectZone(any(), any(), any())).thenReturn(new ProjectZone());
         controller = new AssetController(assetService, mock(AssetStructureService.class),
                 mock(AssetDossierService.class), mock(AssetQrService.class), ownershipResolver,
-                rbacService, mock(DisposalService.class));
+                rbacService, mock(DisposalService.class), mock(ProjectZoneFloorService.class));
     }
 
     @AfterEach

@@ -15,23 +15,20 @@ import {
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { RecordSheetSections } from '@/components/RecordSheetSections';
+import { RecordSummary } from '@/components/RecordSummary';
 import { useBackNavigate } from '@/lib/navigation';
 import { PermissionGuard } from '@/lib/perm';
-import {
-  loadRecordSheet,
-  recordSheetPath,
-  saveRecordSheet,
-  type RecordSheetPayload,
-} from '@/lib/recordSheet';
+import { loadOwnerSheet, saveOwnerSheet, type RecordSheetPayload } from '@/lib/recordSheet';
 
 // ============================================================================
 // 分区详情 / 编辑页（设计 §6.3）。路由 /projects/:projectId/zones/:zoneId，钻取页不挂侧边栏。
 //
-// 上半：分区基本信息（走已上线的 PUT /projects/{pid}/zones/{zoneId}）
-// 下半：后续记录三模块（走 /projects/{pid}/zones/{zoneId}/record-sheet）
+// 上半：成本与评估汇总（只读，取下面那份 recordSheet，不单独发请求）
+// 中段：分区基本信息（走已上线的 PUT /projects/{pid}/zones/{zoneId}）
+// 下半：后续记录五模块（走 /projects/{pid}/zones/{zoneId}/record-sheet）
 //
 // 两块**各自独立保存**：分区本体与后续记录是两件事，塞进一次交互会让「只想改备注」
-// 也走一遍记录 diff（设计 §6.3）。
+// 也走一遍记录 diff（设计 §6.3）。顶部的汇总是纯展示，不参与任何一次保存。
 //
 // 两个保存动作都要求 asset.project:update（后端两处的 @RequiresPerm 口径一致），
 // 因此按钮用 PermissionGuard 门控，避免用户填完才在最后一步吃 403。
@@ -96,13 +93,15 @@ export default function ZoneDetailPage() {
   useEffect(() => {
     let cancelled = false;
     setSheetLoading(true);
-    loadRecordSheet(recordSheetPath('zone', zid, pid))
+    loadOwnerSheet('zone', zid, pid)
       .then((sheet) => {
         if (cancelled) return;
         setRecordSheet({
           receives: sheet.receives,
           sourceInfo: sheet.sourceInfo,
           disposalRecords: sheet.disposalRecords,
+          costRecords: sheet.costRecords,
+          evaluations: sheet.evaluations,
         });
       })
       .catch((e) => {
@@ -136,11 +135,13 @@ export default function ZoneDetailPage() {
       setSavingSheet(true);
       // 存回来的值必须覆盖本地：服务端会回填记录 id 与附件 fileName/url，
       // 不覆盖的话下一次保存会把新记录又当成「新增」重复插入。
-      const saved = await saveRecordSheet(recordSheetPath('zone', zid, pid), recordSheet);
+      const saved = await saveOwnerSheet('zone', zid, recordSheet, { projectId: pid });
       setRecordSheet({
         receives: saved.receives,
         sourceInfo: saved.sourceInfo,
         disposalRecords: saved.disposalRecords,
+        costRecords: saved.costRecords,
+        evaluations: saved.evaluations,
       });
       message.success('后续记录已保存');
     } catch (e) {
@@ -172,6 +173,17 @@ export default function ZoneDetailPage() {
           <h2 className="text-base font-semibold m-0">分区详情 · {zone.name}</h2>
         </Space>
       </div>
+
+      <Card
+        title="成本与评估汇总"
+        className="border border-[var(--ams-border)]"
+        loading={sheetLoading}
+      >
+        <RecordSummary
+          costRecords={recordSheet?.costRecords}
+          evaluations={recordSheet?.evaluations}
+        />
+      </Card>
 
       <Card title="分区信息" className="border border-[var(--ams-border)]">
         <Form form={form} layout="vertical">

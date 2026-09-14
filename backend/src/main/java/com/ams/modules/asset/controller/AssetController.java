@@ -12,10 +12,13 @@ import com.ams.modules.asset.entity.AssetCodeMapping;
 import com.ams.modules.asset.entity.AssetStructureLog;
 import com.ams.modules.asset.entity.Project;
 import com.ams.modules.asset.entity.ProjectZone;
+import com.ams.modules.asset.dto.ProjectZoneFloorInput;
 import com.ams.modules.asset.service.AssetDossierService;
 import com.ams.modules.asset.service.AssetQrService;
 import com.ams.modules.asset.service.AssetService;
 import com.ams.modules.asset.service.AssetStructureService;
+import com.ams.modules.asset.service.ProjectZoneFloorService;
+import com.ams.modules.disposal.dto.DisposalOrderSyncRequest;
 import com.ams.modules.disposal.service.DisposalService;
 import com.ams.modules.record.dto.DisposalOrderView;
 import com.ams.platform.security.Audited;
@@ -54,6 +57,7 @@ public class AssetController {
     private final OwnershipResolver ownershipResolver;
     private final RbacService rbacService;
     private final DisposalService disposalService;
+    private final ProjectZoneFloorService zoneFloorService;
 
     public AssetController(
             AssetService assetService,
@@ -62,7 +66,8 @@ public class AssetController {
             AssetQrService assetQrService,
             OwnershipResolver ownershipResolver,
             RbacService rbacService,
-            DisposalService disposalService) {
+            DisposalService disposalService,
+            ProjectZoneFloorService zoneFloorService) {
         this.assetService = assetService;
         this.structureService = structureService;
         this.dossierService = dossierService;
@@ -70,6 +75,7 @@ public class AssetController {
         this.ownershipResolver = ownershipResolver;
         this.rbacService = rbacService;
         this.disposalService = disposalService;
+        this.zoneFloorService = zoneFloorService;
     }
 
     // ---- 项目 ----
@@ -154,6 +160,51 @@ public class AssetController {
         return ApiResponse.ok(null, TraceIdUtil.get());
     }
 
+    /**
+     * 分区楼层清单（项目分区管理页的楼层 Tab）。
+     *
+     * <p>返回值是 zone_floor 行与「资产实际用到的楼层号」的并集；仅来自资产的楼层 {@code id} 为 null，
+     * 前端据此把编辑 / 删除置灰（见 ProjectZoneFloorService#list）。
+     */
+    @GetMapping("/projects/{id}/zones/{zoneId}/floors")
+    @RequiresPerm("asset.project:view")
+    public ApiResponse<List<ProjectZoneFloorInput>> zoneFloors(@PathVariable Long id,
+            @PathVariable Long zoneId) {
+        assertProject(id);
+        return ApiResponse.ok(zoneFloorService.list(id, zoneId), TraceIdUtil.get());
+    }
+
+    /** 新增楼层：归属由路径参数决定，请求体里的 id / zoneId 在服务层被忽略。 */
+    @PostMapping("/projects/{id}/zones/{zoneId}/floors")
+    @RequiresPerm("asset.project:update")
+    @Audited(module = "asset", action = "create_zone_floor")
+    public ApiResponse<ProjectZoneFloorInput> createZoneFloor(@PathVariable Long id,
+            @PathVariable Long zoneId, @RequestBody ProjectZoneFloorInput floor) {
+        assertProject(id);
+        return ApiResponse.ok(zoneFloorService.create(id, zoneId, floor), TraceIdUtil.get());
+    }
+
+    /** 编辑楼层：改楼层号会同步该分区内资产的 floor_no（见 ProjectZoneFloorService#update）。 */
+    @PutMapping("/projects/{id}/zones/{zoneId}/floors/{floorId}")
+    @RequiresPerm("asset.project:update")
+    @Audited(module = "asset", action = "update_zone_floor")
+    public ApiResponse<ProjectZoneFloorInput> updateZoneFloor(@PathVariable Long id,
+            @PathVariable Long zoneId, @PathVariable Long floorId, @RequestBody ProjectZoneFloorInput floor) {
+        assertProject(id);
+        return ApiResponse.ok(zoneFloorService.update(id, zoneId, floorId, floor), TraceIdUtil.get());
+    }
+
+    /** 删除楼层（软删；该层还有资产时返回 400 并提示宗数）。 */
+    @DeleteMapping("/projects/{id}/zones/{zoneId}/floors/{floorId}")
+    @RequiresPerm("asset.project:update")
+    @Audited(module = "asset", action = "delete_zone_floor")
+    public ApiResponse<Void> deleteZoneFloor(@PathVariable Long id, @PathVariable Long zoneId,
+            @PathVariable Long floorId) {
+        assertProject(id);
+        zoneFloorService.delete(id, zoneId, floorId);
+        return ApiResponse.ok(null, TraceIdUtil.get());
+    }
+
     @PostMapping("/projects")
     @RequiresPerm("asset.project:create")
     @Audited(module = "asset", action = "create_project")
@@ -202,10 +253,11 @@ public class AssetController {
             @RequestParam(required = false) String projectType,
             @RequestParam(required = false) Long companyId,
             @RequestParam(required = false) Long projectId,
-            @RequestParam(required = false) Long zoneId) {
+            @RequestParam(required = false) Long zoneId,
+            @RequestParam(required = false) Integer floorNo) {
         return ApiResponse.ok(assetService.pageAssets(page, pageSize, assetType, keyword,
                 sourceType, ownershipType, leaseControlStatus, companyId, projectType, projectId,
-                zoneId), TraceIdUtil.get());
+                zoneId, floorNo), TraceIdUtil.get());
     }
 
     @GetMapping("/assets/{assetId}")
@@ -234,6 +286,26 @@ public class AssetController {
     public ApiResponse<List<DisposalOrderView>> assetDisposals(@PathVariable Long assetId) {
         assertAsset(assetId);
         return ApiResponse.ok(disposalService.listByAsset(assetId), TraceIdUtil.get());
+    }
+
+    /**
+     * 某资产的处置单**全量同步**（资产表单第 3 步的处置面板保存）。
+     *
+     * <p>权限用 {@code operation.disposal:create}（登记处置）而不是 {@code asset.ledger:update}：
+     * 「能改资产」不等于「能登记处置」，与 {@code POST /disposals} 同一口径（设计 §5.3）。
+     * 无此权限的账号在面板上看到的是只读卡片，前端也不会发起本次同步。
+     *
+     * <p>为什么是「整份列表一次提交」而不是逐条 POST/PUT/DELETE：见
+     * {@code DisposalOrderSyncRequest} 的类注释（一次保存 = 一个事务）。
+     */
+    @PutMapping("/assets/{assetId}/disposals")
+    @RequiresPerm("operation.disposal:create")
+    @Audited(module = "disposal", action = "sync_asset_disposals")
+    public ApiResponse<List<DisposalOrderView>> syncAssetDisposals(
+            @PathVariable Long assetId, @RequestBody DisposalOrderSyncRequest request) {
+        assertAsset(assetId);
+        return ApiResponse.ok(
+                disposalService.syncForAsset(assetId, request.getRecords()), TraceIdUtil.get());
     }
 
     /** 一产一码：下载资产二维码 PNG（扫码打开用户端招租/资产页）。 */

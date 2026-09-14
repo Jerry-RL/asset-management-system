@@ -37,12 +37,7 @@ import { buildCompanyTree, loadCompanies, normalizeList } from '@/lib/org';
 import { ImageUploadField, type ImageValue } from '@/components/ImageUploadField';
 import type { ProjectZone } from '@/lib/projectZones';
 import { RecordSheetSections } from '@/components/RecordSheetSections';
-import {
-  loadRecordSheet,
-  recordSheetPath,
-  saveRecordSheet,
-  type RecordSheetPayload,
-} from '@/lib/recordSheet';
+import { loadOwnerSheet, saveOwnerSheet, type RecordSheetPayload } from '@/lib/recordSheet';
 import {
   loadRegions,
   regionCityHintOf,
@@ -278,13 +273,15 @@ export function ProjectFormPage() {
     }
     let cancelled = false;
     setSheetLoading(true);
-    loadRecordSheet(recordSheetPath('project', Number(id)))
+    loadOwnerSheet('project', Number(id))
       .then((sheet) => {
         if (cancelled) return;
         setRecordSheet({
           receives: sheet.receives,
           sourceInfo: sheet.sourceInfo,
           disposalRecords: sheet.disposalRecords,
+          costRecords: sheet.costRecords,
+          evaluations: sheet.evaluations,
         });
       })
       .catch((e) => {
@@ -376,7 +373,8 @@ export function ProjectFormPage() {
         await api.put(`/projects/${id}`, payload);
         try {
           if (recordSheet) {
-            await saveRecordSheet(recordSheetPath('project', Number(id)), recordSheet);
+            // 项目侧走 record-sheet 的全量 diff；返回值回写以拿到子记录 id 与附件名
+            setRecordSheet(await saveOwnerSheet('project', Number(id), recordSheet));
           }
           message.success('保存成功');
         } catch (e) {
@@ -531,7 +529,7 @@ export function ProjectFormPage() {
             items={[
               { title: '基本信息', description: '名称 / 归属 / 地址定位 / 图片' },
               { title: '项目分区配置', description: '为项目配置分区' },
-              { title: '后续记录', description: '处置 / 接收 / 来源' },
+              { title: '后续记录', description: '处置 / 接收 / 来源 / 成本 / 评估' },
             ]}
           />
         </Card>

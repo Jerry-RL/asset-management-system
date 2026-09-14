@@ -23,18 +23,16 @@ import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { api } from '@/lib/api';
+import { assetScopeLock } from '@/lib/assetScopeLock';
 import { ImageUploadField, type ImageValue } from '@/components/ImageUploadField';
 import { RecordSheetSections } from '@/components/RecordSheetSections';
 import { useDictOptions, useRemoteOptions, type SelectOption } from '@/lib/dict';
 import * as L from '@/lib/labels';
 import { buildCompanyTree, loadCompanies, type CompanyOption } from '@/lib/org';
 import { useBackNavigate } from '@/lib/navigation';
-import {
-  loadRecordSheet,
-  recordSheetPath,
-  saveRecordSheet,
-  type RecordSheetPayload,
-} from '@/lib/recordSheet';
+import { usePerm } from '@/lib/perm';
+import { floorLabel, useProjectZoneFloors } from '@/lib/projectZoneFloors';
+import { loadOwnerSheet, saveOwnerSheet, type RecordSheetPayload } from '@/lib/recordSheet';
 
 // ============================================================================
 // 资产新增/修改：按业务分组表单
@@ -82,6 +80,18 @@ const toPositiveNumber = (raw: string | null): number | undefined => {
   return Number.isFinite(value) && value > 0 ? value : undefined;
 };
 
+/**
+ * URL 楼层号解析：**允许 0 与负数**（地下层 B1 = -1），只挡非整数。
+ *
+ * <p>不能复用上面的 `toPositiveNumber`：那会把地下层参数整条丢掉，
+ * 表现为「从 B1 楼层 Tab 点新增资产，楼层栏却是空的」。
+ */
+const toFloorNo = (raw: string | null): number | undefined => {
+  if (!raw || !/^-?\d+$/.test(raw)) return undefined;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? value : undefined;
+};
+
 export function AssetFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -96,7 +106,19 @@ export function AssetFormPage() {
   const presetProjectId = toPositiveNumber(searchParams.get('projectId'));
   const presetZoneId = toPositiveNumber(searchParams.get('zoneId'));
   /**
-   * 归属锁定：本入口不允许把资产挪到别的项目 / 分区，减少误操作。
+   * 楼层预设（V50）：从「项目分区管理」页的楼层 Tab 点「新增资产」时带过来，
+   * 直接落在该层。同样只在新增态生效。
+   */
+  const presetFloorNo = toFloorNo(searchParams.get('floorNo'));
+  /**
+   * 归属锁定：判据集中在 `lib/assetScopeLock.ts`（配真值表测试），这里只取结果。
+   *
+   * <p>`lockScope` 是**入口**标志，不是「逐字段锁定」的开关：它锁定的是「进入表单时就已经
+   * 确定下来的归属」。项目在进入时必然已定（本入口从某个项目进来），分区却未必 ——
+   * 「全部分区」Tab 下没有分区可锁。所以分区用的是 {@link AssetScopeLock.zone} 而不是
+   * `lockScope`：直接把入口标志用在分区上会让「全部分区」拿到一个「灰化且为空」的分区框，
+   * 既选不了，又因为没有 required 校验而能提交出 `zone_id = null` 的资产
+   * （该资产在任何分区 Tab 下都看不见）。
    *
    * <p>这只是**入口侧的体验约束**，不是安全边界：服务端 `validateReferences`
    * （`AssetService:1064-1076`，创建/更新都会调用）会独立校验「项目、责任部门属于所选资产公司」
@@ -107,7 +129,12 @@ export function AssetFormPage() {
   /** 新增时预填归属；编辑态只保留 assetType，归属交给接口返回值 */
   const initialValues = isEdit
     ? { assetType: 'property' }
-    : { assetType: 'property', projectId: presetProjectId, zoneId: presetZoneId };
+    : {
+        assetType: 'property',
+        projectId: presetProjectId,
+        zoneId: presetZoneId,
+        floorNo: presetFloorNo,
+      };
 
   const [form] = Form.useForm();
 
@@ -151,13 +178,80 @@ export function AssetFormPage() {
   const [step, setStep] = useState(0);
   const [recordSheet, setRecordSheet] = useState<RecordSheetPayload | null>(null);
   const [sheetLoading, setSheetLoading] = useState(false);
+  // 处置单同步需要 operation.disposal:create：无该权限时 saveOwnerSheet 必须跳过那次请求，
+  // 否则「只改了接收信息」的保存也会 403（权限判定口径与 RecordSheetSections 一致）
+  const can = usePerm();
 
   const companyTree = useMemo(() => buildCompanyTree(companies), [companies]);
 
   // ---- 四级联动：资产公司 → 项目 → 分区；资产公司 → 责任部门 → 责任人 ----
   const assetCompanyId = Form.useWatch('assetCompanyId', form);
   const watchProjectId = Form.useWatch('projectId', form);
+  /**
+   * 编辑态下记录回填的分区 id：分区是「进入时未必已确定」的归属，
+   * 编辑一个本身无分区的资产时它为空 —— 那格空白不该被锁（见 {@link assetScopeLock}）。
+   */
+  const watchZoneId = Form.useWatch('zoneId', form);
   const watchDepartmentId = Form.useWatch('responsibleDepartmentId', form);
+  /** 分区楼层（V50）：楼层号由「该项目的该分区」查出来，不再是手填数字 */
+  const watchFloorNo = Form.useWatch('floorNo', form);
+
+  /**
+   * 楼层下拉选项：`GET /projects/{projectId}/zones/{zoneId}/floors`。
+   *
+   * <p>后端返回的是「已登记楼层 ∪ 资产实际用到的楼层号」的并集并**已按楼层号升序**
+   * （`ProjectZoneFloorService#list`，按楼层号排即物理楼层顺序），所以这里不再排序 ——
+   * 前端再排一次就是第二个排序来源，两边迟早会不一致。
+   *
+   * <p>与分区同一条级联链：未选分区时不下拉（`disabled`），换分区时 `useCascadeReset` 清空已选楼层。
+   */
+  const {
+    floors,
+    loading: floorsLoading,
+    loadFailed: floorsFailed,
+  } = useProjectZoneFloors(watchProjectId, watchZoneId);
+
+  const floorOptions = useMemo(() => {
+    /**
+     * 换分区后 `useProjectZoneFloors` 会**保留上一个分区的列表**直到新响应返回（`loading` 期间）。
+     * 这里在加载中把列表选项清空：宁可短暂不可选，也不能让上一个小区的楼层被选中 ——
+     * `floorNo` 只是一个整数约定，后端不会校验它是否属于该分区，选错就会**存下来**。
+     * 兜底项仍保留（见下），否则编辑态那几毫秒会显示裸数字。
+     */
+    const options: { value: number; label: string }[] = floorsLoading
+      ? []
+      : floors.map((floor) => ({ value: floor.floorNo, label: floorLabel(floor) }));
+    /**
+     * 历史数据兜底：已选楼层不在该分区的楼层列表里（该楼层记录被删、或资产数据早于 V50）时补一项。
+     *
+     * <p>不补的话下拉会显示**空白**而表单里其实存着值 —— 用户以为没填、保存后原值又被打回去，
+     * 与「所见即所存」相悖。（同一手法见上面的 `sourceTypeSelectOptions`。）
+     */
+    if (watchFloorNo != null && !options.some((option) => option.value === watchFloorNo)) {
+      options.push({ value: watchFloorNo, label: `${watchFloorNo}F` });
+    }
+    return options;
+  }, [floors, floorsLoading, watchFloorNo]);
+
+  /**
+   * 楼层下拉的辅助说明。只在选好分区后才可能出现，三种情形各说各的：
+   *
+   * <pre>
+   *   加载失败 → 说「加载失败」。**不能**说「暂无楼层」—— 那是把请求失败说成「这里本来就没有」，
+   *              用户会跑去「项目分区管理」新建一个其实已经存在的楼层。
+   *   加载中   → 不说（此时列表还没到，说什么都是猜）。
+   *   列表为空 → 说「暂无楼层」并给出下一步去哪儿加。改成下拉之后手填已不可用，
+   *              没有这句指引，用户面对的就是一个点不出任何东西的空下拉。
+   * </pre>
+   */
+  const floorHint =
+    watchZoneId == null || floorsLoading
+      ? undefined
+      : floorsFailed
+        ? '楼层加载失败，可重新选择分区或刷新页面重试'
+        : floors.length === 0
+          ? '该分区暂无楼层，可先到「项目分区管理」的楼层 Tab 新增'
+          : undefined;
 
   // 所选项目的「项目属性」（project.type，口径同「项目属性」字典），用于「资产来源」级联
   const [projectType, setProjectType] = useState<string | undefined>(undefined);
@@ -202,24 +296,26 @@ export function AssetFormPage() {
   ]);
   // 项目变更 → 项目属性可能变化 → 「资产来源」可选范围变化，已选值一并清空
   useCascadeReset(form, 'projectId', ['zoneId', 'sourceType']);
+  // 楼层号只在所属分区内才有意义（V50）：换分区必须清掉，否则会把 A 区的 3F 带进 B 区
+  useCascadeReset(form, 'zoneId', ['floorNo']);
   useCascadeReset(form, 'responsibleDepartmentId', ['responsibleUserId']);
 
   /**
-   * 锁定态下是否灰化「资产公司」。**四场景真值表，勿简化**：
+   * 三字段锁定判据（真值表与理由见 `lib/assetScopeLock.ts`）。
    *
-   * <pre>
-   *   未锁定                  → false（保持改造前行为）
-   *   锁定 + 新增 + 反查成功  → true
-   *   锁定 + 新增 + 反查失败  → false（反查失败时不能灰化：它是必填项，
-   *                                   空白 + 灰化 = 用户无路可走）
-   *   锁定 + 编辑             → true（编辑态刻意不反查，lockedCompanyId 恒为 undefined，
-   *                                  必须由 isEdit 单独覆盖，否则编辑态漏锁）
-   * </pre>
+   * <p>刻意**不**在 JSX 里逐字段写判据：这三个布尔量出过多次事故，而且都不报错 ——
+   * 收敛到一处 + 配测试，才不会有人再顺手把 `lockScope` 直接用到分区上。
    *
-   * 后两个中间形态都曾实现并上线过、又各自被证伪（计划 Task 3 Step 4b），
-   * 所以这里保留完整的判据而不是压缩成 `lockScope && lockedCompanyId != null`。
+   * <p>分区在**编辑态**取自记录（`watchZoneId`）而不是 URL：本入口的编辑链接只带 `lockScope`，
+   * 记录本身就是分区的唯一真相。
    */
-  const lockCompanyField = lockScope && (isEdit || lockedCompanyId != null);
+  const scopeLock = assetScopeLock({
+    lockScope,
+    isEdit,
+    presetZoneId,
+    recordZoneId: isEdit ? watchZoneId : undefined,
+    lockedCompanyId,
+  });
 
   // 字典下拉。「资产来源」按所选项目的项目属性级联（土地类 / 房产类可见项不同），
   // 规则在「系统管理 → 系统字典 → 项目属性 → 关联字典值」中维护。
@@ -308,13 +404,17 @@ export function AssetFormPage() {
     }
     let cancelled = false;
     setSheetLoading(true);
-    loadRecordSheet(recordSheetPath('asset', Number(id)))
+    // 资产的处置单在 disposal_order 上（另一个端点），loadOwnerSheet 负责合并 —— 直接调
+    // loadRecordSheet 会拿到永远为空的处置段，且不报错（见 lib/recordSheet.ts 注释）
+    loadOwnerSheet('asset', Number(id))
       .then((sheet) => {
         if (cancelled) return;
         setRecordSheet({
           receives: sheet.receives,
           sourceInfo: sheet.sourceInfo,
           disposalRecords: sheet.disposalRecords,
+          costRecords: sheet.costRecords,
+          evaluations: sheet.evaluations,
         });
       })
       .catch((e) => {
@@ -371,7 +471,12 @@ export function AssetFormPage() {
         await api.put(`/assets/${id}`, payload);
         try {
           if (recordSheet) {
-            await saveRecordSheet(recordSheetPath('asset', Number(id)), recordSheet);
+            // 资产侧与台账侧的编排差异都在 saveOwnerSheet 内（处置单走另一个端点），
+            // 返回值必须回写：新卡片的 id、附件名、流程状态都在里面
+            const saved = await saveOwnerSheet('asset', Number(id), recordSheet, {
+              canSyncDisposals: can('operation.disposal', 'create'),
+            });
+            setRecordSheet(saved);
           }
           message.success('保存成功');
         } catch (e) {
@@ -440,7 +545,7 @@ export function AssetFormPage() {
                 title: '资产属性与管理信息',
                 description: '属性字典 / 登记入库 / 责任部门 / 计量与图片',
               },
-              { title: '后续记录', description: '处置 / 接收 / 来源' },
+              { title: '后续记录', description: '处置 / 接收 / 来源 / 成本 / 评估' },
             ]}
           />
         </Card>
@@ -483,7 +588,7 @@ export function AssetFormPage() {
                     placeholder="请选择资产公司（可输入名称搜索）"
                     treeData={companyTree}
                     listHeight={320}
-                    disabled={lockCompanyField || undefined}
+                    disabled={scopeLock.company || undefined}
                   />
                 </Form.Item>
               </Col>
@@ -499,20 +604,30 @@ export function AssetFormPage() {
                     showSearch
                     optionFilterProp="label"
                     loading={projectOptions.loading}
-                    disabled={lockScope || !assetCompanyId}
+                    disabled={scopeLock.project || !assetCompanyId}
                     placeholder={assetCompanyId ? '请选择项目（可搜索）' : '请先选择资产公司'}
                     options={projectOptions.options}
                   />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12} lg={8}>
-                <Form.Item name="zoneId" label="分区" extra={lockScope ? '归属已锁定' : undefined}>
+                {/*
+                  锁定入口下分区必填：分区一旦可空，就能提交出 `zone_id = null` 的资产，
+                  而它不在任何分区 Tab 下 —— 本页的存在意义就是「把资产归到某个分区里」。
+                  台账页等不锁定的入口不受影响（那里的分区本就是可选项）。
+                */}
+                <Form.Item
+                  name="zoneId"
+                  label="分区"
+                  rules={lockScope ? [{ required: true, message: '请选择分区' }] : undefined}
+                  extra={scopeLock.zone ? '归属已锁定' : undefined}
+                >
                   <Select
                     allowClear
                     showSearch
                     optionFilterProp="label"
                     loading={zoneOptions.loading}
-                    disabled={lockScope || !watchProjectId}
+                    disabled={scopeLock.zone || !watchProjectId}
                     placeholder={watchProjectId ? '请选择分区' : '请先选择项目'}
                     options={zoneOptions.options}
                   />
@@ -542,8 +657,21 @@ export function AssetFormPage() {
                 </Form.Item>
               </Col>
               <Col xs={24} md={12} lg={8}>
-                <Form.Item name="floorNo" label="分区楼层">
-                  <InputNumber className="w-full" placeholder="请输入楼层数字" precision={0} />
+                {/*
+                  楼层是下拉选择而不是手填数字：选项来自「该项目 + 该分区」，与「项目分区管理」
+                  的楼层 Tab 同一数据源。手填可以写出一个该分区根本没有的楼层号，
+                  那种资产在楼层 Tab 下既看不见也维护不了。
+                */}
+                <Form.Item name="floorNo" label="分区楼层" extra={floorHint}>
+                  <Select
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    loading={floorsLoading}
+                    disabled={!watchZoneId}
+                    placeholder={watchZoneId ? '请选择楼层' : '请先选择分区'}
+                    options={floorOptions}
+                  />
                 </Form.Item>
               </Col>
               <Col xs={24}>

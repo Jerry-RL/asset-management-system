@@ -21,4 +21,10 @@ public class RecordSheetView {
     private SourceInput sourceInfo;
 
     private List<DisposalInput> disposalRecords = new ArrayList<>();
+
+    /** 成本信息（含费用明细），三种主体共用。 */
+    private List<CostInput> costRecords = new ArrayList<>();
+
+    /** 评估信息，三种主体共用。 */
+    private List<EvaluationInput> evaluations = new ArrayList<>();
 }

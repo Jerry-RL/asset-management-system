@@ -16,6 +16,7 @@ import com.ams.modules.asset.entity.ProjectZone;
 import com.ams.modules.asset.mapper.AssetMapper;
 import com.ams.modules.asset.mapper.ProjectMapper;
 import com.ams.modules.asset.mapper.ProjectZoneMapper;
+import com.ams.modules.asset.service.ProjectZoneFloorService;
 import com.ams.modules.asset.service.AssetQrService;
 import com.ams.modules.asset.service.AssetService;
 import com.ams.modules.asset.service.AssetUnitService;
@@ -85,6 +86,9 @@ class AssetServiceZoneTest {
     private AssetUnitService assetUnitService;
     @Mock
     private RecordPresenceChecker recordPresenceChecker;
+    /** 分区楼层一致性由 ProjectZoneFloorService 兜住；本用例只关心分区/项目自身的删除口径。 */
+    @Mock
+    private ProjectZoneFloorService zoneFloorService;
 
     @InjectMocks
     private AssetService service;

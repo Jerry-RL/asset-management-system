@@ -8,6 +8,7 @@ import com.ams.modules.asset.service.CertificateService;
 import com.ams.modules.asset.service.LeaseControlService;
 import com.ams.modules.billing.entity.Payment;
 import com.ams.modules.billing.service.PaymentService;
+import com.ams.modules.disposal.dto.DisposalOrderInput;
 import com.ams.modules.disposal.entity.DisposalOrder;
 import com.ams.modules.disposal.mapper.DisposalOrderMapper;
 import com.ams.modules.finance.entity.FinanceVoucher;
@@ -23,8 +24,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -95,14 +100,86 @@ public class DisposalService {
             view.setDisposalUserName(order.getDisposalUserName());
             // 金额沿用 actual_amount 原值，不做万元换算（设计 §4.2 末尾）
             view.setAmountWan(order.getActualAmount());
-            view.setActualAmount(order.getActualAmount());
             view.setDisposalDate(order.getDisposalDate());
             view.setRemark(order.getRemark());
             view.setStatus(order.getStatus());
+            // 表单里可录的其余字段：卡片要能就地回显，否则改一次就会把原值抹成 null
+            view.setReason(order.getReason());
+            view.setAssessedValue(order.getAssessedValue());
+            view.setBookValue(order.getBookValue());
+            view.setCounterparty(order.getCounterparty());
             view.setAttachments(recordSheetService.orderAttachments(order.getId()));
             views.add(view);
         }
         return views;
+    }
+
+    /**
+     * 某资产的处置单**全量同步**（{@code PUT /assets/{assetId}/disposals}，设计 §6.6 / §7.1）。
+     *
+     * <p>资产表单第 3 步的处置面板与项目/分区那两个台账段共用同一套交互
+     * （「改动攒在本地、点保存一起提交」），但资产的落点是 {@code disposal_order}，
+     * 不是 record-sheet —— 后者对 asset 的 {@code disposalRecords} 段本就是忽略的。
+     *
+     * <p>三条硬规则：
+     *
+     * <ol>
+     *   <li><strong>只有草稿会被改 / 删</strong>：{@code approving} 及之后的单子原样留在库里
+     *       （面板上对这些单子也是只读），流转只认 {@code /submit} 等流程端点；</li>
+     *   <li><strong>请求体里的 id 必须属于该资产</strong>，否则 400 —— 否则转发别人的单子 id
+     *       就能改到另一个资产的处置数据；</li>
+     *   <li><strong>新增一律先过抵押校验</strong>并建成草稿，与 {@code POST /disposals} 同口径
+     *       （{@code DisposalService.create}）。</li>
+     * </ol>
+     *
+     * <p>顺序上先写、后删：中途任一条非法时整个事务回滚，不会留下「删了旧的、没建成新的」。
+     * 附件先随单子写完，删单前再清空该单子的附件关联，避免留下孤儿行。
+     */
+    @Transactional
+    public List<DisposalOrderView> syncForAsset(Long assetId, List<DisposalOrderInput> inputs) {
+        List<DisposalOrderInput> incoming = inputs == null ? List.of() : inputs;
+        Map<Long, DisposalOrder> existing = disposalOrderMapper.selectList(
+                        new LambdaQueryWrapper<DisposalOrder>()
+                                .eq(DisposalOrder::getAssetId, assetId))
+                .stream()
+                .collect(Collectors.toMap(DisposalOrder::getId, Function.identity(),
+                        (a, b) -> a, LinkedHashMap::new));
+        Set<Long> kept = new LinkedHashSet<>();
+        for (DisposalOrderInput input : incoming) {
+            if (input.getId() == null) {
+                certificateService.assertNotMortgaged(assetId);
+                DisposalOrder order = new DisposalOrder();
+                order.setAssetId(assetId);
+                order.setStatus("draft");
+                input.applyTo(order);
+                disposalOrderMapper.insert(order);
+                recordSheetService.syncOrderAttachments(order.getId(), input.getAttachments());
+                kept.add(order.getId());
+                continue;
+            }
+            DisposalOrder order = existing.get(input.getId());
+            if (order == null) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "处置单不属于该资产：" + input.getId());
+            }
+            kept.add(order.getId());
+            if (!"draft".equals(order.getStatus())) {
+                // 非草稿不接受表单写入；前端对这些卡片也是只读的，这里只做兜底
+                continue;
+            }
+            input.applyTo(order);
+            disposalOrderMapper.updateById(order);
+            recordSheetService.syncOrderAttachments(order.getId(), input.getAttachments());
+        }
+        for (DisposalOrder order : existing.values()) {
+            if (!kept.contains(order.getId()) && "draft".equals(order.getStatus())) {
+                recordSheetService.syncOrderAttachments(order.getId(), List.of());
+                // disposal_order 没有 deleted_at（BaseEntity 的四个审计字段之外无软删列），
+                // 草稿也尚未被审批 / 收款 / 凭证引用，故这里是真删除
+                disposalOrderMapper.deleteById(order.getId());
+            }
+        }
+        return listByAsset(assetId);
     }
 
     /** 处置申请（FR-DISP-001）。 */
