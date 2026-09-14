@@ -104,7 +104,7 @@ const OPERATING: AppEntry[] = [
     color: '#fa541c',
   },
   {
-    title: '资债权证',
+    title: '资债权证记录',
     desc: '权证抵押评估',
     path: '/certificates',
     icon: <FileProtectOutlined />,
