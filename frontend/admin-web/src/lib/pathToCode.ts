@@ -59,6 +59,15 @@ export const PATH_TO_CODE: Record<string, string> = {
   '/asset-leasing': 'operation.assetLeasing',
   '/self-uses': 'operation.selfUse',
   '/asset-audits': 'operation.audit',
+  // ---- 资产经营管理（assetmgmt / icon=solution） ----
+  // V61 新增：7 个模块的菜单骨架 + 规划页（功能待迭代）
+  '/asset-mgmt/lease-listing': 'assetmgmt.leaseListing',
+  '/asset-mgmt/lease-signing': 'assetmgmt.leaseSigning',
+  '/asset-mgmt/lease-risk': 'assetmgmt.leaseRisk',
+  '/asset-mgmt/resource': 'assetmgmt.resource',
+  '/asset-mgmt/other-use': 'assetmgmt.otherUse',
+  '/asset-mgmt/inspection': 'assetmgmt.inspection',
+  '/asset-mgmt/repair': 'assetmgmt.repair',
   // ---- 合同管理（contract / icon=contract） ----
   '/contracts': 'contract.ledger',
   '/vacate-orders': 'contract.vacate',

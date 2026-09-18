@@ -92,6 +92,14 @@ export const PATH_ICONS: Record<string, ReactNode> = {
   '/disposal-records': <FileDoneOutlined />,
   // V59 菜单的 icon 列同为 NULL（与 V54 / V55 / V57 同口径）
   '/asset-leasing': <ShopOutlined />,
+  // V61 新增：资产经营管理 7 个子模块（菜单 icon 列为 NULL，侧栏回退到这里）
+  '/asset-mgmt/lease-listing': <ShopOutlined />,
+  '/asset-mgmt/lease-signing': <FileDoneOutlined />,
+  '/asset-mgmt/lease-risk': <AlertOutlined />,
+  '/asset-mgmt/resource': <BankOutlined />,
+  '/asset-mgmt/other-use': <FieldTimeOutlined />,
+  '/asset-mgmt/inspection': <FileSearchOutlined />,
+  '/asset-mgmt/repair': <ToolOutlined />,
   '/occupations': <FieldTimeOutlined />,
   '/self-uses': <HomeFilled />,
   '/contracts': <FileTextOutlined />,
@@ -164,6 +172,8 @@ export const GROUP_ICONS: Record<string, ReactNode> = {
   运营管理: <TeamOutlined />,
   // V60 把该目录改名为「资产运营人员管理」；旧键保留，避免历史菜单树渲染时退回默认图标
   资产运营人员管理: <TeamOutlined />,
+  // V61 新增目录；DB `menu.icon` 为 'solution'，由 ICON_BY_NAME 解析，这里只是兜底
+  资产经营管理: <SolutionOutlined />,
   系统配置: <SettingOutlined />,
   系统管理: <SafetyOutlined />,
   智能中心: <RobotOutlined />,

@@ -106,6 +106,19 @@ export const MENU: MenuGroup[] = [
     ],
   },
   {
+    title: '资产经营管理',
+    items: [
+      // V61：菜单骨架 + 规划页（功能待迭代）；path 与 PATH_TO_CODE 镜像逐字一致
+      { path: '/asset-mgmt/lease-listing', title: '资产招租管理' },
+      { path: '/asset-mgmt/lease-signing', title: '资产租赁签约管理' },
+      { path: '/asset-mgmt/lease-risk', title: '资产租赁风险管理' },
+      { path: '/asset-mgmt/resource', title: '资产资源管理' },
+      { path: '/asset-mgmt/other-use', title: '资产其他使用管理' },
+      { path: '/asset-mgmt/inspection', title: '资产巡检管理' },
+      { path: '/asset-mgmt/repair', title: '资产维修管理' },
+    ],
+  },
+  {
     title: '合同管理',
     items: [
       { path: '/contracts', title: '合同管理' },

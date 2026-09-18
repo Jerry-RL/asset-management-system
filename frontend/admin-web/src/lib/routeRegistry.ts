@@ -56,6 +56,16 @@ export const STANDALONE_ROUTES: string[] = [
   // 资产运营人员管理（V60）：人员 / 角色 / 运营范围三组联动选择（范围带公司过滤的远程搜索），
   // 超出 ResourcePage 的字段表达能力，走独立页
   '/asset-operators',
+  // 资产经营管理（V61）：7 个子模块的菜单骨架 + 规划页。
+  // 7 条路由共用 ModulePlanPage（按 path 取配置），因此不放进 RESOURCES ——
+  // RESOURCES 的每一项都会被渲染成 ResourcePage 资源列表，而这里是说明页。
+  '/asset-mgmt/lease-listing',
+  '/asset-mgmt/lease-signing',
+  '/asset-mgmt/lease-risk',
+  '/asset-mgmt/resource',
+  '/asset-mgmt/other-use',
+  '/asset-mgmt/inspection',
+  '/asset-mgmt/repair',
 ];
 
 export interface RouteMeta {

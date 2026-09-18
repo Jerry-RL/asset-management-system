@@ -6,6 +6,17 @@
 
 ### Added
 
+- **「资产经营管理」目录 + 7 个子模块菜单（V61）**——本次交付**菜单骨架 + 功能规划页**，功能待迭代：
+  - 新增一级目录 `assetmgmt`「资产经营管理」（`sort 75`，落在「资产运营」(70) 与「合同管理」(80) 之间；`icon='solution'`），下挂 7 个子菜单：`assetmgmt.leaseListing` 资产招租管理（`/asset-mgmt/lease-listing`）/ `leaseSigning` 资产租赁签约管理（`/asset-mgmt/lease-signing`）/ `leaseRisk` 资产租赁风险管理（`/asset-mgmt/lease-risk`）/ `resource` 资产资源管理（`/asset-mgmt/resource`）/ `otherUse` 资产其他使用管理（`/asset-mgmt/other-use`）/ `inspection` 资产巡检管理（`/asset-mgmt/inspection`）/ `repair` 资产维修管理（`/asset-mgmt/repair`），`sort 10..70` 即业务流程顺序
+  - **为什么不复用既有页面**：这 7 个模块大多已有对应页面（招租 → `/lease-listings`、签约 → `/contracts`、资源 → `/assets`、其他使用 → `/occupations`+`/self-uses`、巡检 → `/inspections`、维修 → `/repairs`），但仓内口径「同一 path 只落一行」（V45 §2）会禁止重复挂入口 —— 否则侧边栏出现两个指向同一页面的入口、权限矩阵多出无意义行。因此每个子菜单用**自己的 path**，页面是**规划页**，页内以链接形式指向既有页面（既不重复入口，又能今天就跳到能干活的地方）。实测 `menu` 表无任何重复 path
+  - **规划页 `ModulePlanPage`（7 条路由共用，按 `useLocation` 取配置）**：写清三件事 —— ①明确「本模块尚未实现，点进来不会有数据」，避免使用者以为系统坏了；②列出规划能力清单（作为后续迭代的需求锚点）；③给出既有可用入口的跳转链接。配置集中在 `lib/modulePlan.ts`，每页还提供「下一个模块」跳转（按业务流程顺序）
+  - **后端不建表、不加接口**：本次是菜单骨架，因此本迁移只碰 `menu` / `role_permission`（契约测试把这一点钉住：不得出现 `CREATE TABLE` / `ALTER TABLE` / `@RequiresPerm`）。规划页是只读说明页，没有后端接口，因此**不新增任何 `@RequiresPerm`**（也就不会给 `PermissionRegistry` 增加需要核对的菜单码）
+  - **权限回填**：按 V45 §5.1 的**导航类**口径，非超管角色各回填 7 条 `view`（与 V55/V57/V59 同口径；不像 V60 那样只给 `operator` —— 那 7 页不含敏感数据、也没有写操作）。写动作一律不回填。实测 7 角色 × 7 菜单 = 49 条、全部 `view`
+  - 前端路由 / `STANDALONE_ROUTES` / `PATH_TO_CODE` 镜像 / 侧栏图标（7 个路由图标 + 目录图标）/ 静态 `MENU` 兜底 / 用户手册 7 条全部同步（`check-perm-invariants` 通过：`PATH_TO_CODE` 79 条、`STANDALONE_ROUTES` 32 条）
+  - 测试：新增 `V61AssetMgmtMenuMigrationContractTest` 7 例（目录字段逐条、7 条子菜单用正则解析对齐（含顺序即业务顺序）、按 code 解析父目录且禁用标量子查询、**path 与前端 `PATH_TO_CODE` 镜像跨仓逐条比对**、view 回填且无写动作、结构不变量（只碰两张表 / 两条菜单 INSERT + 一条回填）、幂等）；61 个迁移在 PostgreSQL 15 全链应用通过，并实测幂等重跑无重复行
+  - **尚未交付**（后续迭代）：7 个模块的实际功能页面与接口。规划能力清单已写入各页与用户手册，可直接作为需求清单
+
+
 - **资产运营人员管理（V60）**——「运营管理」目录改名为「资产运营人员管理」并补齐同级子模块，登记「谁负责哪些资产的运营」：
   - **三张新表**：`asset_operator`（一人一份档案：`user_id` / `status` / `remark` + 软删）、`asset_operator_role`（角色选择，多对多）、`asset_operator_scope`（资产运营范围）。范围沿用 V56 抵押记录的三值口径 `scope_type`（project / zone / asset）+ `scope_id` —— **不用三个可空列**：可空列的组合唯一索引里两列恒为 NULL，而 PG 把 NULL 视为互不相等，去重会静默失效。实测 `project:3` 与 `asset:3` 并存、同类型同 id 重复被拒
   - **一人一份有效档案**用**部分**唯一索引 `uk_asset_operator_user ... WHERE deleted_at IS NULL`：软删后允许重新登记（普通唯一索引会让该人员永久占位），而未软删的行仍然互斥

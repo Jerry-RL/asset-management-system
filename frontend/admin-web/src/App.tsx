@@ -13,6 +13,7 @@ import { AgentReportsPage } from '@/pages/AgentReportsPage';
 import { AssetDossierPage } from '@/pages/AssetDossierPage';
 import { AssetLeasingPage } from '@/pages/AssetLeasingPage';
 import { AssetOperatorsPage } from '@/pages/AssetOperatorsPage';
+import { ModulePlanPage } from '@/pages/ModulePlanPage';
 import { ContractTemplatesPage } from '@/pages/ContractTemplatesPage';
 import { ContractDetailPage } from '@/pages/ContractDetailPage';
 import { OpsCalendarPage } from '@/pages/OpsCalendarPage';
@@ -104,6 +105,14 @@ export default function App() {
               <Route path="asset-leasing" element={<AssetLeasingPage />} />
               {/* 资产运营人员管理（V60）：人员 + 角色 + 资产运营范围（项目/分区/资产） */}
               <Route path="asset-operators" element={<AssetOperatorsPage />} />
+              {/* 资产经营管理（V61）：菜单骨架 + 规划页（功能待迭代，页面内给出既有可用入口） */}
+              <Route path="asset-mgmt/lease-listing" element={<ModulePlanPage />} />
+              <Route path="asset-mgmt/lease-signing" element={<ModulePlanPage />} />
+              <Route path="asset-mgmt/lease-risk" element={<ModulePlanPage />} />
+              <Route path="asset-mgmt/resource" element={<ModulePlanPage />} />
+              <Route path="asset-mgmt/other-use" element={<ModulePlanPage />} />
+              <Route path="asset-mgmt/inspection" element={<ModulePlanPage />} />
+              <Route path="asset-mgmt/repair" element={<ModulePlanPage />} />
               {/* 菜单管理：专用页面（树 + 抽屉 + 校验），不再走 ResourcePage */}
               <Route path="system/menus" element={<SystemMenuPage />} />
               <Route path="system/roles" element={<SystemRolePage />} />
