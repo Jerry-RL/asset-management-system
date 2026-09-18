@@ -242,8 +242,20 @@ paths:
   /lease-listings:
     get:
       tags: [LeaseListings]
-      summary: 招租列表
+      summary: 招租列表（小程序端只取 status=active）
+      description: >-
+        排序固定为「推荐优先 → 排序号 → id 倒序」，与索引 idx_lease_listing_pub_sort 一致，
+        端上不再自己排序。只有 status=active 会被租控派生为 leasing（V40 的
+        v_asset_lease_status_derived），因此**待审批 / 已驳回 / 已关闭的招租在小程序端不可见**。
       parameters:
+        - name: status
+          in: query
+          description: 招租状态；不传为全部
+          schema: { type: string, enum: [pending, active, rejected, closed] }
+        - name: assetId
+          in: query
+          description: 按资产过滤（「招租记录」抽屉列出某资产的全部发布审批记录）
+          schema: { type: integer }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
       responses:
@@ -251,15 +263,260 @@ paths:
           description: OK
     post:
       tags: [LeaseListings]
-      summary: 发布招租
+      summary: 发布招租（= 提交发布审批，V59）
+      description: >-
+        提交后招租为 pending，**租控不变**（仍是 vacant）、小程序端不可见；
+        审批通过（POST /approvals/{instanceId}/approve）才置 active 并由 LeaseStatusDeriver
+        派生为 leasing，驳回则把审批意见写入 rejectReason。提交前置校验：仅空置资产可发起、
+        同一计租单元不得有进行中的招租、年租金低于评估 / 备案底价年化额且未标记可议价时拒绝。
+        年租金是表单口径，服务端按 12 折算写入既有的「元/月」列 rentAmount。
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LeaseListingCreate'
+              $ref: '#/components/schemas/LeaseListingPublish'
       responses:
         '200':
           description: OK
+        '400':
+          description: 缺少资产或年租金
+        '409':
+          description: 非空置资产 / 该资产已有进行中的招租 / 租金低于底价年化额
+
+  /lease-listings/{id}:
+    get:
+      tags: [LeaseListings]
+      summary: 招租详情（招租字段 + 资产详情 + 发起人信息）
+      description: >-
+        列表只返回招租自身的字段；资产详情与发起人姓名 / 电话只在详情返回
+        （需求约定「资产详情和发起人信息在查看详情时可见」）。
+      parameters:
+        - $ref: '#/components/parameters/LeaseListingId'
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: 招租记录不存在
+
+  /lease-listings/{id}/resubmit:
+    post:
+      tags: [LeaseListings]
+      summary: 重新提交招租发布（仅已驳回）
+      description: >-
+        已驳回的招租修改后重报：清空 rejectReason 并再次启动审批。
+        已发布（active）的招租不可重报 —— 那等于绕过审批重新发布。
+      parameters:
+        - $ref: '#/components/parameters/LeaseListingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaseListingPublish'
+      responses:
+        '200':
+          description: OK
+        '409':
+          description: 当前状态不是 rejected
+
+  /lease-listings/{id}/close:
+    post:
+      tags: [LeaseListings]
+      summary: 关闭招租
+      description: 置 closed 并刷新租控（无生效占用且无 active 招租时回落 vacant）。
+      parameters:
+        - $ref: '#/components/parameters/LeaseListingId'
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: 招租记录不存在
+
+  /asset-operators:
+    get:
+      tags: [AssetOperators]
+      summary: 资产运营人员列表
+      description: >-
+        关键字命中三类：人员（姓名 / 手机 / 账号）、备注、**运营范围标的**
+        （项目名 / 分区名 / 资产名 / 资产编号）—— 本页最常见的用法是「谁在管这个项目」。
+      parameters:
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          description: 1 启用 / 0 停用
+          schema: { type: integer, enum: [0, 1] }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 ops.assetOperator:view
+    post:
+      tags: [AssetOperators]
+      summary: 新增资产运营人员
+      description: >-
+        校验：人员须存在且启用、至少一个启用角色、至少一条运营范围、范围标的须存在
+        （分区额外校验其所属项目仍存在、资产须未退出）、同一人员不得重复登记有效档案。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetOperatorInput'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 业务校验失败（人员停用 / 角色停用或不存在 / 范围标的不存在 / 人员已停用）
+        '403':
+          description: 无 ops.assetOperator:create
+        '409':
+          description: 该人员已有资产运营人员档案
+
+  /asset-operators/user-options:
+    get:
+      tags: [AssetOperators]
+      summary: 人员下拉（供远程搜索）
+      description: >-
+        刻意不复用 GET /system/users（要求 org.user:view）：维护运营人员档案的人未必持有
+        人员维护权限，缺它就会选不到人。只返回启用账号，字段到「能认出是哪个人」为止。
+      parameters:
+        - name: keyword
+          in: query
+          description: 模糊匹配姓名 / 手机 / 账号
+          schema: { type: string }
+        - name: companyId
+          in: query
+          schema: { type: integer }
+        - name: departmentId
+          in: query
+          schema: { type: integer }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 ops.assetOperator:view
+
+  /asset-operators/role-options:
+    get:
+      tags: [AssetOperators]
+      summary: 角色下拉（只返回已启用角色）
+      description: 刻意不复用 GET /system/roles（要求 system.role:view，属系统管理面）。
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: 无 ops.assetOperator:view
+
+  /asset-operators/scope-options:
+    get:
+      tags: [AssetOperators]
+      summary: 运营范围下拉（项目 / 分区 / 资产）
+      description: >-
+        按 scopeType 分派候选查询，**必须带公司**：项目按 project.company_id，
+        分区与资产分别经 project.company_id / asset.asset_company_id 收敛
+        （与 V56 抵押标的候选同口径，避免列出别家公司的标的）。
+      parameters:
+        - name: scopeType
+          in: query
+          required: true
+          schema: { type: string, enum: [project, zone, asset] }
+        - name: companyId
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: projectId
+          in: query
+          description: 可选，仅对分区 / 资产生效（在项目详情里登记运营人员时可直接收窄）
+          schema: { type: integer }
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 缺少 companyId 或 scopeType 非法
+        '403':
+          description: 无 ops.assetOperator:view
+
+  /asset-operators/{id}:
+    get:
+      tags: [AssetOperators]
+      summary: 资产运营人员详情（含角色与运营范围明细）
+      description: 列表不返回范围明细（避免一页塞进上百个范围对象），详情才展开。
+      parameters:
+        - $ref: '#/components/parameters/AssetOperatorId'
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: 档案不存在或已删除
+    put:
+      tags: [AssetOperators]
+      summary: 编辑资产运营人员（角色与范围为全量替换）
+      parameters:
+        - $ref: '#/components/parameters/AssetOperatorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetOperatorInput'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 业务校验失败
+        '404':
+          description: 档案不存在或已删除
+    delete:
+      tags: [AssetOperators]
+      summary: 删除资产运营人员（软删）
+      description: >-
+        软删：明细行（角色 / 范围）保留，档案才可能回答「这个人当初负责过什么」；
+        软删也让 uk_asset_operator_user 放开该人员，允许重新登记。
+      parameters:
+        - $ref: '#/components/parameters/AssetOperatorId'
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: 档案不存在或已删除
+
+  /asset-operators/{id}/status:
+    put:
+      tags: [AssetOperators]
+      summary: 启用 / 停用资产运营人员
+      description: 停用保留档案（历史运营范围不丢），不清理明细行。
+      parameters:
+        - $ref: '#/components/parameters/AssetOperatorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: integer
+                  enum: [0, 1]
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: 状态取值不是 0 / 1
+        '404':
+          description: 档案不存在或已删除
 
   /tender/announcements:
     post:
@@ -1590,6 +1847,18 @@ components:
       required: true
       schema:
         type: integer
+    LeaseListingId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    AssetOperatorId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
     MortgageId:
       name: id
       in: path
@@ -1899,17 +2168,93 @@ components:
       allOf:
         - $ref: '#/components/schemas/AssetCreate'
 
-    LeaseListingCreate:
+    LeaseListingPublish:
       type: object
-      required: [assetId, rentAmount]
+      required: [assetId, annualRent]
+      description: >-
+        发布招租表单（V59）。年租金是**表单主字段**；服务端按 12 折算写入既有的
+        「元/月」列 rentAmount，以兼容小程序展示与底价校验的既有口径。
       properties:
         assetId:
           type: integer
-        rentAmount:
+          description: 资产；从资产列表行内发起时由前端注入（列表中操作无需选择）
+        assetUnitId:
+          type: integer
+          description: 计租单元；为空时自动取该资产第一个可租单元（必须挂单元，租控视图按它判定 leasing）
+        rentType:
+          type: string
+          description: 租金类型（RENT_TYPE 字典）
+          enum: [fixed_monthly, fixed_yearly, per_area, per_unit]
+        annualRent:
           type: number
-          nullable: true
+          description: 年租金（元）；低于评估/备案底价年化额时须同时标记可议价
         rentNegotiable:
           type: boolean
+          description: 可议价（低于底价时须为 true，否则 409）
+        coverImage:
+          $ref: '#/components/schemas/ImageRef'
+        detailImages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageRef'
+        recommended:
+          type: boolean
+          description: 是否推荐（小程序端优先展示）
+        sortNo:
+          type: integer
+          description: 排序号，越小越前
+        intro:
+          type: string
+        remark:
+          type: string
+          description: 招租说明
+
+    ImageRef:
+      type: object
+      description: 图片引用；文件本体先经 POST /files/upload 拿到 fileId
+      properties:
+        fileId:
+          type: integer
+        url:
+          type: string
+
+    AssetOperatorInput:
+      type: object
+      required: [userId, roleIds, scopes]
+      description: >-
+        新增 / 编辑资产运营人员（V60）。角色与运营范围都是**全量替换**语义
+        （请求体给的是编辑后的完整集合，不是增量），因此连续两次提交相同内容幂等。
+      properties:
+        userId:
+          type: integer
+          description: 人员（sys_user.id）；须存在且启用，且该人员不得已有有效档案
+        roleIds:
+          type: array
+          description: 角色（role.id）至少 1 个；须存在且启用。仅登记到本档案，不写 user_role
+          items:
+            type: integer
+        scopes:
+          type: array
+          description: 资产运营范围（项目 / 分区 / 资产可混选）至少 1 条；同一 (type, id) 只登记一次
+          items:
+            $ref: '#/components/schemas/AssetOperatorScopeRef'
+        status:
+          type: integer
+          description: 1 启用 / 0 停用；缺省为 1
+          enum: [0, 1]
+        remark:
+          type: string
+
+    AssetOperatorScopeRef:
+      type: object
+      required: [scopeType, scopeId]
+      properties:
+        scopeType:
+          type: string
+          enum: [project, zone, asset]
+        scopeId:
+          type: integer
+          description: project.id / project_zone.id / asset.id
 
     TenderAnnouncement:
       type: object

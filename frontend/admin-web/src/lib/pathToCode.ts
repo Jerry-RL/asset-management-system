@@ -55,6 +55,8 @@ export const PATH_TO_CODE: Record<string, string> = {
   // ---- 资产运营（operation / icon=operation） ----
   '/disposals': 'operation.disposal',
   '/occupations': 'operation.occupation',
+  // V59 新增：Tab = 资产租控状态 + 发布招租（提交审批）
+  '/asset-leasing': 'operation.assetLeasing',
   '/self-uses': 'operation.selfUse',
   '/asset-audits': 'operation.audit',
   // ---- 合同管理（contract / icon=contract） ----
@@ -104,6 +106,8 @@ export const PATH_TO_CODE: Record<string, string> = {
   '/system/users': 'org.user',
   // ---- 运营管理（ops / icon=tenant） ----
   '/tenants': 'ops.tenant',
+  // V60 新增：资产运营人员管理（目录同名页面）；V60 把该目录改名为「资产运营人员管理」
+  '/asset-operators': 'ops.assetOperator',
   // ---- 系统配置（config / icon=config） ----
   '/config/versions': 'config.version',
   // ---- 系统管理（system / icon=setting） ----

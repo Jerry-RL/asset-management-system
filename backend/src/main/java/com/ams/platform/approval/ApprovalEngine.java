@@ -98,7 +98,7 @@ public class ApprovalEngine {
         instance.setCompletedAt(LocalDateTime.now());
         instanceMapper.updateById(instance);
         eventPublisher.publishAfterCommit(
-                new ApprovalCompletedEvent(instance.getBizType(), instance.getBizId(), true));
+                new ApprovalCompletedEvent(instance.getBizType(), instance.getBizId(), true, comment));
         return instance;
     }
 
@@ -114,7 +114,7 @@ public class ApprovalEngine {
         instance.setCompletedAt(LocalDateTime.now());
         instanceMapper.updateById(instance);
         eventPublisher.publishAfterCommit(
-                new ApprovalCompletedEvent(instance.getBizType(), instance.getBizId(), false));
+                new ApprovalCompletedEvent(instance.getBizType(), instance.getBizId(), false, comment));
         return instance;
     }
 

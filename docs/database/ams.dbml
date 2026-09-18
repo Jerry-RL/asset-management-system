@@ -96,9 +96,69 @@ Table tenant {
 Table lease_listing {
   id bigserial [pk, increment]
   asset_id bigint [not null, ref: > asset.id]
+  asset_unit_id bigint
+  annual_rent numeric(18,2)
   rent_amount numeric(18,2)
-  status varchar(20) [not null]
+  rent_negotiable boolean [not null, default: false]
+  rent_type varchar(30)
+  cover_image_file_id bigint
+  cover_image_url varchar(500)
+  detail_images text
+  recommended boolean [not null, default: false]
+  sort_no integer [not null, default: 0]
+  intro text
+  reject_reason varchar(500)
+  status varchar(20) [not null, note: 'pending 待审批 / active 招租中 / rejected 已驳回 / closed 已关闭']
   published_at timestamptz
+  closed_at timestamptz
+  remark varchar(500)
+
+  Note: '招租发布（V59）：发布 = 提交审批；只有 status=active 会被租控派生为 leasing，端上可见。必须挂 asset_unit_id（租控视图按它判定）'
+
+  indexes {
+    (status, recommended, sort_no, id) [name: 'idx_lease_listing_pub_sort']
+    (asset_id, status) [name: 'idx_lease_listing_asset_status']
+  }
+}
+
+Table asset_operator {
+  id bigserial [pk, increment]
+  user_id bigint [not null]
+  status smallint [not null, default: 1]
+  remark varchar(500)
+  deleted_at timestamptz
+
+  Note: '资产运营人员档案（V60）：一人一份有效档案（部分唯一索引 uk_asset_operator_user WHERE deleted_at IS NULL）'
+
+  indexes {
+    user_id [unique, name: 'uk_asset_operator_user']
+  }
+}
+
+Table asset_operator_role {
+  id bigserial [pk, increment]
+  operator_id bigint [not null, ref: > asset_operator.id]
+  role_id bigint [not null]
+
+  Note: '运营人员 × 角色（V60）：只登记不授权 —— 不写 user_role，不产生实际权限'
+
+  indexes {
+    (operator_id, role_id) [unique, name: 'uk_asset_operator_role']
+  }
+}
+
+Table asset_operator_scope {
+  id bigserial [pk, increment]
+  operator_id bigint [not null, ref: > asset_operator.id]
+  scope_type varchar(20) [not null, note: 'project / zone / asset']
+  scope_id bigint [not null]
+
+  Note: '运营人员 × 资产运营范围（V60）：用类型 + id 两列而非三个可空列 —— 后者会让去重因 NULL 语义静默失效'
+
+  indexes {
+    (operator_id, scope_type, scope_id) [unique, name: 'uk_asset_operator_scope']
+    (scope_type, scope_id) [name: 'idx_asset_operator_scope_target']
+  }
 }
 
 Table contract {

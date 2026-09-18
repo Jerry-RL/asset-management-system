@@ -50,6 +50,12 @@ export const STANDALONE_ROUTES: string[] = [
   // 资产处置记录（V57）：只读台账，行是「被处置的资产」而非单据，
   // 且原产权公司 / 处置对象 / 处置方式三个筛选维度超出 ResourcePage 的表达能力，走独立页
   '/disposal-records',
+  // 资产租赁管理（V59）：Tab 是资产租控状态（全部 / 招租中 / 租赁中 / 自用中 …），
+  // 列表是资产而不是招租单据，且「发布招租」是带图片上传的独立表单，走独立页
+  '/asset-leasing',
+  // 资产运营人员管理（V60）：人员 / 角色 / 运营范围三组联动选择（范围带公司过滤的远程搜索），
+  // 超出 ResourcePage 的字段表达能力，走独立页
+  '/asset-operators',
 ];
 
 export interface RouteMeta {

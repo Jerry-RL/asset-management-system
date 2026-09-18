@@ -6,6 +6,34 @@
 
 ### Added
 
+- **资产运营人员管理（V60）**——「运营管理」目录改名为「资产运营人员管理」并补齐同级子模块，登记「谁负责哪些资产的运营」：
+  - **三张新表**：`asset_operator`（一人一份档案：`user_id` / `status` / `remark` + 软删）、`asset_operator_role`（角色选择，多对多）、`asset_operator_scope`（资产运营范围）。范围沿用 V56 抵押记录的三值口径 `scope_type`（project / zone / asset）+ `scope_id` —— **不用三个可空列**：可空列的组合唯一索引里两列恒为 NULL，而 PG 把 NULL 视为互不相等，去重会静默失效。实测 `project:3` 与 `asset:3` 并存、同类型同 id 重复被拒
+  - **一人一份有效档案**用**部分**唯一索引 `uk_asset_operator_user ... WHERE deleted_at IS NULL`：软删后允许重新登记（普通唯一索引会让该人员永久占位），而未软删的行仍然互斥
+  - **角色只登记、不授权**（已确认口径）：本模块不写 `user_role`，不产生任何实际权限；真正授权仍在「系统管理 → 角色权限」。若在这里同步写 `user_role`，一个业务模块的页面就等于多出一条提权路径，而它的权限码不是提权类权限码。**范围只登记、不拦截**：本期不接入 `RbacService` 数据范围，表结构已按可扩展口径建（类型 + id 分开存），后续接入不需要改表
+  - **后端**：`AssetOperatorController` 提供 `GET /asset-operators`（列表：支持按**人员姓名 / 手机 / 账号**、**备注**、**运营范围标的**（项目 / 分区 / 资产名）三类关键字检索）、`GET /{id}`（详情：比列表多返回范围明细与标的名）、`POST` / `PUT /{id}` / `PUT /{id}/status` / `DELETE /{id}`（软删），以及**三个独立的下拉端点** `user-options` / `role-options` / `scope-options`。下拉单独开是因为人员 / 角色 / 资产分别要 `org.user:view` / `system.role:view` / `asset.ledger:view` 三个**别的**菜单权限，复用既有端点会让缺任一项权限的人选不出东西（与 V55 调拨记录、V56 抵押记录同一取舍）；权限码固定 `ops.assetOperator:view|create|update|delete`
+  - **校验**（唯一一份实现）：人员须存在且启用、至少一个**启用**角色、至少一条范围、范围标的须存在（分区额外校验其项目仍存在、资产须未退出）、同一人员不得重复登记；角色与范围都是**全量替换**（先删后插），编辑两次相同内容幂等
+  - **前端** `AssetOperatorsPage`（`/asset-operators`）：列表 + 弹窗表单（人员远程搜索 / 角色多选 / 运营范围可增删的「类型 + 标的」联动行，支持三类混选）+ 详情抽屉。范围候选的**公司取自所选人员**的所属公司（不加独立的公司选择框：让人手工再选一次公司只会制造「选的人与范围不属于同一家公司」的脏组合）；人员没有所属公司时明确提示并禁用范围选择，而不是退化成一个不筛公司的候选列表。切换范围类型会清空已选标的 —— `project:3` 与 `asset:3` 是完全不同的对象
+  - **菜单与权限**：「运营管理」目录**只改 `name`**（`menu.code` 仍是 `ops`）—— 改 code 会同时打断 `role_permission.menu_code` 与前端 `pathToCode` 镜像（V58 为改名的完整清单立过规矩）；新页 `ops.assetOperator` 挂在 `ops` 下、sort 5 排在「租户管理」之前。权限回填**只给 `operator` 且只回填 `view`**：本页能给人登记角色，属权限面入口，与 `org.user` 同级敏感（V45 §5.1 已把 `org.user` 排除在通用回填之外），故不用 V55/V57/V59 的「所有非超管角色」口径；写动作一律不回填
+  - 前端路由 / `STANDALONE_ROUTES` / `PATH_TO_CODE` 镜像 / 侧栏图标 / 用户手册同步（`check-perm-invariants` 通过）；`docs/api/openapi.yaml` 补齐本模块全部端点与 `AssetOperatorInput` / `AssetOperatorScopeRef` schema，并顺带补齐 V59 遗漏的招租端点（`/lease-listings/{id}`、`/{id}/resubmit`、`/{id}/close`）与 `LeaseListingPublish` 表单 schema（`pnpm api:lint` 通过）
+  - 测试：新增 `AssetOperatorServiceTest` 17 例（含「范围去重按 (类型,id)，project:3 与 asset:3 不能被吃掉」、停用角色 / 已退出资产 / 孤儿分区 / 非法类型拒绝、编辑全量替换、软删可见性、标的名缺失回落占位）、`AssetOperatorPermissionTest` 7 例（含「三个下拉只要求本模块 `:view`」与字面量段不被 `/{id}` 抢匹配）、`V60AssetOperatorMigrationContractTest` 8 例（列集恰好、部分唯一索引、不写 `user_role`、目录只改名、权限只回填 operator）；后端全量 678 例通过；60 个迁移在 PostgreSQL 15 全链应用通过，并实测幂等重跑与三条唯一约束
+  - **顺带修的缺陷**：`AssetOperatorService` 详情对可空键取值时用了 `Map.of().get(null)`（`ImmutableCollections` 对 null 键抛 NPE）—— 人员没填「所属部门」时一打开详情就 500。收敛为可空安全的 `lookup()` 并覆盖全部取值点（仓内 `AssetService#fillResponsibleNames` 已为同一个坑立过注释）
+  - **新增守卫** `scripts/check-source-encoding.mjs`（并接入 CI）：禁止 UTF-8 BOM。`javac` 见到 BOM 会报「非法字符: '\ufeff'」并**让整个 backend 编译失败**，而 BOM 是零宽字符、编辑器里看不见 —— 本仓已发生两次（V57 的 `DisposalRecordController`、V60 的 `AssetOperatorService`），两次排查成本都远高于这条检查
+
+
+- **招租发布审批 + 资产租赁管理（V59）**——「发布招租」从「直接生效」改为「提交审批 → 通过后小程序端可见」，并新增按租控状态分 Tab 的资产租赁管理页：
+  - **`lease_listing` 扩展（V59）**：新增 `rent_type` / `annual_rent` / `cover_image_file_id` / `cover_image_url` / `detail_images`（JSON 文本）/ `recommended` / `sort_no` / `intro` / `reject_reason` / `created_by` 共 10 列，`status` 由二值（`active` / `closed`）**扩为四值**：`pending` 待审批 / `active` 招租中 / `rejected` 已驳回 / `closed` 已关闭（旧取值语义不变，存量数据无需转换）。新增 `idx_lease_listing_pub_sort`（`status, recommended DESC, sort_no ASC, id DESC`）供端上列表直接走索引
+  - **发布闭环**：`POST /lease-listings` 由「直接置 active + 租控转 leasing」改为**提交审批**（落 `pending` + `ApprovalEngine.start('lease_listing', id)`）。`biz_type='lease_listing'` 的流程定义随迁移落库；审批通过置 `active` 并 `publishedAt`，驳回把**审批意见写入 `reject_reason`**。新增 `POST /lease-listings/{id}/resubmit`（仅 `rejected` 可重报）、`GET /lease-listings/{id}`（招租字段 + 资产详情 + 发起人信息）、`GET /lease-listings?assetId=` 过滤
+  - **租控由派生而非直写**：审批通过后改调 `LeaseStatusDeriver.refresh(assetId)`，不再走 `LeaseControlService.transition` —— ADR-0019 之后 `v_asset_lease_status_derived` 才是租控真源，且它正是按 `lease_listing.status='active' AND asset_unit_id = u.id` 判定 `leasing`。因此发布的招租必须挂到**计租单元**（`AssetUnitService.resolveForLease`），否则派生视图看不到新发布的招租，表现为「审批通过了但资产还是空置」
+  - **审批意见进事件**：`ApprovalCompletedEvent` 新增 `comment`（保留三参构造兼容存量发件箱事件）。此前审批意见只落在 `approval_task.comment`，业务侧拿不到，「驳回填写原因」在界面上只能是空的
+  - **租金量纲**：表单只收**年租金**（`annual_rent`），提交时按 12 折算写入 `rent_amount`（「元/月」的既有列，小程序与底价校验的口径），底价校验改为「年租金 vs 底价×12」——直接拿年租金对比月底价会让校验形同虚设
+  - **提交前置校验**：仅空置资产可发起（`assertVacant`）、同一计租单元不得有进行中的招租（否则产生重复的发布审批）、低于底价年化额且未勾选可议价时 409
+  - **前端新页 `AssetLeasingPage`（`/asset-leasing`，`operation.assetLeasing`）**：Tab = **资产租控状态**（全部 / 招租中 / 租赁中 / 自用中 / 空置 / 部分出租），列表是**资产**；行内「发布招租」（资产由行注入，需求「在列表中操作无需选择」）/「招租记录」（抽屉列出该资产全部发布审批记录，含驳回原因与重新提交）/「详情」；招租详情弹窗才露出**资产详情与发起人信息**
+  - **表单能力下沉**：`ResourcePage.FieldConfig.type` 新增 `image` / `images`（`ImageUploadField` / 新增 `MultiImageUploadField`），并导出 `ResourceFormField` 供独立页复用；发布表单字段集中定义在 `lib/listingFields.ts`，三处入口（资产台账行内 / 招租管理新增 / 资产租赁管理弹窗）共用一份配置
+  - 「招租管理」列表补齐资产编号 / 名称 / 封面 / 租金类型 / 年租金 / 推荐 / 排序 / 审批状态 / 驳回原因与状态筛选；`BIZ_TYPE` 与新增 `LISTING_STATUS` 标签映射、菜单 / 路由 / `PATH_TO_CODE` 镜像 / 侧栏图标 / 用户手册同步
+  - 端侧（小程序 `miniprogram-tenant` / H5 `h5-tenant`）改按**年租金**展示（`¥…/年`，不再误用月均 `rentAmount`），并展示封面图、推荐标识与介绍
+  - 测试：新增 `LeaseListingPublishApprovalTest` 13 例（提交只落 pending 且不刷租控、年租金→月均换算、底价年化拦截与可议价放行、同单元重复招租拦截、通过/驳回的落库与刷新、监听器幂等与 bizType 隔离、重报状态守卫、详情携带资产与发起人且发起人缺失不 500）；后端全量 640 例通过；59 个迁移在 PostgreSQL 15 全链应用通过，并实测「pending → 派生 vacant、active → 派生 leasing、closed → 回落 vacant」
+  - **顺带修复**：`DisposalRecordController.java` 文件开头带 UTF-8 BOM，导致 `javac` 报「非法字符: '\ufeff'」、**整个 backend 无法编译**（V57 提交遗留），已去掉 3 字节 BOM
+
 - **资产处置记录（V57 / V58）：处置完成后资产脱离原产权公司**——补齐「处置了哪些资产、从哪家公司处置出去」的可见性与归属收口：
   - 新增菜单「资产处置记录」（`deed.disposalRecord`，挂「资债权证记录」目录下，路径 `/disposal-records`）：以**资产**为行的只读台账，展示所有被处置的资产，支持按**原产权公司** / 处置对象（资产 / 项目 / 分区）/ 处置方式筛选与资产编号 / 名称搜索。**V58 调整**：该菜单原在「资产运营」下（V57），因它属「记录 / 台账」而非「发起操作」，移入「资债权证记录」目录；`menu.code` 随目录改名（`operation.disposalRecord` → `deed.disposalRecord`）并同步 `role_permission.menu_code`（反范式冗余列，不同步会让按码查询得到空集），`path` 保持不变
   - 新增表 `asset_disposal_record`（一行 = 一个被处置的资产）：快照处置时资产的**原产权公司 / 原经营公司**、处置方式、金额与单位、日期、处置人、备注，并记录处置对象（`asset` / `project` / `zone`）与来源单据（资产级 `disposal_order.id`、项目 / 分区级 `biz_disposal_record.id`）。**无软删列**——处置不可逆，台账只增不减；`uk_asset_disposal_record_asset` 唯一索引同时充当幂等键与并发兜底

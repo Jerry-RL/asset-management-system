@@ -3,6 +3,8 @@ package com.ams.modules.lease.controller;
 import com.ams.common.web.ApiResponse;
 import com.ams.common.web.PageResult;
 import com.ams.common.web.TraceIdUtil;
+import com.ams.modules.lease.dto.LeaseListingDetail;
+import com.ams.modules.lease.dto.LeaseListingPublishRequest;
 import com.ams.modules.lease.entity.LeaseListing;
 import com.ams.modules.lease.entity.Tenant;
 import com.ams.modules.lease.entity.TenantCreditLog;
@@ -86,14 +88,31 @@ public class LeaseController {
 
     // ---- 招租 ----
     @GetMapping("/lease-listings")
-    public ApiResponse<List<LeaseListing>> listings(@RequestParam(required = false) String status) {
-        return ApiResponse.ok(listingService.listListings(status), TraceIdUtil.get());
+    public ApiResponse<List<LeaseListing>> listings(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long assetId) {
+        return ApiResponse.ok(listingService.listListings(status, assetId), TraceIdUtil.get());
     }
 
+    /** 招租详情：招租字段 + 资产详情 + 发起人信息（仅查看详情时可见）。 */
+    @GetMapping("/lease-listings/{id}")
+    public ApiResponse<LeaseListingDetail> listingDetail(@PathVariable Long id) {
+        return ApiResponse.ok(listingService.detail(id), TraceIdUtil.get());
+    }
+
+    /** 发布招租 = 提交发布审批（V59）；审批通过后小程序端可见。 */
     @PostMapping("/lease-listings")
     @Audited(module = "lease", action = "publish")
-    public ApiResponse<LeaseListing> publish(@RequestBody LeaseListing listing) {
-        return ApiResponse.ok(listingService.publish(listing), TraceIdUtil.get());
+    public ApiResponse<LeaseListing> publish(@RequestBody LeaseListingPublishRequest request) {
+        return ApiResponse.ok(listingService.submit(request), TraceIdUtil.get());
+    }
+
+    /** 驳回后修改再报。 */
+    @PostMapping("/lease-listings/{id}/resubmit")
+    @Audited(module = "lease", action = "resubmit")
+    public ApiResponse<LeaseListing> resubmit(@PathVariable Long id,
+            @RequestBody LeaseListingPublishRequest request) {
+        return ApiResponse.ok(listingService.resubmit(id, request), TraceIdUtil.get());
     }
 
     @PostMapping("/lease-listings/{id}/close")

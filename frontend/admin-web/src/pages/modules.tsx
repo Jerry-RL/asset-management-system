@@ -1,8 +1,10 @@
 import type { ResourceConfig } from '@/components/ResourcePage';
 import { ProjectZonesPanel } from '@/components/ProjectZonesPanel';
 import { AssetUnitPanel } from '@/components/AssetUnitPanel';
+import { CoverImage } from '@/components/CoverImage';
 import { toAssetUnitOwner } from '@/lib/assetUnits';
 import { ASSET_QUICK_ACTIONS } from '@/lib/assetQuickActions';
+import { listingPublishFields } from '@/lib/listingFields';
 import * as L from '@/lib/labels';
 
 // ============================================================================
@@ -98,6 +100,7 @@ export const MENU: MenuGroup[] = [
     items: [
       { path: '/disposals', title: '资产处置' },
       { path: '/occupations', title: '临时占用' },
+      { path: '/asset-leasing', title: '资产租赁管理' },
       { path: '/self-uses', title: '资产自用' },
       { path: '/asset-audits', title: '经营性盘点' },
     ],
@@ -188,8 +191,12 @@ export const MENU: MenuGroup[] = [
     ],
   },
   {
-    title: '运营管理',
-    items: [{ path: '/tenants', title: '租户管理' }],
+    title: '资产运营人员管理',
+    items: [
+      // V60：目录名与同名子页；sort 5 让同名页面排在「租户管理」之前
+      { path: '/asset-operators', title: '资产运营人员管理' },
+      { path: '/tenants', title: '租户管理' },
+    ],
   },
   {
     title: '系统配置',
@@ -535,19 +542,45 @@ export const RESOURCES: Record<string, ResourceConfig> = {
   'lease-listings': {
     title: '招租管理',
     listPath: '/lease-listings',
+    // 发布走「提交审批」：字段与「资产租赁管理」的发布弹窗共用同一份配置
+    // （见 lib/listingFields），避免两处表单各自漂移。
     create: true,
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'assetId', label: '资产ID' },
-      { key: 'rentAmount', label: '租金' },
-      { key: 'rentNegotiable', label: '面议', render: (r) => (r.rentNegotiable ? '是' : '否') },
-      { key: 'status', label: '状态', map: { active: '进行中', closed: '已关闭' } },
+      { key: 'assetNo', label: '资产编号' },
+      { key: 'assetName', label: '资产名称' },
+      {
+        key: 'coverImageUrl',
+        label: '封面',
+        render: (r) => (
+          <CoverImage src={String(r.coverImageUrl ?? '')} alt="招租封面" className="h-10 w-14" />
+        ),
+      },
+      { key: 'rentType', label: '租金类型', map: L.RENT_TYPE },
+      { key: 'annualRent', label: '年租金(元)' },
+      {
+        key: 'rentNegotiable',
+        label: '可议价',
+        render: (r) => (r.rentNegotiable ? '是' : '否'),
+      },
+      {
+        key: 'recommended',
+        label: '推荐',
+        render: (r) => (r.recommended ? '是' : '否'),
+      },
+      { key: 'sortNo', label: '排序' },
+      { key: 'status', label: '状态', map: L.LISTING_STATUS },
+      { key: 'rejectReason', label: '驳回原因' },
+      { key: 'createdAt', label: '发起时间' },
     ],
-    fields: [
-      { name: 'assetId', label: '资产ID', type: 'number', required: true },
-      { name: 'rentAmount', label: '租金', type: 'number' },
-      { name: 'rentNegotiable', label: '可面议', type: 'boolean' },
+    filters: [
+      {
+        key: 'status',
+        label: '状态',
+        options: Object.entries(L.LISTING_STATUS).map(([value, label]) => ({ value, label })),
+      },
     ],
+    fields: listingPublishFields({ withAsset: true }),
   },
   'lease-bundles': {
     title: '组合/拆分租赁',

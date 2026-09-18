@@ -11,6 +11,8 @@ import { ApprovalPage } from '@/pages/ApprovalPage';
 import { PaymentConfirmPage } from '@/pages/PaymentConfirmPage';
 import { AgentReportsPage } from '@/pages/AgentReportsPage';
 import { AssetDossierPage } from '@/pages/AssetDossierPage';
+import { AssetLeasingPage } from '@/pages/AssetLeasingPage';
+import { AssetOperatorsPage } from '@/pages/AssetOperatorsPage';
 import { ContractTemplatesPage } from '@/pages/ContractTemplatesPage';
 import { ContractDetailPage } from '@/pages/ContractDetailPage';
 import { OpsCalendarPage } from '@/pages/OpsCalendarPage';
@@ -98,6 +100,10 @@ export default function App() {
               <Route path="mortgages/:id/edit" element={<MortgageFormPage />} />
               {/* 资产处置记录（V57）：只读台账，一行 = 一个被处置的资产 */}
               <Route path="disposal-records" element={<DisposalRecordsPage />} />
+              {/* 资产租赁管理（V59）：Tab = 资产租控状态 + 发布招租（提交审批） */}
+              <Route path="asset-leasing" element={<AssetLeasingPage />} />
+              {/* 资产运营人员管理（V60）：人员 + 角色 + 资产运营范围（项目/分区/资产） */}
+              <Route path="asset-operators" element={<AssetOperatorsPage />} />
               {/* 菜单管理：专用页面（树 + 抽屉 + 校验），不再走 ResourcePage */}
               <Route path="system/menus" element={<SystemMenuPage />} />
               <Route path="system/roles" element={<SystemRolePage />} />

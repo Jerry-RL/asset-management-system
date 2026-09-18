@@ -1,4 +1,4 @@
-﻿package com.ams.modules.disposal.controller;
+package com.ams.modules.disposal.controller;
 
 import com.ams.common.web.ApiResponse;
 import com.ams.common.web.PageResult;

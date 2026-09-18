@@ -151,6 +151,19 @@ export const RENT_TYPE: Record<string, string> = {
   negotiable: '面议',
 };
 
+/**
+ * 招租发布状态（`lease_listing.status`，V59 由二值扩为四值）。
+ *
+ * <p>`pending` / `rejected` 是新增的审批态：提交后待审批、租控不变、小程序不可见；
+ * 只有 `active` 会被租控派生为「招租中」并出现在小程序端。
+ */
+export const LISTING_STATUS: Record<string, string> = {
+  pending: '待审批',
+  active: '招租中',
+  rejected: '已驳回',
+  closed: '已关闭',
+};
+
 export const PAYMENT_CYCLE: Record<string, string> = {
   monthly: '月缴',
   quarterly: '季缴',
@@ -294,6 +307,7 @@ export const BIZ_TYPE: Record<string, string> = {
   asset_audit_variance: '盘点差异审批',
   transfer: '资产调拨',
   evaluation: '评估申请',
+  lease_listing: '招租发布审批',
 };
 
 export const AGENT_REPORT_STATUS: Record<string, string> = {

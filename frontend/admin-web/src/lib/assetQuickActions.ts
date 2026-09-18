@@ -1,5 +1,19 @@
 import type { RowActionConfig } from '@/components/ResourcePage';
+import { LISTING_PUBLISH_DEFAULTS, listingPublishFields } from '@/lib/listingFields';
 import * as L from '@/lib/labels';
+
+/**
+ * 由资产评估/备案底价推默认年租金。
+ *
+ * <p>`baseRentFloor` / `baseRentAssessed` 是**月**口径底价，而发布招租表单收的是年租金，
+ * 故乘 12 —— 直接把月租金填进「年租金」会让提交值缩水 12 倍，并撞上后端的底价年化校验。
+ * 底价缺失或非正数时返回 undefined，让用户自己填，而不是替他填一个 0。
+ */
+const annualRentFromFloor = (row: Record<string, unknown>): number | undefined => {
+  const floor = Number(row.baseRentFloor ?? row.baseRentAssessed ?? NaN);
+  if (!Number.isFinite(floor) || floor <= 0) return undefined;
+  return Math.round(floor * 12 * 100) / 100;
+};
 
 /** 资产台账 / 资产档案共用的快捷操作 */
 export const ASSET_QUICK_ACTIONS: RowActionConfig[] = [
@@ -89,28 +103,19 @@ export const ASSET_QUICK_ACTIONS: RowActionConfig[] = [
   {
     key: 'publishListing',
     label: '发布招租',
-    title: '快速发布招租信息',
+    title: '发布招租信息（提交审批）',
     submitPath: '/lease-listings',
     injectIdField: 'assetId',
-    successMessage: '招租已发布',
+    successMessage: '招租发布已提交审批，通过后小程序端可见',
     visible: (row) => {
       const s = String(row.leaseControlStatus ?? '');
       return s === 'vacant' || s === '';
     },
     defaultValues: (row) => ({
-      rentAmount: row.baseRentFloor ?? row.baseRentAssessed ?? row.marketRefRent ?? undefined,
-      rentNegotiable: false,
-      remark: '',
+      ...LISTING_PUBLISH_DEFAULTS,
+      annualRent: annualRentFromFloor(row),
     }),
-    fields: [
-      { name: 'rentAmount', label: '挂牌租金(元)', type: 'number', required: true },
-      {
-        name: 'rentNegotiable',
-        label: '可议价',
-        type: 'boolean',
-      },
-      { name: 'remark', label: '招租说明', type: 'textarea' },
-    ],
+    fields: listingPublishFields({ withAsset: false }),
   },
   {
     key: 'createRepair',

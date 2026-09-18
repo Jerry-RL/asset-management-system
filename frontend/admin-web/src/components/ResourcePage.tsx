@@ -44,6 +44,8 @@ import { AssetUnitSheetModal } from '@/components/AssetUnitSheetModal';
 import { toAssetUnitOwner } from '@/lib/assetUnits';
 import { AssetQrLabel } from '@/components/AssetQrLabel';
 import { CoverImage } from '@/components/CoverImage';
+import { ImageUploadField } from '@/components/ImageUploadField';
+import { MultiImageUploadField } from '@/components/MultiImageUploadField';
 import { TableActions, actionsColumnWidth, type TableActionItem } from '@/components/TableActions';
 import {
   BILL_STATUS,
@@ -132,7 +134,7 @@ const GLOBAL_VALUE_MAPS: Record<string, Record<string, string>> = {
 export interface FieldConfig {
   name: string;
   label: string;
-  type?: 'text' | 'number' | 'date' | 'select' | 'textarea' | 'boolean';
+  type?: 'text' | 'number' | 'date' | 'select' | 'textarea' | 'boolean' | 'image' | 'images';
   options?: { value: string | number; label: string }[];
   /** GET 拉取下拉选项（支持 PageResult.list 或数组） */
   optionsPath?: string;
@@ -151,6 +153,13 @@ export interface FieldConfig {
   /** 详情抽屉中隐藏（列表已用名称列展示时避免重复露出原始 ID） */
   hideInDetail?: boolean;
   required?: boolean;
+  /**
+   * `image` / `images` 的上传来源标记（`POST /files/upload` 的 bizType）。
+   * 其它类型忽略。
+   */
+  bizType?: string;
+  /** `images` 的最多张数，默认 9。其它类型忽略。 */
+  maxCount?: number;
 }
 
 export interface ColumnConfig {
@@ -445,6 +454,20 @@ const renderFieldControl = (
   if (field.type === 'textarea') return <Input.TextArea rows={3} />;
   if (field.type === 'boolean') return <Switch />;
   if (field.type === 'number') return <InputNumber className="w-full" />;
+  // 图片字段的 bizType 缺省为 'resource'：调用点漏配时不至于把附件挂到错误业务上，
+  // 也不会因为 undefined 让上传接口 400（后端 bizType 为必填）。
+  if (field.type === 'image') {
+    return <ImageUploadField bizType={field.bizType ?? 'resource'} previewTitle={field.label} />;
+  }
+  if (field.type === 'images') {
+    return (
+      <MultiImageUploadField
+        bizType={field.bizType ?? 'resource'}
+        previewTitle={field.label}
+        maxCount={field.maxCount}
+      />
+    );
+  }
   return <Input type={field.type === 'date' ? 'date' : 'text'} />;
 };
 
@@ -490,8 +513,11 @@ const resolveOptionsPath = (template: string, values: Record<string, unknown>): 
 /**
  * 表单字段：远程下拉由字段自身按需拉取（挂载时 + 依赖字段变化时），
  * 免去打开表单前的统一预取。
+ *
+ * <p>导出给「不能用 ResourcePage 渲染、但仍要用同一套字段配置」的独立页面复用
+ * （如资产租赁管理的发布招租弹窗）—— 否则字段渲染规则会出现第二份实现并各自漂移。
  */
-function ResourceFormField({ field, form }: { field: FieldConfig; form: FormInstance }) {
+export function ResourceFormField({ field, form }: { field: FieldConfig; form: FormInstance }) {
   // 无依赖字段时挂一个不存在的名字，保证 useWatch 调用顺序稳定
   const dependentValue = Form.useWatch(field.optionsDependsOn ?? '__ams_none__', form);
   const [options, setOptions] = useState<FieldOption[]>(field.options ?? []);

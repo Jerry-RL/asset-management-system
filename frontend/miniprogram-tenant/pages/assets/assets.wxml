@@ -2,12 +2,15 @@
   <view class="banner" bindtap="goTender">📢 公开招租 · 在线报名 ›</view>
   <block wx:for="{{list}}" wx:key="id">
     <view class="card" bindtap="goDetail" data-id="{{item.assetId}}">
-      <view class="title">{{item.assetId}} · 招租资产</view>
-      <view class="rent">
-        <text wx:if="{{item.rentAmount}}">¥{{item.rentAmount}}/月</text>
-        <text wx:else>面议</text>
+      <image wx:if="{{item.coverImageUrl}}" class="cover" src="{{item.coverImageUrl}}" mode="aspectFill" />
+      <view class="body">
+        <view class="title-row">
+          <text class="title">{{item.title}}</text>
+          <text wx:if="{{item.recommended}}" class="badge">推荐</text>
+        </view>
+        <view class="rent">{{item.rentLabel}}</view>
+        <view wx:if="{{item.introText}}" class="intro">{{item.introText}}</view>
       </view>
-      <view class="status">{{item.status === 'active' ? '招租中' : '已结束'}}</view>
     </view>
   </block>
   <view wx:if="{{!loading && list.length === 0}}" class="empty">暂无招租资产</view>
