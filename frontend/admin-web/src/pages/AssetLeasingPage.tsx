@@ -27,7 +27,10 @@ import { useListQuery } from '@/lib/listQuery';
 import { LEASE_CONTROL_STATUS, LISTING_STATUS, RENT_TYPE, enumLabel } from '@/lib/labels';
 import { CoverImage } from '@/components/CoverImage';
 import { TableActions, actionsColumnWidth } from '@/components/TableActions';
-import { PublishListingModal, type ListingPublishFormValues } from '@/components/PublishListingModal';
+import {
+  PublishListingModal,
+  type ListingPublishFormValues,
+} from '@/components/PublishListingModal';
 
 /** 资产行（`/assets` 返回，含列表回显的非表字段）。 */
 interface AssetRow {
@@ -85,8 +88,7 @@ const LEASE_TABS = [
   { key: 'partial_leased', label: '部分出租' },
 ];
 
-const formatTime = (value?: string): string =>
-  value ? value.slice(0, 19).replace('T', ' ') : '-';
+const formatTime = (value?: string): string => (value ? value.slice(0, 19).replace('T', ' ') : '-');
 
 /**
  * 资产租赁管理（FR-OPS-002，V59）。
@@ -519,7 +521,11 @@ export function AssetLeasingPage() {
                 </Descriptions.Item>
               )}
               <Descriptions.Item label="封面" span={2}>
-                <CoverImage src={detail.listing.coverImageUrl} alt="招租封面" className="h-20 w-28" />
+                <CoverImage
+                  src={detail.listing.coverImageUrl}
+                  alt="招租封面"
+                  className="h-20 w-28"
+                />
               </Descriptions.Item>
               <Descriptions.Item label="详情列表图" span={2}>
                 {detail.listing.detailImages?.length ? (
