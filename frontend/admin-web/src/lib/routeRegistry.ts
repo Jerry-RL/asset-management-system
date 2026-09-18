@@ -47,6 +47,9 @@ export const STANDALONE_ROUTES: string[] = [
   // 抵押记录（V56）：标的类型（项目 / 分区 / 资产）决定候选查询与展示拼接，
   // 且金额 / 利率 / 期限 / 合同号超出 ResourcePage 的表达能力，走独立页
   '/mortgages',
+  // 资产处置记录（V57）：只读台账，行是「被处置的资产」而非单据，
+  // 且原产权公司 / 处置对象 / 处置方式三个筛选维度超出 ResourcePage 的表达能力，走独立页
+  '/disposal-records',
 ];
 
 export interface RouteMeta {

@@ -13,6 +13,8 @@ import com.ams.modules.disposal.entity.DisposalOrder;
 import com.ams.modules.disposal.mapper.DisposalOrderMapper;
 import com.ams.modules.finance.entity.FinanceVoucher;
 import com.ams.modules.finance.service.ReconcileService;
+import com.ams.modules.record.DisposalCascadePort;
+import com.ams.modules.record.DisposalCascadeSnapshot;
 import com.ams.modules.record.dto.DisposalOrderView;
 import com.ams.modules.record.service.RecordSheetService;
 import com.ams.platform.approval.ApprovalEngine;
@@ -49,6 +51,7 @@ public class DisposalService {
     private final ObjectMapper objectMapper;
     private final DomainEventPublisher eventPublisher;
     private final RecordSheetService recordSheetService;
+    private final DisposalCascadePort disposalCascadePort;
 
     public DisposalService(
             DisposalOrderMapper disposalOrderMapper,
@@ -59,7 +62,8 @@ public class DisposalService {
             ReconcileService reconcileService,
             ObjectMapper objectMapper,
             DomainEventPublisher eventPublisher,
-            RecordSheetService recordSheetService) {
+            RecordSheetService recordSheetService,
+            DisposalCascadePort disposalCascadePort) {
         this.disposalOrderMapper = disposalOrderMapper;
         this.leaseControlService = leaseControlService;
         this.approvalEngine = approvalEngine;
@@ -69,6 +73,7 @@ public class DisposalService {
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
         this.recordSheetService = recordSheetService;
+        this.disposalCascadePort = disposalCascadePort;
     }
 
     public PageResult<DisposalOrder> page(long page, long pageSize, String status) {
@@ -211,7 +216,9 @@ public class DisposalService {
         DisposalOrder order = require(id);
         order.setStatus("pending_execute");
         disposalOrderMapper.updateById(order);
-        leaseControlService.transition(order.getAssetId(), LeaseControlStatus.DISPOSING,
+        // 终态豁免：资产已是 exited 时跳过租控写入 —— 否则「已处置的资产再登记处置」会在这一步
+        // 撞上「租控状态不允许从 exited 迁移到 disposing」的 409（分次处置 / 项目级级联后补登记）
+        leaseControlService.transitionUnlessExited(order.getAssetId(), LeaseControlStatus.DISPOSING,
                 "disposal", id, "处置审批通过");
     }
 
@@ -282,8 +289,19 @@ public class DisposalService {
 
         order.setStatus("completed");
         disposalOrderMapper.updateById(order);
-        leaseControlService.transition(order.getAssetId(), LeaseControlStatus.EXITED,
+        // 终态豁免：同上 —— 资产已是 exited 时不再写租控（重复完成不会 409）
+        leaseControlService.transitionUnlessExited(order.getAssetId(), LeaseControlStatus.EXITED,
                 "disposal", id, "处置完成，资产已退出");
+        // V57：处置完成即「资产脱离原产权公司」—— 清空 property_company_id、置
+        // ownership_status='disposed' / lifecycle_status='exited'，并写一行被处置资产台账。
+        // 快照必须在这里做：公司字段一旦被清空就再也反推不出「从哪家公司处置出去」。
+        disposalCascadePort.cascadeDispose(
+                DisposalCascadePort.TARGET_ASSET,
+                order.getAssetId(),
+                new DisposalCascadeSnapshot(order.getDisposalType(), actual,
+                        DisposalCascadeSnapshot.UNIT_YUAN, order.getDisposalDate(),
+                        order.getDisposalUserId(), order.getDisposalUserName(), order.getRemark()),
+                order.getId(), null);
         // DSD §4.8：处置完成 → DisposalCompleted（备案提醒、档案与看板投影）
         // 注：租控写入仍走旧入口，改造清单触点 7 将改为 AssetOccupancyService
         eventPublisher.publishAfterCommit(new DisposalCompletedEvent(

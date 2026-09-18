@@ -82,6 +82,7 @@ export const MENU: MenuGroup[] = [
       { path: '/evaluations', title: '评估申请' },
       { path: '/ownership-transfers', title: '权属流转' },
       { path: '/asset-transfer-records', title: '资产调拨记录' },
+      { path: '/disposal-records', title: '资产处置记录' },
     ],
   },
   {

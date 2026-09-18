@@ -42,13 +42,18 @@ import {
 // 「一次保存」的编排（那属于各页面的职责），只负责三块的渲染、校验提示与值同步：
 // 记录挂在 `value`/`onChange` 上，由宿主用 saveOwnerSheet 落库。
 //
-// 处置模块**三种主体共用同一套卡片**（新增 = 追加一张空卡、字段就地编辑、
-// 删除按钮在卡片里），差异只有数据来源与「这一张能不能改、能不能推进流程」：
+// 处置模块**三种主体共用同一套卡片**（字段就地编辑、删除按钮在卡片里），
+// 差异只有数据来源与「这一张能不能改、能不能推进流程」：
 //   资产          → 数据来自 disposal_order（读/写都经宿主的 loadOwnerSheet /
 //                    saveOwnerSheet，落点是 PUT /assets/{id}/disposals）；
 //                    卡片多一个状态标签、资产专有的扩展字段与流程按钮，
 //                    且**只有草稿可以改**（审批中及之后由流程端点推进，见设计 §7.1）；
 //   项目 / 分区   → 数据来自 record-sheet 的 disposalRecords 段，纯台账、无状态机。
+//
+// **新增入口已下线**（产品口径：处置是由处置动作产生的事实，不是可以随手追加的台账行）：
+// 面板上不再有「新增处置记录」按钮，处置记录一律由业务动作写入 —— 资产走「资产处置」模块、
+// 项目 / 分区走后端 record-sheet 的处置段。已存在的记录仍可读、可改草稿、可在资产侧推进流程。
+// 详见 {@link #renderDisposals}。
 //
 // 落库时机两侧一致：**卡片上的改动先攒在本地，点宿主的「保存」才提交**。
 // 唯一的例外是流程按钮（提交审批 / 审批通过 / 执行 / 完成）—— 那是「命令」而不是
@@ -1071,20 +1076,36 @@ export function RecordSheetSections({
     );
   };
 
+  /**
+   * 处置记录列表。**刻意不提供「新增」入口**：
+   *
+   * <p>处置是**由处置动作产生的事实**，不是可以随手追加的台账行 —— 在面板上点几次就能造出
+   * 多张处置卡，会让「资产处置记录」这份台账与真实发生过的处置脱钩。因此处置记录一律由
+   * 业务动作写入：
+   * <ul>
+   *   <li><b>资产</b>：在「资产处置」模块登记处置单并走完流程（完成时级联写台账）；</li>
+   *   <li><b>项目 / 分区</b>：由后端 {@code PUT /projects|zones/{id}/record-sheet} 的处置段写入
+   *       （本面板不再提供该入口，见 {@code RecordSheetService} 的级联说明）。</li>
+   * </ul>
+   *
+   * <p>已存在的记录**仍然可读、可改草稿、可在资产侧推进流程**：把新增拿掉不等于把这一块变成
+   * 只读展示 —— 否则资产的处置流程将失去唯一的操作入口（提交审批 / 审批通过 / 执行 / 完成
+   * 四个按钮都只在本面板上，见 {@link #renderFlowActions}）。
+   */
   const renderDisposals = () => (
     <div className="flex flex-col gap-3">
-      {sheet.disposalRecords.length === 0 && (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无处置记录" />
+      {sheet.disposalRecords.length === 0 ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={
+            isAsset
+              ? '暂无处置记录。资产的处置请在「资产处置」中登记并完成，记录会自动生成'
+              : '暂无处置记录（新增入口已下线，处置记录由处置流程写入）'
+          }
+        />
+      ) : (
+        sheet.disposalRecords.map((record, index) => renderDisposalCard(record, index))
       )}
-      {sheet.disposalRecords.map((record, index) => renderDisposalCard(record, index))}
-      <Button
-        type="dashed"
-        icon={<PlusOutlined />}
-        disabled={readOnly || !canRegisterDisposal}
-        onClick={() => patch({ disposalRecords: [...sheet.disposalRecords, { attachments: [] }] })}
-      >
-        新增处置记录
-      </Button>
     </div>
   );
 

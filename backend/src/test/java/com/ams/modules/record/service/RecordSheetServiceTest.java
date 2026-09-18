@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 
 import com.ams.common.exception.AppException;
 import com.ams.common.exception.ErrorCode;
+import com.ams.modules.record.DisposalCascadePort;
 import com.ams.modules.org.entity.User;
 import com.ams.modules.org.mapper.UserMapper;
 import com.ams.modules.record.AttachmentOwner;
@@ -83,11 +84,12 @@ class RecordSheetServiceTest {
     private final BizAttachmentMapper bizAttachmentMapper = mock(BizAttachmentMapper.class);
     private final UserMapper userMapper = mock(UserMapper.class);
     private final FileService fileService = mock(FileService.class);
+    private final DisposalCascadePort disposalCascadePort = mock(DisposalCascadePort.class);
 
     private final RecordSheetService service = new RecordSheetService(
             receiveRecordMapper, receiveIssueMapper, sourceInfoMapper, disposalRecordMapper,
             costRecordMapper, costItemMapper, evaluationInfoMapper,
-            bizAttachmentMapper, userMapper, fileService);
+            bizAttachmentMapper, userMapper, fileService, disposalCascadePort);
 
     // ---- 全量 diff ----
 

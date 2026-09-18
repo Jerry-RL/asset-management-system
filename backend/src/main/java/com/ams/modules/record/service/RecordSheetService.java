@@ -4,6 +4,8 @@ import com.ams.common.exception.AppException;
 import com.ams.common.exception.ErrorCode;
 import com.ams.modules.org.entity.User;
 import com.ams.modules.org.mapper.UserMapper;
+import com.ams.modules.record.DisposalCascadePort;
+import com.ams.modules.record.DisposalCascadeSnapshot;
 import com.ams.modules.record.AttachmentOwner;
 import com.ams.modules.record.RecordOwnerType;
 import com.ams.modules.record.dto.AttachmentRef;
@@ -66,6 +68,7 @@ public class RecordSheetService {
     private final BizAttachmentMapper bizAttachmentMapper;
     private final UserMapper userMapper;
     private final FileService fileService;
+    private final DisposalCascadePort disposalCascadePort;
 
     public RecordSheetService(
             ReceiveRecordMapper receiveRecordMapper,
@@ -77,7 +80,8 @@ public class RecordSheetService {
             EvaluationInfoMapper evaluationInfoMapper,
             BizAttachmentMapper bizAttachmentMapper,
             UserMapper userMapper,
-            FileService fileService) {
+            FileService fileService,
+            DisposalCascadePort disposalCascadePort) {
         this.receiveRecordMapper = receiveRecordMapper;
         this.receiveIssueMapper = receiveIssueMapper;
         this.sourceInfoMapper = sourceInfoMapper;
@@ -88,6 +92,7 @@ public class RecordSheetService {
         this.bizAttachmentMapper = bizAttachmentMapper;
         this.userMapper = userMapper;
         this.fileService = fileService;
+        this.disposalCascadePort = disposalCascadePort;
     }
 
     @Transactional
@@ -340,6 +345,19 @@ public class RecordSheetService {
                 target.setOwnerId(ownerId);
                 applyDisposal(input, target);
                 disposalRecordMapper.insert(target);
+                // V57：项目 / 分区**新增**一条处置台账 = 一次处置登记，立即级联 —— 其下资产
+                // 脱离原产权公司（清空 property_company_id）并写入「资产处置记录」台账。
+                //
+                // 只在新增时级联：编辑已有记录不重复处置（处置不可逆，台账是处置那一刻的快照）；
+                // 删除记录也不回滚资产状态 —— 把产权公司"还回去"要靠权属流转重新登记，
+                // 不能让删一张记录表把已发生的处置抹掉。级联本身幂等（已退出的资产被跳过）。
+                disposalCascadePort.cascadeDispose(
+                        type.code(), ownerId,
+                        new DisposalCascadeSnapshot(target.getDisposalType(), target.getAmountWan(),
+                                DisposalCascadeSnapshot.UNIT_WAN, target.getDisposalDate(),
+                                target.getDisposalUserId(), target.getDisposalUserName(),
+                                target.getRemark()),
+                        null, target.getId());
             }
             kept.add(target.getId());
             syncAttachments(AttachmentOwner.DISPOSAL_RECORD, target.getId(), input.getAttachments());

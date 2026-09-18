@@ -18,6 +18,7 @@ import com.ams.modules.disposal.dto.DisposalOrderInput;
 import com.ams.modules.disposal.entity.DisposalOrder;
 import com.ams.modules.disposal.mapper.DisposalOrderMapper;
 import com.ams.modules.disposal.service.DisposalService;
+import com.ams.modules.record.DisposalCascadePort;
 import com.ams.modules.finance.service.ReconcileService;
 import com.ams.modules.record.dto.AttachmentRef;
 import com.ams.modules.record.service.RecordSheetService;
@@ -65,7 +66,8 @@ class AssetDisposalSyncServiceTest {
             mock(ReconcileService.class),
             mock(ObjectMapper.class),
             mock(DomainEventPublisher.class),
-            recordSheetService);
+            recordSheetService,
+            mock(DisposalCascadePort.class));
 
     private void stubExisting(DisposalOrder... rows) {
         List<DisposalOrder> list = new ArrayList<>(List.of(rows));

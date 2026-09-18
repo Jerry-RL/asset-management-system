@@ -6,6 +6,26 @@
 
 ### Added
 
+- **资产处置记录（V57 / V58）：处置完成后资产脱离原产权公司**——补齐「处置了哪些资产、从哪家公司处置出去」的可见性与归属收口：
+  - 新增菜单「资产处置记录」（`deed.disposalRecord`，挂「资债权证记录」目录下，路径 `/disposal-records`）：以**资产**为行的只读台账，展示所有被处置的资产，支持按**原产权公司** / 处置对象（资产 / 项目 / 分区）/ 处置方式筛选与资产编号 / 名称搜索。**V58 调整**：该菜单原在「资产运营」下（V57），因它属「记录 / 台账」而非「发起操作」，移入「资债权证记录」目录；`menu.code` 随目录改名（`operation.disposalRecord` → `deed.disposalRecord`）并同步 `role_permission.menu_code`（反范式冗余列，不同步会让按码查询得到空集），`path` 保持不变
+  - 新增表 `asset_disposal_record`（一行 = 一个被处置的资产）：快照处置时资产的**原产权公司 / 原经营公司**、处置方式、金额与单位、日期、处置人、备注，并记录处置对象（`asset` / `project` / `zone`）与来源单据（资产级 `disposal_order.id`、项目 / 分区级 `biz_disposal_record.id`）。**无软删列**——处置不可逆，台账只增不减；`uk_asset_disposal_record_asset` 唯一索引同时充当幂等键与并发兜底
+  - 级联处置（`AssetDisposalRecordService.cascadeDispose`，唯一写入口）：把资产置 `ownership_status='disposed'`、`lifecycle_status='exited'`、**清空 `property_company_id`**（经营公司刻意保留，资产仍留在原经营主体的数据范围里）；已退出的资产被跳过，重复级联不产生第二批副作用
+  - 两个触发点：① 资产级处置单**完成**（`DisposalService.complete`）——以 `disposal_order` 的处置方式 / 金额（元）/ 日期 / 处置人写台账；② 项目 / 分区**新增**一条处置台账（`RecordSheetService.syncDisposalRecords`）——逐资产展开级联。编辑 / 删除处置台账**不**回滚资产状态（要把产权公司还回去得走权属流转重新登记）
+  - **存量回填**：迁移把 V57 之前已完成的**资产级**处置单按其最新一张补写台账并同步资产状态（旧规则没有动产权公司，不回填则菜单对存量数据为空、模型也不一致）；**刻意不回填项目 / 分区级** `biz_disposal_record`——旧语义下它只是登记台账，按行反向处置整个项目会产出未经复核且不可逆的批量变更
+  - 跨模块依赖处理：级联端口 `DisposalCascadePort` / `DisposalCascadeSnapshot` 定义在**调用方** `record` 模块、由 `disposal` 实现，使依赖保持单向（`disposal → record`），不引入 `record ↔ disposal` 包级环
+  - 后端只读端点：`GET /api/v1/disposal-records`、`GET /api/v1/disposal-records/{id}`（权限码仅 `deed.disposalRecord:view`；刻意不提供写接口——处置记录是已发生事实的快照，可编辑意味着可以伪造处置历史）
+  - 前端：`DisposalRecordsPage` + `lib/disposalRecord.ts`（金额与单位成对展示：资产级是元、项目 / 分区级是万元，不做换算）；菜单 / 路由 / `PATH_TO_CODE` 镜像 / 侧栏图标 / 用户手册同步
+  - 测试：新增 `V57AssetDisposalRecordMigrationContractTest` 7 例（列集恰好、唯一索引、菜单与 view 回填、存量回填口径）、`AssetDisposalRecordServiceTest` 8 例（先快照后清空、已退出跳过、乐观锁冲突、项目 / 分区逐资产展开、名称批量回填）、`DisposalCompleteCascadeTest` 2 例（完成即级联、状态非法不级联）、`V58MoveDisposalRecordMenuMigrationContractTest` 5 例（改名 + 改挂同句完成、必须用 `UPDATE ... FROM` 而非标量子查询、`role_permission.menu_code` 同步且不动 `menu_id`、不顺带授权、纯 UPDATE 幂等）
+- **修复：已处置的资产无法再登记处置记录**——`exited` 是租控终态且 `canTransition` 既不允许自迁移也不允许迁出，而「处置完成」与「项目 / 分区级级联」都会把资产置为已退出，导致第二次处置在审批通过（→ `disposing`）或完成（→ `exited`）时 409。新增 `LeaseControlService.transitionUnlessExited`：**资产当前已是 `exited` 时跳过租控写入**（无状态变化即不留日志行），`DisposalService.onApproved` / `complete` 改走该入口；豁免**只**针对终态，`leased → disposing` 仍然拒绝（"在租资产须先退租才能处置"这条真实规则不受影响）
+  - 测试：新增 `LeaseControlTerminalExemptionTest` 8 例（含反向用例「在租 → 处置中仍 409」与根因固化）、`DisposalReDisposalTest` 3 例；后端全量 622 例全绿
+  - **本次未交付**：改造清单 [触点 7](docs/design/资产单元与占用模型改造清单.md) 要求的「处置转 `AssetOccupancyService.occupy`」（当前资产级仍走 `LeaseControlService.transition`，项目 / 分区级级联不写租控状态，只写 `lifecycle_status`）；处置记录台账的**导出**与**资产档案时间线**接入
+  - **已确认口径（产品已签字）**：同一资产被**多次**处置时，台账保持「一行 = 一个被处置的资产」—— 第二次处置**不**新增行也**不**改写既有行（保留首次处置信息）。理由：需求原文是「展示所有**被处置的资产**」，以资产为行才是直译；「每次处置分别留痕」由租控日志、审批中心与 `disposal_order` 自身承担，台账只回答「哪些资产被处置了、从哪家公司处置出去的」
+- **后续记录不再提供「新增处置记录」入口**（三种主体一致）：处置是**由处置动作产生的事实**，不是可以随手追加的台账行 —— 面板上点几次就能造出多张处置卡，会让「资产处置记录」台账与真实发生过的处置脱钩。因此摘掉 `RecordSheetSections` 处置段的「新增」按钮，记录一律由业务动作写入（资产走「资产处置」模块，项目 / 分区走后端 `record-sheet` 的处置段）
+  - **保留**：已存在的记录仍可读、可改草稿（资产侧）、可删除；**资产侧四个流程按钮（提交审批 / 审批通过 / 执行 / 完成）必须保留** —— 它们是前端**唯一**的处置状态机入口（全仓唯一调用点），摘掉会让处置流程不可达
+  - 空态文案按主体区分：资产指向「资产处置」模块；项目 / 分区说明新增入口已下线
+  - **已知后果（已确认接受）**：项目 / 分区处置记录失去唯一的 UI 录入入口；后端 `record-sheet` 处置段与级联逻辑不变（项目 / 分区级联处置仍走该路径），前端入口待后续产品补充
+
+
 - **计租单元拆分/合并落地（FR-MDM-001~004、FR-OPS-006）**——「资产支持部分租赁」的最小可用能力：
   - 后端 `AssetUnitController`：`GET /assets/{assetId}/units`、`POST /assets/units/{unitId}/split`、`POST /assets/units/merge`；新增 DTO `AssetUnitSplitRequest` / `AssetUnitMergeRequest`
   - 后端 `AssetUnitService.merge`（**新增能力**）：把同一资产下多个空置单元合并为一个；保留排序最靠前的单元、其余软删，面积与底价**相加**；前置按**占用表**判定（无未收口占用含预留、无生效招租、资产未在押）

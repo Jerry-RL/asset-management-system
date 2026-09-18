@@ -28,6 +28,7 @@ import { AssetTransferRecordsPage } from '@/pages/AssetTransferRecordsPage';
 import { AssetTransferRecordFormPage } from '@/pages/AssetTransferRecordFormPage';
 import { MortgagesPage } from '@/pages/MortgagesPage';
 import { MortgageFormPage } from '@/pages/MortgageFormPage';
+import { DisposalRecordsPage } from '@/pages/DisposalRecordsPage';
 import { ProjectFormPage } from '@/pages/ProjectFormPage';
 import ProjectDetailPage from '@/pages/ProjectDetailPage';
 import { ProjectZonesPage } from '@/pages/ProjectZonesPage';
@@ -95,6 +96,8 @@ export default function App() {
               <Route path="mortgages" element={<MortgagesPage />} />
               <Route path="mortgages/new" element={<MortgageFormPage />} />
               <Route path="mortgages/:id/edit" element={<MortgageFormPage />} />
+              {/* 资产处置记录（V57）：只读台账，一行 = 一个被处置的资产 */}
+              <Route path="disposal-records" element={<DisposalRecordsPage />} />
               {/* 菜单管理：专用页面（树 + 抽屉 + 校验），不再走 ResourcePage */}
               <Route path="system/menus" element={<SystemMenuPage />} />
               <Route path="system/roles" element={<SystemRolePage />} />

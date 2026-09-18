@@ -39,6 +39,7 @@ import {
   HomeFilled,
   ThunderboltOutlined,
   FileSearchOutlined,
+  FileDoneOutlined,
   TransactionOutlined,
   ReconciliationOutlined,
   PercentageOutlined,
@@ -85,6 +86,8 @@ export const PATH_ICONS: Record<string, ReactNode> = {
   '/tender/announcements': <NotificationOutlined />,
   '/tenants': <UserOutlined />,
   '/disposals': <ExportOutlined />,
+  // V57 菜单的 icon 列为 NULL，侧栏会回退到这里
+  '/disposal-records': <FileDoneOutlined />,
   '/occupations': <FieldTimeOutlined />,
   '/self-uses': <HomeFilled />,
   '/contracts': <FileTextOutlined />,

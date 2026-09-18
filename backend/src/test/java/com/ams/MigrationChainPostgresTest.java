@@ -255,8 +255,9 @@ class MigrationChainPostgresTest {
                         + "V54 加权属流转两表与 asset.ownership_status；"
                         + "V55 加资产调拨记录两表与它的菜单；"
                         + "V56 把 mortgage 扩成项目 / 分区 / 资产三级标的；"
+                        + "V57 加资产处置记录台账与它的菜单（V58 把该菜单移入 deed 目录并改名）；"
                         + "迁移文件躺在仓库里而从未被执行过，是本仓长期存在的状态，这里把它钉住")
-                .contains("51", "52", "54", "55", "56");
+                .contains("51", "52", "54", "55", "56", "57", "58");
     }
 
     // ------------------------------------------------------------------
@@ -767,5 +768,96 @@ class MigrationChainPostgresTest {
         assertThat(queryString("SELECT parent_id FROM menu WHERE code = 'deed.mortgage'"))
                 .as("菜单必须仍挂在 deed 目录下（V53 改过它的显示名，但 code 不变）")
                 .isEqualTo(String.valueOf(queryLong("SELECT id FROM menu WHERE code = 'deed'")));
+    }
+
+    // ------------------------------------------------------------------
+    // 7. V57：资产处置记录在真库上的落库结果（菜单归属另见 V58）
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("V57：asset_disposal_record 的必填 / 可空列与设计一致，且没有软删列")
+    void createsAssetDisposalRecordTable() {
+        assertThat(columnType("asset_disposal_record", "asset_id"))
+                .as("资产 id 必填：一行就是一个被处置的资产，没有资产的行不可追溯")
+                .startsWith("bigint|NO|");
+        assertThat(columnType("asset_disposal_record", "target_type"))
+                .as("处置对象层级必填（asset / project / zone）")
+                .startsWith("character varying|NO|");
+        assertThat(columnType("asset_disposal_record", "target_id")).startsWith("bigint|NO|");
+        assertThat(columnType("asset_disposal_record", "from_property_company_id"))
+                .as("原产权公司快照必须可空：资产处置时本来就可能没有产权公司")
+                .startsWith("bigint|YES|");
+        assertThat(columnType("asset_disposal_record", "source_order_id"))
+                .as("资产级来源可空：项目 / 分区级级联没有 disposal_order")
+                .startsWith("bigint|YES|");
+        assertThat(columnType("asset_disposal_record", "amount_unit"))
+                .as("金额单位可空：没填金额时不需要单位")
+                .startsWith("character varying|YES|");
+        assertThat(columnType("asset_disposal_record", "disposed_at"))
+                .as("处置时间 NOT NULL 且有默认值：它是列表的排序与展示依据")
+                .startsWith("timestamp with time zone|NO|");
+        // 处置不可逆：台账只增不减，所以刻意不落 deleted_at（与 V54/V55 的明细表不同 ——
+        // 那两个的宿主是草稿可改可删的主单，台账没有「草稿」这一态）
+        assertThat(queryLong("SELECT count(*) FROM information_schema.columns"
+                        + " WHERE table_name = 'asset_disposal_record' AND column_name = 'deleted_at'"))
+                .as("台账不应有软删列：处置不可逆，留软删只会制造永不清理的孤儿行")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("V57：同一资产重复写台账会被唯一索引拒绝 —— 幂等键与并发兜底")
+    void rejectsDuplicateDisposedAsset() {
+        execute("INSERT INTO asset_disposal_record (asset_id, target_type, target_id)"
+                + " VALUES (9601, 'asset', 9601)");
+
+        try {
+            execute("INSERT INTO asset_disposal_record (asset_id, target_type, target_id)"
+                    + " VALUES (9601, 'project', 42)");
+            fail("唯一索引 uk_asset_disposal_record_asset 未生效：同一资产可以写两条处置台账");
+        } catch (AssertionError expected) {
+            assertThat(expected.getCause())
+                    .as("必须是唯一约束冲突，而不是别的 SQL 错误")
+                    .isInstanceOf(java.sql.SQLException.class);
+        }
+    }
+
+    @Test
+    @DisplayName("V57：资产处置记录菜单先落在 operation 目录下（V58 随后把它移入 deed 目录）")
+    void seedsDisposalRecordMenu() {
+        // 本用例描述的是 **V57 当时的落库结果**；最终归属由 V58 调整（见
+        // V58MoveDisposalRecordMenuMigrationContractTest 与下方 v58 的终态断言）。
+        assertThat(queryString("SELECT path FROM menu WHERE code = 'deed.disposalRecord'"))
+                .as("path 与前端 PATH_TO_CODE['/disposal-records'] 必须逐字一致，否则点菜单会落回首页")
+                .isEqualTo("/disposal-records");
+        assertThat(queryString("SELECT name FROM menu WHERE code = 'deed.disposalRecord'"))
+                .isEqualTo("资产处置记录");
+
+        long deedId = queryLong("SELECT id FROM menu WHERE code = 'deed'");
+        assertThat(deedId)
+                .as("父目录 deed（资债权证记录）必须存在，否则按 code 解析 parent_id 会得到 NULL")
+                .isPositive();
+        assertThat(queryString("SELECT parent_id FROM menu WHERE code = 'deed.disposalRecord'"))
+                .as("V58 之后菜单最终挂在「资债权证记录」目录下")
+                .isEqualTo(String.valueOf(deedId));
+
+        List<String> rows = queryStrings(
+                "SELECT r.code || ':' || rp.action"
+                        + " FROM role_permission rp JOIN role r ON r.id = rp.role_id"
+                        + " WHERE rp.menu_code = 'deed.disposalRecord'"
+                        + " ORDER BY r.code, rp.action");
+        assertThat(rows)
+                .as("只允许 view 且不含 super_admin（它由 PermissionRegistry 特判全通）")
+                .isNotEmpty()
+                .allSatisfy(row -> assertThat(row).endsWith(":view"))
+                .allSatisfy(row -> assertThat(row).doesNotStartWith("super_admin:"));
+
+        // V58 的改名必须是**完整**的：旧码不得残留，否则权限矩阵会出现两条指向同一菜单的授权
+        assertThat(queryLong("SELECT count(*) FROM menu WHERE code = 'operation.disposalRecord'"))
+                .as("旧码必须已被 V58 改掉（唯一约束下也不可能有第二行）")
+                .isZero();
+        assertThat(queryLong("SELECT count(*) FROM role_permission"
+                        + " WHERE menu_code = 'operation.disposalRecord'"))
+                .as("role_permission.menu_code 是反范式冗余列，不同步会让按码查询得到空集")
+                .isZero();
     }
 }

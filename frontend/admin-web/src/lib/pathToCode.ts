@@ -47,6 +47,8 @@ export const PATH_TO_CODE: Record<string, string> = {
   '/evaluations': 'deed.evaluation',
   '/ownership-transfers': 'deed.ownershipTransfer',
   '/asset-transfer-records': 'deed.transferRecord',
+  // V58 把该页从「资产运营」移到本目录，权限码随之由 operation.disposalRecord 改名
+  '/disposal-records': 'deed.disposalRecord',
   // ---- 资产招租（lease / icon=listing） ----
   '/lease-listings': 'lease.listing',
   '/tender/announcements': 'lease.tender',
